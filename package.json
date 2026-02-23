@@ -1,0 +1,59 @@
+{
+	"name": "obsidian-telegram-ai-sync",
+	"version": "0.0.1",
+	"description": "AI-powered Telegram to Obsidian sync with smart categorization, media grouping, and local document processing.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs && npm run post-build",
+		"lint": "eslint src/**/*.ts",
+		"lint-fix": "eslint --fix src/**/*.ts",
+		"version": "node version-bump.mjs && git add manifest.json versions.json",
+		"test": "node esbuild.config.mjs test && npm run post-build && node install-plugin.mjs",
+		"release-notes-check": "node release-notes.mjs check",
+		"build": "tsc -noEmit -skipLibCheck && npm run lint && node esbuild.config.mjs production && npm run post-build",
+		"post-build": "node post-build.mjs"
+	},
+	"keywords": [
+		"Telegram",
+		"AI",
+		"Sync",
+		"Obsidian",
+		"Automation",
+		"Smart Categorization",
+		"Media Processing",
+		"Document Extraction"
+	],
+	"author": "Evgeniy Berezovskiy",
+	"license": "AGPL-3.0",
+	"devDependencies": {
+		"@types/async": "^3.2.18",
+		"@types/linkify-it": "^3.0.2",
+		"@types/mime-types": "^2.1.1",
+		"@types/node": "^16.11.6",
+		"@typescript-eslint/eslint-plugin": "5.29.0",
+		"@typescript-eslint/parser": "5.29.0",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.17.3",
+		"eslint": "^8.47.0",
+		"eslint-config-prettier": "latest",
+		"eslint-plugin-prettier": "latest",
+		"obsidian": "latest",
+		"prettier": "latest",
+		"release-please": "^16.14.0",
+		"tslib": "2.4.0",
+		"typescript": "4.7.4"
+	},
+	"dependencies": {
+		"@popperjs/core": "^2.11.7",
+		"@types/qrcode": "^1.5.0",
+		"compare-versions": "^6.1.0",
+		"linkify-it": "^4.0.1",
+		"mammoth": "^1.11.0",
+		"mime-types": "^2.1.35",
+		"node-machine-id": "^1.1.12",
+		"node-telegram-bot-api": "^0.66.0",
+		"pdf-parse": "^2.4.5",
+		"qrcode": "^1.5.3",
+		"telegram": "^2.25.11"
+	}
+}
