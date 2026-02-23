@@ -1,5 +1,5 @@
 {
-	"name": "obsidian-telegram-ai-sync",
+	"name": "obsidian-telegram-ai",
 	"version": "0.1.0",
 	"description": "AI-powered Telegram to Obsidian sync with smart categorization, media grouping, and local document processing.",
 	"main": "main.js",

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram AI Sync supports a comprehensive set of template variables for dynamic file naming, content organization, and message filtering. This reference covers all available variables and their usage patterns.
+Telegram AI supports a comprehensive set of template variables for dynamic file naming, content organization, and message filtering. This reference covers all available variables and their usage patterns.
 
 ## Message Filter Variables
 
@@ -300,4 +300,4 @@ Documents: {{category}}/Documents/{{date:YYYY}}/{{ai:title}}.md
 - **Incremental Building**: Add variables one at a time to identify issues
 - **Fallback Values**: Consider providing fallback values for critical variables
 
-This comprehensive reference covers all available template variables in Telegram AI Sync. Use these variables to create sophisticated, automated organization systems for your Telegram content.
+This comprehensive reference covers all available template variables in Telegram AI. Use these variables to create sophisticated, automated organization systems for your Telegram content.

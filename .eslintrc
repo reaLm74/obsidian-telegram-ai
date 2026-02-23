@@ -1,8 +1,13 @@
 {
 	"root": true,
 	"parser": "@typescript-eslint/parser",
-	"env": { "node": true },
-	"plugins": ["prettier", "@typescript-eslint"],
+	"env": {
+		"node": true
+	},
+	"plugins": [
+		"prettier",
+		"@typescript-eslint"
+	],
 	"extends": [
 		"prettier",
 		"eslint:recommended",
@@ -27,8 +32,12 @@
 		"@typescript-eslint/ban-ts-comment": "off",
 		"no-prototype-builtins": "off",
 		"@typescript-eslint/no-empty-function": "off",
-		"prettier/prettier": ["error"],
-		"linebreak-style": ["error", "unix"],
-		"no-mixed-spaces-and-tabs": ["error", "smart-tabs"]
+		"prettier/prettier": [
+			"error"
+		],
+		"no-mixed-spaces-and-tabs": [
+			"error",
+			"smart-tabs"
+		]
 	}
 }

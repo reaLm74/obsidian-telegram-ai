@@ -1,6 +1,6 @@
-# Telegram AI Sync Documentation
+# Telegram AI Documentation
 
-Welcome to the comprehensive documentation for Telegram AI Sync! This collection of guides will help you master all aspects of the plugin, from basic setup to advanced AI-powered workflows.
+Welcome to the comprehensive documentation for Telegram AI! This collection of guides will help you master all aspects of the plugin, from basic setup to advanced AI-powered workflows.
 
 ## 📚 Documentation Overview
 
@@ -66,13 +66,13 @@ Each guide is designed to be:
 ## 🔗 External Resources
 
 ### Official Links
-- **GitHub Repository**: [reaLm74/obsidian-telegram-ai-sync](https://github.com/reaLm74/obsidian-telegram-ai-sync)
-- **Releases**: [Latest Releases](https://github.com/reaLm74/obsidian-telegram-ai-sync/releases)
-- **Issues**: [Bug Reports & Feature Requests](https://github.com/reaLm74/obsidian-telegram-ai-sync/issues)
+- **GitHub Repository**: [reaLm74/obsidian-telegram-ai](https://github.com/reaLm74/obsidian-telegram-ai)
+- **Releases**: [Latest Releases](https://github.com/reaLm74/obsidian-telegram-ai/releases)
+- **Issues**: [Bug Reports & Feature Requests](https://github.com/reaLm74/obsidian-telegram-ai/issues)
 
 ### Community & Support
 - **Telegram Contact**: [@realm74](https://t.me/realm74)
-- **GitHub Discussions**: [Community Forum](https://github.com/reaLm74/obsidian-telegram-ai-sync/discussions)
+- **GitHub Discussions**: [Community Forum](https://github.com/reaLm74/obsidian-telegram-ai/discussions)
 
 ### Related Resources
 - **Obsidian**: [Official Documentation](https://help.obsidian.md/)
@@ -119,6 +119,6 @@ When asking for help, please include:
 
 ---
 
-**Happy note-taking with Telegram AI Sync!** 🚀
+**Happy note-taking with Telegram AI!** 🚀
 
-For the most up-to-date information, always refer to the [GitHub repository](https://github.com/reaLm74/obsidian-telegram-ai-sync) and these documentation files.
+For the most up-to-date information, always refer to the [GitHub repository](https://github.com/reaLm74/obsidian-telegram-ai) and these documentation files.

@@ -1,6 +1,6 @@
 {
-	"id": "telegram-ai-sync",
-	"name": "Telegram AI Sync",
+	"id": "telegram-ai",
+	"name": "Telegram AI",
 	"version": "0.1.0",
 	"minAppVersion": "1.0.0",
 	"description": "AI-powered Telegram to Obsidian sync with smart categorization, media grouping, and local document processing.",

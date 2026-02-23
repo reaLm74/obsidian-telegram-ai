@@ -92,7 +92,7 @@ export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
 				plugin.saveSettings();
 				displayAndLog(
 					plugin,
-					"Telegram Sync got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
+					"Telegram AI got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
 				);
 				return;
 			}

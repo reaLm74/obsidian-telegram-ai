@@ -1,4 +1,5 @@
 import { Plugin } from "obsidian";
+import { NoteCategory } from "./categories/types";
 import { DEFAULT_SETTINGS, TelegramSyncSettings, TelegramSyncSettingTab } from "./settings/Settings";
 import TelegramBot from "node-telegram-bot-api";
 import { machineIdSync } from "node-machine-id";
@@ -40,7 +41,7 @@ import { CategoryManager } from "./categories/CategoryManager";
 export type ConnectionStatus = "connected" | "disconnected";
 export type PluginStatus = "unloading" | "unloaded" | "loading" | "loaded";
 
-// Main class for the Telegram Sync plugin
+// Main class for the Telegram AI plugin
 export default class TelegramSyncPlugin extends Plugin {
 	settings: TelegramSyncSettings;
 	settingsTab?: TelegramSyncSettingTab;
@@ -260,7 +261,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 		// Migration: Convert old folderPath to notePathTemplate
 		if (this.settings.noteCategories && this.settings.noteCategories.length > 0) {
-			this.settings.noteCategories.forEach((category: any) => {
+			this.settings.noteCategories.forEach((category: NoteCategory & { folderPath?: string }) => {
 				if (category.folderPath && !category.notePathTemplate) {
 					// Migrate folderPath to notePathTemplate
 					category.notePathTemplate = `${category.folderPath}/{{content:30}}.md`;
@@ -291,7 +292,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	async getBotUser(): Promise<TelegramBot.User> {
 		this.botUser = this.botUser || (await this.bot?.getMe());
-		if (!this.botUser) throw new Error("Can't get access to bot info. Restart the Telegram Sync plugin");
+		if (!this.botUser) throw new Error("Can't get access to bot info. Restart the Telegram AI plugin");
 		return this.botUser;
 	}
 
@@ -317,7 +318,7 @@ export default class TelegramSyncPlugin extends Plugin {
 			await new Promise((resolve) => {
 				const pinCodeModal = new PinCodeModal(this, true);
 				pinCodeModal.onClose = async () => {
-					if (!this.pinCode) displayAndLog(this, "Plugin Telegram Sync stopped. No pin code entered.");
+					if (!this.pinCode) displayAndLog(this, "Plugin Telegram AI stopped. No pin code entered.");
 					resolve(undefined);
 				};
 				pinCodeModal.open();

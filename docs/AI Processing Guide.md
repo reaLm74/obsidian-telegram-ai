@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram AI Sync supports automatic processing of messages through various AI providers before saving them to Obsidian. The plugin supports OpenAI (GPT-4), Anthropic Claude, and Google Gemini, allowing you to transform raw Telegram messages into structured, intelligent notes.
+Telegram AI supports automatic processing of messages through various AI providers before saving them to Obsidian. The plugin supports OpenAI (GPT-4), Anthropic Claude, and Google Gemini, allowing you to transform raw Telegram messages into structured, intelligent notes.
 
 ## Key Features
 
@@ -233,4 +233,4 @@ Create sophisticated processing workflows by combining:
 - **External Tools**: Can integrate with automation tools via file system
 - **Backup Strategy**: Regular backups recommended for AI-processed content
 
-This guide provides a comprehensive overview of AI processing capabilities in Telegram AI Sync. Experiment with different configurations to find the setup that works best for your workflow.
+This guide provides a comprehensive overview of AI processing capabilities in Telegram AI. Experiment with different configurations to find the setup that works best for your workflow.

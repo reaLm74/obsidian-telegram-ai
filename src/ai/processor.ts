@@ -173,9 +173,7 @@ export async function processWithAIMixed(
 	// This is the FINAL request, so include the general prompt
 	if (messageText && plugin.settings.aiProcessText) {
 		const combinedContent = fileAnalysisResult
-			? `**${getFileTypeDisplayName(
-					fileType,
-				)} Analysis:**\n${fileAnalysisResult}\n\n**Message Text:**\n${messageText}`
+			? `**${getFileTypeDisplayName(fileType)} Analysis:**\n${fileAnalysisResult}${messageText ? `\n\n**Message Text:**\n${messageText}` : ""}`
 			: messageText;
 
 		// Build final prompt: text + general

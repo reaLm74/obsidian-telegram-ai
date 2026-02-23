@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides examples of different Telegram message formats that Telegram AI Sync can process. Understanding these formats helps with debugging and customizing message processing rules.
+This document provides examples of different Telegram message formats that Telegram AI can process. Understanding these formats helps with debugging and customizing message processing rules.
 
 ## Text Messages
 

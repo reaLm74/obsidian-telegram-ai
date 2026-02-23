@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Initial Release
 
-This is the first release of **Telegram AI Sync** - a complete rewrite and enhancement of the original Telegram sync plugin with advanced AI capabilities.
+This is the first release of **Telegram AI** - a complete rewrite and enhancement of the original Telegram sync plugin with advanced AI capabilities.
 
 ### ✨ Added
 
@@ -101,7 +101,7 @@ This is the first release of **Telegram AI Sync** - a complete rewrite and enhan
 
 **Author**: [Evgeniy Berezovskiy](https://github.com/reaLm74)  
 **License**: AGPL-3.0
-**Repository**: [GitHub](https://github.com/reaLm74/obsidian-telegram-ai-sync)  
+**Repository**: [GitHub](https://github.com/reaLm74/obsidian-telegram-ai)  
 
 ### Built With
 - [Obsidian Plugin API](https://docs.obsidian.md/)

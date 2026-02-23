@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide will help you get Telegram AI Sync up and running quickly. Follow these steps to start syncing your Telegram messages to Obsidian with AI-powered processing.
+This guide will help you get Telegram AI up and running quickly. Follow these steps to start syncing your Telegram messages to Obsidian with AI-powered processing.
 
 ## Prerequisites
 
@@ -14,13 +14,13 @@ Before starting, ensure you have:
 ## Step 1: Install the Plugin
 
 ### Manual Installation
-1. Download the latest release from [GitHub Releases](https://github.com/reaLm74/obsidian-telegram-ai-sync/releases)
-2. Extract the files to your `.obsidian/plugins/telegram-ai-sync/` folder
+1. Download the latest release from [GitHub Releases](https://github.com/reaLm74/obsidian-telegram-ai/releases)
+2. Extract the files to your `.obsidian/plugins/telegram-ai/` folder
 3. Enable the plugin in Obsidian Settings → Community Plugins
 
 ### From Obsidian Community Plugins (when available)
 1. Go to Settings → Community Plugins → Browse
-2. Search for "Telegram AI Sync"
+2. Search for "Telegram AI"
 3. Install and enable the plugin
 
 ## Step 2: Create a Telegram Bot
@@ -35,7 +35,7 @@ Before starting, ensure you have:
 ## Step 3: Configure the Plugin
 
 ### Basic Configuration
-1. Open Obsidian Settings → Telegram AI Sync
+1. Open Obsidian Settings → Telegram AI
 2. Enter your bot token in the "Bot Token" field
 3. Add your Telegram user ID to "Allowed Chats":
    - Send `/start` to your bot in Telegram
@@ -198,4 +198,4 @@ Remember to:
 - Monitor API usage and costs
 - Maintain secure backups
 
-This quick start guide should have you up and running with Telegram AI Sync. Explore the other documentation files for more detailed information about specific features and advanced configuration options.
+This quick start guide should have you up and running with Telegram AI. Explore the other documentation files for more detailed information about specific features and advanced configuration options.
