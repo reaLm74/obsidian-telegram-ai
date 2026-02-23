@@ -1,0 +1,30 @@
+# IDE & Editors
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Build and Dependencies
+node_modules/
+dist/
+build/
+
+# Compiled Plugin files
+main.js
+main.css
+*.map
+
+# Development/Local files
+data.json
+.devcontainer/
+.env
+*.log
+
+# Obsidian specific
+.obsidian/

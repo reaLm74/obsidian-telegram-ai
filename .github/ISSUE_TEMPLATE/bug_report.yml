@@ -1,0 +1,42 @@
+name: "🐞 Bug Report"
+description: Report a bug to help us improve
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please provide as much detail as possible.
+  - type: input
+    id: version
+    attributes:
+      label: Plugin Version
+      placeholder: e.g., v0.1.1
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: AI Provider
+      options:
+        - OpenAI (GPT)
+        - Anthropic (Claude)
+        - Google (Gemini)
+        - Local Processing Only
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: What exactly did you do?
+      placeholder: |
+        1. Send image to bot
+        2. Wait for sync...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Obsidian Console Logs
+      description: Open Obsidian Developer Tools (Ctrl+Shift+I) and paste relevant logs here.
+      render: shell
