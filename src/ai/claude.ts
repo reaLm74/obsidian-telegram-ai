@@ -2,6 +2,14 @@ import TelegramBot from "node-telegram-bot-api";
 import { displayAndLogError } from "src/utils/logUtils";
 import TelegramSyncPlugin from "src/main";
 
+interface AIErrorResponse {
+	error?: {
+		message?: string;
+		type?: string;
+		status?: string;
+	};
+}
+
 export interface ClaudeMessage {
 	role: "user" | "assistant";
 	content: string;
@@ -26,7 +34,7 @@ export interface ClaudeResponse {
 /**
  * Checks if error is temporary (retryable)
  */
-function isRetryableError(error: any, status?: number): boolean {
+function isRetryableError(error: unknown, status?: number): boolean {
 	if (status) {
 		return [429, 500, 502, 503, 504].includes(status);
 	}
@@ -110,11 +118,12 @@ export async function processWithClaude(
 
 				if (!response.ok) {
 					let errorMessage = `HTTP ${response.status}`;
-					let errorData: any = null;
+					let errorData: unknown = null;
 
 					try {
-						errorData = await response.json();
-						errorMessage = errorData.error?.message || errorData.error?.type || errorMessage;
+						const data = (await response.json()) as AIErrorResponse;
+						errorData = data;
+						errorMessage = data.error?.message || data.error?.type || errorMessage;
 					} catch {
 						errorMessage = await response.text();
 					}

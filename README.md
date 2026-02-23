@@ -1,7 +1,7 @@
 # Telegram AI Sync
 
-<a href="https://github.com/reaLm74/obsidian-telegram-ai-sync/releases/latest">
-  <img src="https://img.shields.io/github/v/release/reaLm74/obsidian-telegram-ai-sync?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet">
+<a href="https://github.com/reaLm74/obsidian-telegram-ai/releases/latest">
+  <img src="https://img.shields.io/github/v/release/reaLm74/obsidian-telegram-ai?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet">
 </a>
 &nbsp;
 <a href="https://www.gnu.org/licenses/agpl-3.0">
@@ -21,7 +21,7 @@ An advanced Obsidian plugin that syncs Telegram messages to your vault with AI-p
 
 ## 🚀 Quick Start
 
-1.  **Install**: Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/reaLm74/obsidian-telegram-ai-sync/releases) to `.obsidian/plugins/telegram-ai-sync/`.
+1.  **Install**: Download `main.js`, `manifest.json`, and `styles.css` from [Releases](https://github.com/reaLm74/obsidian-telegram-ai/releases) to `.obsidian/plugins/telegram-ai/`.
 2.  **Obsidian**: Settings → Community Plugins → Enable "Telegram AI Sync".
 3.  **Telegram Bot**: Create a bot via [@BotFather](https://t.me/botfather), copy the Token.
 4.  **Configure**:
@@ -75,6 +75,6 @@ Special thanks to the open-source community.
 ---
 <div align="center">
   <strong>Made for the Obsidian Community</strong><br>
-  <a href="https://github.com/reaLm74/obsidian-telegram-ai-sync/issues">Report Bug</a> · 
-  <a href="https://github.com/reaLm74/obsidian-telegram-ai-sync/discussions">Request Feature</a>
+  <a href="https://github.com/reaLm74/obsidian-telegram-ai/issues">Report Bug</a> · 
+  <a href="https://github.com/reaLm74/obsidian-telegram-ai/discussions">Request Feature</a>
 </div>

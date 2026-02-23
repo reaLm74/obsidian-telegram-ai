@@ -2,18 +2,27 @@ import TelegramBot from "node-telegram-bot-api";
 import { displayAndLogError } from "src/utils/logUtils";
 import TelegramSyncPlugin from "src/main";
 
+interface AIErrorResponse {
+	error?: {
+		message?: string;
+		type?: string;
+		status?: string;
+		code?: string;
+	};
+}
+
+export type OpenAIContentPart = {
+	type: "text" | "image_url";
+	text?: string;
+	image_url?: {
+		url: string;
+		detail?: "low" | "high" | "auto";
+	};
+};
+
 export interface OpenAIMessage {
 	role: "system" | "user" | "assistant";
-	content:
-		| string
-		| Array<{
-				type: "text" | "image_url";
-				text?: string;
-				image_url?: {
-					url: string;
-					detail?: "low" | "high" | "auto";
-				};
-		  }>;
+	content: string | OpenAIContentPart[];
 }
 
 export interface OpenAIResponse {
@@ -49,7 +58,7 @@ export function getMessageContentType(msg: TelegramBot.Message): string {
 /**
  * Checks if error is temporary (retryable)
  */
-function isRetryableError(error: any, status?: number): boolean {
+function isRetryableError(error: unknown, status?: number): boolean {
 	if (status) {
 		// HTTP statuses that should be retried
 		return [429, 500, 502, 503, 504].includes(status);
@@ -208,16 +217,18 @@ export async function processWithOpenAI(
 
 				if (!response.ok) {
 					let errorMessage = `HTTP ${response.status}`;
-					let errorData: any = null;
+					let errorData: unknown = null;
 					let userFriendlyMessage = "";
 
 					try {
-						errorData = await response.json();
-						errorMessage = errorData.error?.message || errorData.error?.type || errorMessage;
+						const data = (await response.json()) as AIErrorResponse;
+						errorData = data;
+						const errorBody = data.error;
+						errorMessage = errorBody?.message || errorBody?.type || errorMessage;
 
 						// Check for specific error types
-						const errorType = errorData.error?.type || "";
-						const errorCode = errorData.error?.code || "";
+						const errorType = errorBody?.type || "";
+						const errorCode = errorBody?.code || "";
 
 						// Quota exceeded (no money)
 						if (

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram AI Sync features an advanced categorization system that automatically sorts your messages into organized folders using AI-powered analysis and keyword matching. This guide explains how to set up and use the smart categories system effectively.
+Telegram AI features an advanced categorization system that automatically sorts your messages into organized folders using AI-powered analysis and keyword matching. This guide explains how to set up and use the smart categories system effectively.
 
 ## How Categories Work
 

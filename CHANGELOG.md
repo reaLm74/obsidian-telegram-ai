@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.1](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.1.0...0.1.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* update documentation and configuration files ([63dd3e7](https://github.com/reaLm74/obsidian-telegram-ai/commit/63dd3e74a29eab4e8e9e07f1dd84a60f824fbe0b))
+
 ## [0.1.0](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.0.1...0.1.0) (2026-02-23)
 
 
@@ -17,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Initial Release
 
-This is the first release of **Telegram AI Sync** - a complete rewrite and enhancement of the original Telegram sync plugin with advanced AI capabilities.
+This is the first release of **Telegram AI** - a complete rewrite and enhancement of the original Telegram sync plugin with advanced AI capabilities.
 
 ### ✨ Added
 
@@ -101,7 +108,7 @@ This is the first release of **Telegram AI Sync** - a complete rewrite and enhan
 
 **Author**: [Evgeniy Berezovskiy](https://github.com/reaLm74)  
 **License**: AGPL-3.0
-**Repository**: [GitHub](https://github.com/reaLm74/obsidian-telegram-ai-sync)  
+**Repository**: [GitHub](https://github.com/reaLm74/obsidian-telegram-ai)  
 
 ### Built With
 - [Obsidian Plugin API](https://docs.obsidian.md/)

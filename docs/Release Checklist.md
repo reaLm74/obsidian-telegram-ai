@@ -98,23 +98,6 @@ docs: update installation guide
 
 ---
 
-## Release via gh (GitHub CLI)
-
-```bash
-# 1. Sync develop
-git checkout develop && git pull origin develop
-
-# 2. Create PR develop → main (triggers Release Please)
-gh pr create -B main -H develop --title "Release: merge develop to main" --body "Release: merge develop to main"
-
-# 3. Wait ~1–2 min for workflows (Release Please updates develop), then merge
-gh pr merge $(gh pr list --base main --head develop -q '.[0].number') --merge
-```
-
-Or run: `./scripts/release-via-gh.sh` (Git Bash) or `.\scripts\release-via-gh.ps1` (PowerShell)
-
----
-
 ## Troubleshooting
 
 - **Release Please didn't create PR** — ensure PR develop→main is opened by repository owner (OWNER)

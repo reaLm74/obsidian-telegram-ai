@@ -3,29 +3,29 @@ import TelegramSyncPlugin from "src/main";
 
 /** Predefined OpenAI models for dropdown selection */
 const OPENAI_MODELS: Record<string, string> = {
-	"gpt-4o": "GPT-4o (flagship)",
-	"gpt-4o-mini": "GPT-4o Mini (recommended)",
-	"gpt-4o-nano": "GPT-4o Nano",
+	o1: "o1 (Reasoning model)",
+	"o1-mini": "o1-mini (Fast reasoning)",
+	"o3-mini": "o3-mini (Latest reasoning)",
+	"gpt-4o": "GPT-4o (Flagship)",
+	"gpt-4o-mini": "GPT-4o Mini (Recommended)",
 	"gpt-4-turbo": "GPT-4 Turbo",
 	"gpt-4": "GPT-4",
-	"gpt-3.5-turbo": "GPT-3.5 Turbo",
 };
 
 /** Predefined Claude models for dropdown selection */
 const CLAUDE_MODELS: Record<string, string> = {
+	"claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet (Latest)",
 	"claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
 	"claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
 	"claude-3-opus-20240229": "Claude 3 Opus",
-	"claude-3-sonnet-20240229": "Claude 3 Sonnet",
 	"claude-3-haiku-20240307": "Claude 3 Haiku",
 };
 
 /** Predefined Gemini models for dropdown selection */
 const GEMINI_MODELS: Record<string, string> = {
-	"gemini-2.5-pro": "Gemini 2.5 Pro",
-	"gemini-2.5-flash": "Gemini 2.5 Flash",
-	"gemini-2.5-flash-lite": "Gemini 2.5 Flash Lite",
-	"gemini-2.0-flash": "Gemini 2.0 Flash",
+	"gemini-2.0-flash": "Gemini 2.0 Flash (Fast & Capable)",
+	"gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite",
+	"gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Experimental)",
 	"gemini-1.5-pro": "Gemini 1.5 Pro",
 	"gemini-1.5-flash": "Gemini 1.5 Flash",
 	"gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
@@ -156,7 +156,7 @@ export class AIProviderModal extends Modal {
 			"Model",
 			"OpenAI model to use",
 			OPENAI_MODELS,
-			this.plugin.settings.openAIModel || "gpt-4o-mini",
+			this.plugin.settings.openAIModel,
 			async (value) => {
 				this.plugin.settings.openAIModel = value;
 				await this.plugin.saveSettings();
@@ -227,7 +227,7 @@ export class AIProviderModal extends Modal {
 			"Claude Model",
 			"Claude model to use",
 			CLAUDE_MODELS,
-			this.plugin.settings.claudeModel || "claude-3-5-sonnet-20241022",
+			this.plugin.settings.claudeModel,
 			async (value) => {
 				this.plugin.settings.claudeModel = value;
 				await this.plugin.saveSettings();
@@ -287,7 +287,7 @@ export class AIProviderModal extends Modal {
 			"Gemini Model",
 			"Gemini model to use for both text and images",
 			GEMINI_MODELS,
-			this.plugin.settings.geminiModel || "gemini-1.5-pro",
+			this.plugin.settings.geminiModel,
 			async (value) => {
 				this.plugin.settings.geminiModel = value;
 				await this.plugin.saveSettings();
@@ -346,23 +346,29 @@ export class AIProviderModal extends Modal {
 		onChange: (value: string) => Promise<void>,
 		providerKey: "openai" | "claude" | "gemini",
 	) {
-		const isPredefined = Object.keys(predefinedModels).includes(currentValue);
-		const dropdownValue = isPredefined ? currentValue : CUSTOM_MODEL_VALUE;
+		const isPredefined = currentValue && Object.keys(predefinedModels).includes(currentValue);
+		const dropdownValue = isPredefined ? currentValue : currentValue === "" ? "" : CUSTOM_MODEL_VALUE;
 
 		const modelSetting = new Setting(container).setName(name).setDesc(desc);
 
 		modelSetting.addDropdown((dropdown) => {
+			dropdown.addOption("", "Select a model...");
 			for (const [id, label] of Object.entries(predefinedModels)) {
 				dropdown.addOption(id, label);
 			}
-			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other (custom)");
+			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other (custom model id)");
 			dropdown.setValue(dropdownValue);
 			dropdown.onChange(async (value) => {
-				const modelValue = value === CUSTOM_MODEL_VALUE ? (currentValue && !isPredefined ? currentValue : "") : value;
-				await onChange(modelValue);
 				if (value === CUSTOM_MODEL_VALUE) {
+					if (isPredefined || !currentValue) {
+						await onChange("enter-model-id");
+					}
 					this.renderProviderSettings();
+					return;
 				}
+
+				await onChange(value);
+				this.renderProviderSettings();
 			});
 		});
 

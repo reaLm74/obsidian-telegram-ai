@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram AI Sync implements multiple layers of security to protect your sensitive information, including bot tokens, API keys, and processed content. This guide explains the security features and best practices for safe usage.
+Telegram AI implements multiple layers of security to protect your sensitive information, including bot tokens, API keys, and processed content. This guide explains the security features and best practices for safe usage.
 
 ## Token and API Key Protection
 
@@ -235,4 +235,4 @@ Review and comply with AI provider terms:
 3. **Service Disruption**: Have backup communication methods ready
 4. **Recovery Planning**: Maintain updated recovery procedures
 
-This security guide provides comprehensive information about protecting your data and maintaining secure operations with Telegram AI Sync. Regular review and updates of security practices are essential for maintaining protection against evolving threats.
+This security guide provides comprehensive information about protecting your data and maintaining secure operations with Telegram AI. Regular review and updates of security practices are essential for maintaining protection against evolving threats.

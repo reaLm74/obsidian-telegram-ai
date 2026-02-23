@@ -2,6 +2,15 @@ import TelegramBot from "node-telegram-bot-api";
 import { displayAndLogError } from "src/utils/logUtils";
 import TelegramSyncPlugin from "src/main";
 
+interface AIErrorResponse {
+	error?: {
+		message?: string;
+		type?: string;
+		status?: string;
+		code?: string;
+	};
+}
+
 export interface GeminiContent {
 	parts: Array<{
 		text: string;
@@ -24,7 +33,7 @@ export interface GeminiResponse {
 /**
  * Checks if error is temporary (retryable)
  */
-function isRetryableError(error: any, status?: number): boolean {
+function isRetryableError(error: unknown, status?: number): boolean {
 	if (status) {
 		return [429, 500, 502, 503, 504].includes(status);
 	}
@@ -99,7 +108,7 @@ async function createGeminiContent(
 	content: string,
 	prompt: string,
 	msg: TelegramBot.Message,
-): Promise<any[]> {
+): Promise<Array<{ parts: unknown[] }>> {
 	const useVision = plugin.settings.geminiVisionEnabled && msg.photo;
 
 	if (useVision) {
@@ -108,7 +117,7 @@ async function createGeminiContent(
 		if (imageData) {
 			return [
 				{
-					parts: [{ text: `${prompt}\n\n${content || "Analyze this image"}` }, imageData],
+					parts: [{ text: `${prompt}\n\n${content || "Analyze this image"}` }, imageData as unknown],
 				},
 			];
 		}
@@ -152,15 +161,7 @@ export async function processWithGemini(
 		try {
 			const contents = msg
 				? await createGeminiContent(plugin, content, prompt, msg)
-				: [
-						{
-							parts: [
-								{
-									text: `${prompt}\n\n${content}`,
-								},
-							],
-						},
-					];
+				: [{ parts: [{ text: `${prompt}\n\n${content}` }] }];
 
 			const requestBody = {
 				contents: contents,
@@ -192,11 +193,12 @@ export async function processWithGemini(
 
 				if (!response.ok) {
 					let errorMessage = `HTTP ${response.status}`;
-					let errorData: any = null;
+					let errorData: unknown = null;
 
 					try {
-						errorData = await response.json();
-						errorMessage = errorData.error?.message || errorData.error?.status || errorMessage;
+						const data = (await response.json()) as AIErrorResponse;
+						errorData = data;
+						errorMessage = data.error?.message || data.error?.status || errorMessage;
 					} catch {
 						errorMessage = await response.text();
 					}
@@ -247,11 +249,7 @@ export async function processWithGemini(
 
 				await displayAndLogError(
 					plugin,
-					new Error(
-						`Error processing through Gemini ` +
-							`(attempt ${attempt}/${maxAttempts}): ` +
-							`${errorMessage}`,
-					),
+					new Error(`Error processing through Gemini (attempt ${attempt}/${maxAttempts}): ${errorMessage}`),
 					"Gemini Processing Failed",
 					"Message will be saved without AI processing",
 					msg,

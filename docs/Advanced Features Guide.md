@@ -2,7 +2,7 @@
 
 ## Overview
 
-Telegram AI Sync offers advanced features that enhance functionality beyond basic message syncing. This guide covers user authentication, premium features, and advanced configuration options.
+Telegram AI offers advanced features that enhance functionality beyond basic message syncing. This guide covers user authentication, premium features, and advanced configuration options.
 
 ## User Authentication Features
 
@@ -204,4 +204,4 @@ Processing: Delayed processing until business hours
 3. **Monitoring**: Set up monitoring for critical workflows
 4. **Feedback Loop**: Regularly review and improve processing results
 
-This guide covers the advanced capabilities of Telegram AI Sync. These features enable sophisticated automation and integration workflows while maintaining security and performance.
+This guide covers the advanced capabilities of Telegram AI. These features enable sophisticated automation and integration workflows while maintaining security and performance.

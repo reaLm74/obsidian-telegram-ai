@@ -384,6 +384,7 @@ async function createNoteContent(
 	filesPaths: string[] = [],
 	error?: Error,
 	combinedContent?: string,
+	extractedTextOverride?: string,
 ) {
 	const filesLinks: string[] = [];
 
@@ -409,9 +410,9 @@ async function createNoteContent(
 	const contentType = getMessageContentType(msg);
 	const messageText = msg.caption || msg.text || "";
 
-	// Attempt to extract text from document if local extraction is enabled
-	let extractedText: string | null = null;
-	if (!error && contentType === "document" && filesPaths.length > 0) {
+	// Use override transcript/text if provided, otherwise try to extract from document
+	let extractedText: string | null = extractedTextOverride || null;
+	if (!error && !extractedText && contentType === "document" && filesPaths.length > 0) {
 		const filePath = filesPaths[0];
 		const fileName = filePath.split("/").pop() || "";
 		extractedText = await tryExtractDocumentText(plugin, filePath, fileName, msg.document?.mime_type);
@@ -444,12 +445,27 @@ async function createNoteContent(
 		}
 		// For other files try to process based on type
 		else {
-			if (messageText && filesPaths.length > 0) {
+			// If we have extracted text (transcript) or a message caption, use it
+			const contentToProcess = extractedText || messageText;
+
+			if (contentToProcess && filesPaths.length > 0) {
 				displayAndLog(plugin, `Processing mixed content (file + text)`, 0);
-				const fileContent = await applyNoteContentTemplate(plugin, distributionRule.templateFilePath, msg, []);
+				const fileContent = await applyNoteContentTemplate(
+					plugin,
+					distributionRule.templateFilePath,
+					msg,
+					[],
+					extractedText || undefined,
+				);
 				aiProcessedContent = await processWithAIMixed(plugin, fileContent, contentType, messageText, msg);
 			} else {
-				const fileContent = await applyNoteContentTemplate(plugin, distributionRule.templateFilePath, msg, []);
+				const fileContent = await applyNoteContentTemplate(
+					plugin,
+					distributionRule.templateFilePath,
+					msg,
+					[],
+					extractedText || undefined,
+				);
 				aiProcessedContent = await processWithAI(plugin, fileContent, contentType, msg);
 			}
 		}
@@ -476,7 +492,7 @@ async function createNoteContent(
 		distributionRule.templateFilePath,
 		msg,
 		filesLinks,
-		finalContentOverride,
+		finalContentOverride || extractedTextOverride,
 	);
 
 	return noteContent;
@@ -1010,7 +1026,16 @@ async function appendFileToNote(
 		return;
 	}
 
-	let noteContent = await createNoteContent(plugin, notePath, msg, distributionRule, [filePath], error);
+	let noteContent = await createNoteContent(
+		plugin,
+		notePath,
+		msg,
+		distributionRule,
+		[filePath],
+		error,
+		undefined,
+		extractedText || undefined,
+	);
 
 	// Apply categorization for files, passing extracted text for better AI title generation
 	const categorization = await applyCategorization(

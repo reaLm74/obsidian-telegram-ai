@@ -41,7 +41,7 @@ jobs:
                   token: ${{ secrets.GITHUB_TOKEN }}
                   release-type: node
                   command: release-pr
-                  package-name: obsidian-telegram-ai-sync
+                  package-name: obsidian-telegram-ai
                   include-v-in-tag: false
                   pull-request-title-pattern: "chore: update version of package to ${version}"
                   pull-request-header: "Update version in CHANGELOG.md and package.json"

@@ -266,14 +266,14 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		versionContainer.style.display = "flex";
 		versionContainer.style.justifyContent = "space-between";
 		versionContainer.createSpan().createEl("h1", {
-			text: `Telegram Sync ${
+			text: `Telegram AI ${
 				versionALessThanVersionB(this.plugin.manifest.version, this.plugin.settings.betaVersion)
 					? this.plugin.settings.betaVersion
 					: releaseVersion
 			}`,
 		});
 
-		this.containerEl.createEl("div", { text: "Telegram AI Sync Plugin" });
+		this.containerEl.createEl("div", { text: "Telegram AI Plugin" });
 		this.containerEl.createEl("br");
 		this.containerEl.createEl("br");
 	}
