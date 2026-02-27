@@ -1,6 +1,6 @@
 {
 	"name": "telegram-ai",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "AI-powered Telegram sync with smart categorization, media grouping, and local document processing.",
 	"main": "main.js",
 	"scripts": {
