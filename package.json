@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-telegram-ai",
-	"version": "0.1.1",
-	"description": "AI-powered Telegram to Obsidian sync with smart categorization, media grouping, and local document processing.",
+	"name": "telegram-ai",
+	"version": "0.1.2",
+	"description": "AI-powered Telegram sync with smart categorization, media grouping, and local document processing.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs && npm run post-build",

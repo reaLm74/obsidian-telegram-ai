@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg">
 </a>
 
-An advanced Obsidian plugin that syncs Telegram messages to your vault with AI-powered processing (OpenAI, Claude, Gemini), smart categorization, and automated content organization.
+An advanced plugin that syncs Telegram messages to your vault with AI-powered processing (OpenAI, Claude, Gemini), smart categorization, and automated content organization.
 
 ## ✨ Key Features
 

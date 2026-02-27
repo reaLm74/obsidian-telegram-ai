@@ -1,10 +1,10 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.1.1";
+export const releaseVersion = "0.1.2";
 export const showNewFeatures = true;
 export let showBreakingChanges = true; // Repository migration notice
 
-const newFeatures = `🎉 Version 0.1.1: Refactoring, stability improvements, and bug fixes:
+const newFeatures = `🎉 Version 0.1.2: Refactoring, stability improvements, and bug fixes:
 - 🛠️ Fixed linting and formatting issues for better cross-platform builds
 - 🎤 Improved audio processing: voice transcripts are now correctly passed to AI
 - 🤖 Updated AI model lists and fixed custom model selection bug
