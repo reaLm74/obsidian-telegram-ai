@@ -1,8 +1,8 @@
 import TelegramBot from "node-telegram-bot-api";
 import TelegramSyncPlugin from "src/main";
 import { processWithOpenAI, getPromptForContentType } from "./openai";
-import { processWithClaude } from "./claude";
-import { processWithGemini } from "./gemini";
+// import { processWithClaude } from "./claude";
+// import { processWithGemini } from "./gemini";
 
 /**
  * Processes content through selected AI provider with hierarchical prompt system
@@ -26,9 +26,10 @@ export async function processWithAI(
 
 	// For images with Vision API use special processing
 	if (contentType === "photo" && msg) {
-		const hasVision =
-			(provider === "openai" && plugin.settings.aiVisionEnabled) ||
-			(provider === "gemini" && plugin.settings.geminiVisionEnabled);
+		const hasVision = provider === "openai" && plugin.settings.aiVisionEnabled;
+		/* Coming soon in future versions:
+		|| (provider === "gemini" && plugin.settings.geminiVisionEnabled);
+		*/
 
 		if (hasVision) {
 			// For Vision API pass caption as content, image will be processed internally
@@ -38,8 +39,10 @@ export async function processWithAI(
 			switch (provider) {
 				case "openai":
 					return await processWithOpenAI(plugin, caption, prompt, msg);
+				/* Coming soon in future versions:
 				case "gemini":
 					return await processWithGemini(plugin, caption, prompt, msg);
+				*/
 				default:
 					return await processWithOpenAI(plugin, caption, prompt, msg);
 			}
@@ -55,10 +58,12 @@ export async function processWithAI(
 	switch (provider) {
 		case "openai":
 			return await processWithOpenAI(plugin, content, prompt, msg);
+		/* Coming soon in future versions:
 		case "claude":
 			return await processWithClaude(plugin, content, prompt, msg);
 		case "gemini":
 			return await processWithGemini(plugin, content, prompt, msg);
+		*/
 		default:
 			return await processWithOpenAI(plugin, content, prompt, msg);
 	}
@@ -239,10 +244,12 @@ async function processContentWithPrompt(
 	switch (provider) {
 		case "openai":
 			return await processWithOpenAI(plugin, content, prompt, msg);
+		/* Coming soon in future versions:
 		case "claude":
 			return await processWithClaude(plugin, content, prompt, msg);
 		case "gemini":
 			return await processWithGemini(plugin, content, prompt, msg);
+		*/
 		default:
 			return await processWithOpenAI(plugin, content, prompt, msg);
 	}
@@ -277,6 +284,7 @@ export function getAvailableProviders(): Array<{
 			name: "OpenAI (ChatGPT)",
 			description: "GPT-4o, GPT-4o-mini with Vision API support",
 		},
+		/* Coming soon in future versions:
 		{
 			id: "claude",
 			name: "Anthropic Claude",
@@ -287,6 +295,7 @@ export function getAvailableProviders(): Array<{
 			name: "Google Gemini",
 			description: "Gemini 1.5 Flash - fast and free",
 		},
+		*/
 	];
 }
 
@@ -297,10 +306,12 @@ export function isProviderConfigured(plugin: TelegramSyncPlugin, providerId: str
 	switch (providerId) {
 		case "openai":
 			return !!plugin.settings.openAIApiKey;
+		/* Coming soon in future versions:
 		case "claude":
 			return !!plugin.settings.claudeApiKey;
 		case "gemini":
 			return !!plugin.settings.geminiApiKey;
+		*/
 		default:
 			return false;
 	}

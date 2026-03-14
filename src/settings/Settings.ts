@@ -513,8 +513,10 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		const provider = this.plugin.settings.aiProvider || "openai";
 		const providerNames: Record<string, string> = {
 			openai: "OpenAI (ChatGPT)",
+			/* Coming soon in future versions:
 			claude: "Anthropic Claude",
 			gemini: "Google Gemini",
+			*/
 		};
 
 		const hasApiKey = this.getApiKeyStatus(provider);
@@ -724,10 +726,12 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		switch (provider) {
 			case "openai":
 				return !!this.plugin.settings.openAIApiKey?.trim();
+			/* Coming soon in future versions:
 			case "claude":
 				return !!this.plugin.settings.claudeApiKey?.trim();
 			case "gemini":
 				return !!this.plugin.settings.geminiApiKey?.trim();
+			*/
 			default:
 				return false;
 		}

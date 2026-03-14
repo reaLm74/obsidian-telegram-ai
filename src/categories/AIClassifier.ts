@@ -96,6 +96,7 @@ Respond with only the name of the most suitable category or "none" if none fits.
 					const { processWithOpenAI } = await import("src/ai/openai");
 					return await processWithOpenAI(this.plugin, content, prompt);
 				}
+				/* Coming soon in future versions:
 				case "claude": {
 					const { processWithClaude } = await import("src/ai/claude");
 					return await processWithClaude(this.plugin, content, prompt);
@@ -104,6 +105,7 @@ Respond with only the name of the most suitable category or "none" if none fits.
 					const { processWithGemini } = await import("src/ai/gemini");
 					return await processWithGemini(this.plugin, content, prompt);
 				}
+				*/
 				default: {
 					const { processWithOpenAI } = await import("src/ai/openai");
 					return await processWithOpenAI(this.plugin, content, prompt);
@@ -239,10 +241,12 @@ Respond with only the name of the most suitable category or "none" if none fits.
 		switch (provider) {
 			case "openai":
 				return !!this.plugin.settings.openAIApiKey;
+			/* Coming soon in future versions:
 			case "claude":
 				return !!this.plugin.settings.claudeApiKey;
 			case "gemini":
 				return !!this.plugin.settings.geminiApiKey;
+			*/
 			default:
 				return false;
 		}

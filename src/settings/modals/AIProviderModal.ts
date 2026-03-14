@@ -12,7 +12,7 @@ const OPENAI_MODELS: Record<string, string> = {
 	"gpt-4": "GPT-4",
 };
 
-/** Predefined Claude models for dropdown selection */
+/* Coming soon in future versions:
 const CLAUDE_MODELS: Record<string, string> = {
 	"claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet (Latest)",
 	"claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
@@ -20,8 +20,9 @@ const CLAUDE_MODELS: Record<string, string> = {
 	"claude-3-opus-20240229": "Claude 3 Opus",
 	"claude-3-haiku-20240307": "Claude 3 Haiku",
 };
+*/
 
-/** Predefined Gemini models for dropdown selection */
+/* Coming soon in future versions:
 const GEMINI_MODELS: Record<string, string> = {
 	"gemini-2.0-flash": "Gemini 2.0 Flash (Fast & Capable)",
 	"gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite",
@@ -30,6 +31,7 @@ const GEMINI_MODELS: Record<string, string> = {
 	"gemini-1.5-flash": "Gemini 1.5 Flash",
 	"gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
 };
+*/
 
 const CUSTOM_MODEL_VALUE = "__custom__";
 
@@ -56,8 +58,10 @@ export class AIProviderModal extends Modal {
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption("openai", "OpenAI (ChatGPT)")
+					/* Coming soon in future versions:
 					.addOption("claude", "Anthropic Claude")
 					.addOption("gemini", "Google Gemini")
+					*/
 					.setValue(this.plugin.settings.aiProvider || "openai")
 					.onChange(async (value) => {
 						this.plugin.settings.aiProvider = value as "openai" | "claude" | "gemini";
@@ -97,12 +101,14 @@ export class AIProviderModal extends Modal {
 			case "openai":
 				this.addOpenAISettings(providerContainer);
 				break;
+			/* Coming soon in future versions:
 			case "claude":
 				this.addClaudeSettings(providerContainer);
 				break;
 			case "gemini":
 				this.addGeminiSettings(providerContainer);
 				break;
+			*/
 		}
 	}
 
@@ -206,6 +212,7 @@ export class AIProviderModal extends Modal {
 			});
 	}
 
+	/* Coming soon in future versions:
 	private addClaudeSettings(container: HTMLElement) {
 		new Setting(container)
 			.setName("Claude API Key")
@@ -265,7 +272,9 @@ export class AIProviderModal extends Modal {
 					});
 			});
 	}
+    */
 
+	/* Coming soon in future versions:
 	private addGeminiSettings(container: HTMLElement) {
 		new Setting(container)
 			.setName("Gemini API Key")
@@ -336,6 +345,7 @@ export class AIProviderModal extends Modal {
 					});
 			});
 	}
+    */
 
 	private addModelDropdown(
 		container: HTMLElement,
