@@ -3,7 +3,7 @@ import { Api, TelegramClient } from "telegram";
 import { getFileObject } from "../bot/message/getters";
 import { extractMediaId } from "./botFileToMessageMedia";
 import { TotalList } from "telegram/Helpers";
-import { _1h, _1sec, _2h } from "src/utils/logUtils";
+import { _1h, _1sec, _2h, sleep } from "src/utils/logUtils";
 import { unixTime2Date } from "src/utils/dateUtils";
 
 const cantFindTheMessage = "Can't find the message for connected user.";
@@ -47,11 +47,17 @@ export function clearCachedMessagesInterval() {
 	clearInterval(cachedMessagesIntervalId);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getMediaId(media: any): bigint | undefined {
+/** Minimal shape of a GramJS message media object that exposes document/photo IDs */
+interface MediaWithId {
+	document?: { id?: bigint };
+	photo?: { id?: bigint };
+}
+
+function getMediaId(media: unknown): bigint | undefined {
 	if (!media) return undefined;
-	if (media.document && media.document.id) return media.document.id;
-	if (media.photo && media.photo.id) return media.photo.id;
+	const m = media as MediaWithId;
+	if (m.document && m.document.id) return m.document.id;
+	if (m.photo && m.photo.id) return m.photo.id;
 	return undefined;
 }
 
@@ -75,9 +81,9 @@ export async function getInputPeer(
 	const dialog = dialogs.find((d) => d.id?.toJSNumber() == chatId);
 	if (!dialog && limit <= 20) return await getInputPeer(client, user, botUser, botMsg, limit + 10);
 	else if (!dialog || !dialog.inputEntity) {
-		console.log(`Telegram Sync => Dialogs:\n${dialogs}`);
+		console.debug(`Telegram Sync => Dialogs:\n${dialogs.map((d) => d.name ?? d.id?.toString() ?? "").join(", ")}`);
 		throw new Error(
-			`User ${user.username || user.firstName || user.id} does not have chat with ${
+			`User ${user.username || user.firstName || user.id.toString()} does not have chat with ${
 				botMsg.chat.username || botMsg.chat.title || botMsg.chat.first_name || botMsg.chat.id
 			} `,
 		);
@@ -110,8 +116,7 @@ export async function getMessage(
 	);
 	if (!messagesRequests.find((rq) => rq.limit == limit)) {
 		// wait 1 sec for history updates in Telegram
-		if (new Date().getTime() - unixTime2Date(botMsg.date, botMsg.message_id).getTime() < _1sec)
-			await new Promise((resolve) => setTimeout(resolve, _1sec));
+		if (new Date().getTime() - unixTime2Date(botMsg.date, botMsg.message_id).getTime() < _1sec) await sleep(_1sec);
 		let messages = await client.getMessages(inputPeer, { limit, reverse: true, offsetDate: botMsg.date - 2 });
 		// remove bot messages (fromId != undefined)
 		messages = messages.filter((m) => m.fromId || m.peerId instanceof Api.PeerChannel) || [];
@@ -121,8 +126,10 @@ export async function getMessage(
 
 	if (!botMsg.text && !mediaId) {
 		const { fileObject } = getFileObject(botMsg);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		const fileObjectToUse = fileObject instanceof Array ? fileObject.pop() : fileObject;
-		mediaId = extractMediaId(fileObjectToUse.file_id);
+
+		mediaId = extractMediaId((fileObjectToUse as { file_id?: string })?.file_id ?? "");
 	}
 	const skipMsgIds = cachedMessageCouples
 		.filter((msgCouple) => Math.abs(botMsg.date - msgCouple.date) <= 1 && msgCouple.botMsgId != botMsg.message_id)
@@ -155,6 +162,7 @@ export async function getMessage(
 }
 
 function findUserMsgByOffset(
+	this: void,
 	messages: Api.Message[],
 	botMsg: TelegramBot.Message,
 	// add dateOffset, because different date rounding between bot api and user api for unknown reason

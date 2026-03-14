@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/ban-types */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/ban-types -- third-party type declaration file; `{}` types must match the original library signatures exactly */
+/* eslint-disable @typescript-eslint/no-explicit-any -- third-party type declaration file; `any` types must match the original library signatures exactly */
 declare module "node-telegram-bot-api" {
 	import { ServerOptions } from "https";
 	import { Options } from "request";
@@ -140,7 +140,7 @@ declare module "node-telegram-bot-api" {
 			polling?: boolean | PollingOptions | undefined;
 			webHook?: boolean | WebHookOptions | undefined;
 			onlyFirstMatch?: boolean | undefined;
-			request?: Options | undefined;
+			request?: Record<string, unknown> | undefined;
 			baseApiUrl?: string | undefined;
 			filepath?: boolean | undefined;
 			testEnvironment?: boolean | undefined;
@@ -958,22 +958,30 @@ declare module "node-telegram-bot-api" {
 			icon_custom_emoji_id: string;
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-empty-interface -- Currently holds no information (https://core.telegram.org/bots/api#forumtopicclosed)
-		interface ForumTopicClosed {}
+		// Currently holds no information (https://core.telegram.org/bots/api#forumtopicclosed)
+		interface ForumTopicClosed {
+			[key: string]: never;
+		}
 
 		interface ForumTopicEdited {
 			name: string;
 			icon_custom_emoji_id: string;
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-empty-interface -- Currently holds no information (https://core.telegram.org/bots/api#forumtopicreopened)
-		interface ForumTopicReopened {}
+		// Currently holds no information (https://core.telegram.org/bots/api#forumtopicreopened)
+		interface ForumTopicReopened {
+			[key: string]: never;
+		}
 
-		// eslint-disable-next-line @typescript-eslint/no-empty-interface -- Currently holds no information (https://core.telegram.org/bots/api#generalforumtopichidden)
-		interface GeneralForumTopicHidden {}
+		// Currently holds no information (https://core.telegram.org/bots/api#generalforumtopichidden)
+		interface GeneralForumTopicHidden {
+			[key: string]: never;
+		}
 
-		// eslint-disable-next-line @typescript-eslint/no-empty-interface -- Currently holds no information (https://core.telegram.org/bots/api#generalforumtopicunhidden)
-		interface GeneralForumTopicUnhidden {}
+		// Currently holds no information (https://core.telegram.org/bots/api#generalforumtopicunhidden)
+		interface GeneralForumTopicUnhidden {
+			[key: string]: never;
+		}
 
 		interface UserShared {
 			request_id: number;
@@ -1672,14 +1680,17 @@ declare module "node-telegram-bot-api" {
 			fileOptions?: TelegramBot.FileOptions,
 		): Promise<TelegramBot.Message>;
 
-		getStickerSet(name: string, options?: {}): Promise<TelegramBot.StickerSet>;
+		getStickerSet(name: string, options?: Record<string, never>): Promise<TelegramBot.StickerSet>;
 
-		getCustomEmojiStickers(customEmojiIds: string[], options?: {}): Promise<TelegramBot.Sticker[]>;
+		getCustomEmojiStickers(
+			customEmojiIds: string[],
+			options?: Record<string, never>,
+		): Promise<TelegramBot.Sticker[]>;
 
 		uploadStickerFile(
 			userId: number,
 			pngSticker: string | Stream | Buffer,
-			options?: {},
+			options?: Record<string, never>,
 			fileOptions?: TelegramBot.FileOptions,
 		): Promise<TelegramBot.File>;
 
@@ -1705,13 +1716,13 @@ declare module "node-telegram-bot-api" {
 
 		setStickerPositionInSet(sticker: string, position: number): Promise<boolean>;
 
-		deleteStickerFromSet(sticker: string, options?: {}): Promise<boolean>;
+		deleteStickerFromSet(sticker: string, options?: Record<string, never>): Promise<boolean>;
 
 		setStickerSetThumb(
 			userId: number,
 			name: string,
 			pngThumb: string | Stream | Buffer,
-			options?: {},
+			options?: Record<string, never>,
 			fileOptions?: TelegramBot.FileOptions,
 		): Promise<boolean>;
 
@@ -2075,3 +2086,5 @@ declare module "node-telegram-bot-api" {
 	}
 	export = TelegramBot;
 }
+/* eslint-enable @typescript-eslint/ban-types */
+/* eslint-enable @typescript-eslint/no-explicit-any */

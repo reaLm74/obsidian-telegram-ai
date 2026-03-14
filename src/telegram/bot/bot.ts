@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import TelegramSyncPlugin from "src/main";
-import { _1sec, displayAndLog } from "src/utils/logUtils";
+import { _1sec, displayAndLog, sleep } from "src/utils/logUtils";
 import { handleMessage } from "./message/handlers";
 import { reconnect } from "../user/user";
 import { enqueue, enqueueByCondition } from "src/utils/queues";
@@ -18,23 +18,30 @@ export async function connect(plugin: TelegramSyncPlugin) {
 			return;
 		}
 		// Create a new bot instance and start polling
+		// eslint-disable-next-line @typescript-eslint/unbound-method
 		plugin.bot = new TelegramBot(await enqueue(plugin, plugin.getBotToken));
 		const bot = plugin.bot;
 		// Set connected flag to false and log errors when a polling error occurs
-		bot.on("polling_error", async (error: unknown) => {
-			handlePollingError(plugin, error);
+		bot.on("polling_error", (error: unknown) => {
+			void handlePollingError(plugin, error);
 		});
 
-		bot.on("channel_post", async (msg) => {
-			await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg, true);
+		bot.on("channel_post", (msg) => {
+			void (async () => {
+				await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg, true);
+			})();
 		});
 
-		bot.on("edited_message", async (msg) => {
-			await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg);
+		bot.on("edited_message", (msg) => {
+			void (async () => {
+				await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg);
+			})();
 		});
 
-		bot.on("message", async (msg) => {
-			await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg);
+		bot.on("message", (msg) => {
+			void (async () => {
+				await enqueueByCondition(!plugin.settings.parallelMessageProcessing, handleMessage, plugin, msg);
+			})();
 		});
 
 		// Check if the bot is connected and set the connected flag accordingly
@@ -46,9 +53,9 @@ export async function connect(plugin: TelegramSyncPlugin) {
 		}
 		plugin.setBotStatus("connected");
 		plugin.time4processOldMessages = true;
-	} catch (error) {
+	} catch (error: unknown) {
 		if (!plugin.bot || !plugin.bot.isPolling()) {
-			plugin.setBotStatus("disconnected", error);
+			plugin.setBotStatus("disconnected", error instanceof Error ? error : new Error(String(error)));
 		}
 	} finally {
 		plugin.checkingBotConnection = false;
@@ -58,7 +65,9 @@ export async function connect(plugin: TelegramSyncPlugin) {
 // Stop the bot polling
 export async function disconnect(plugin: TelegramSyncPlugin) {
 	try {
-		plugin.bot && (await plugin.bot.stopPolling());
+		if (plugin.bot) {
+			await plugin.bot.stopPolling();
+		}
 	} finally {
 		plugin.bot = undefined;
 		plugin.botUser = undefined;
@@ -66,12 +75,12 @@ export async function disconnect(plugin: TelegramSyncPlugin) {
 	}
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handlePollingError(plugin: TelegramSyncPlugin, error: any) {
+// Handle error from the Telegram bot polling event
+function handlePollingError(this: void, plugin: TelegramSyncPlugin, error: unknown) {
 	let pollingError = "unknown";
 
 	try {
-		const errorCode = error.response.body.error_code;
+		const errorCode = (error as { response?: { body?: { error_code?: number } } }).response?.body?.error_code;
 
 		if (errorCode === 409) {
 			pollingError = "twoBotInstances";
@@ -82,7 +91,7 @@ async function handlePollingError(plugin: TelegramSyncPlugin, error: any) {
 		}
 	} catch {
 		try {
-			pollingError = error.code === "EFATAL" ? "fatalError" : pollingError;
+			pollingError = (error as { code?: string }).code === "EFATAL" ? "fatalError" : pollingError;
 		} catch {
 			pollingError = "unknown";
 		}
@@ -91,24 +100,28 @@ async function handlePollingError(plugin: TelegramSyncPlugin, error: any) {
 	if (plugin.lastPollingErrors.length == 0 || !plugin.lastPollingErrors.includes(pollingError)) {
 		plugin.lastPollingErrors.push(pollingError);
 		if (!(pollingError == "twoBotInstances")) {
-			plugin.setBotStatus("disconnected", error);
+			plugin.setBotStatus("disconnected", error as Error);
 		}
 	}
 
-	if (!(pollingError == "twoBotInstances")) checkConnectionAfterError(plugin);
+	if (!(pollingError == "twoBotInstances")) {
+		void (async () => {
+			await checkConnectionAfterError(plugin);
+		})();
+	}
 }
 
-async function checkConnectionAfterError(plugin: TelegramSyncPlugin, intervalInSeconds = 15) {
+async function checkConnectionAfterError(this: void, plugin: TelegramSyncPlugin, intervalInSeconds = 15) {
 	if (plugin.checkingBotConnection || !plugin.bot || !plugin.bot.isPolling()) return;
 	if (!plugin.checkingBotConnection && plugin.isBotConnected()) plugin.lastPollingErrors = [];
 	try {
 		plugin.checkingBotConnection = true;
-		await new Promise((resolve) => setTimeout(resolve, intervalInSeconds * _1sec));
+		await sleep(intervalInSeconds * _1sec);
 		plugin.botUser = await plugin.bot.getMe();
 		plugin.setBotStatus("connected");
 		plugin.lastPollingErrors = [];
 		plugin.checkingBotConnection = false;
-		reconnect(plugin);
+		void reconnect(plugin);
 		plugin.time4processOldMessages = true;
 	} catch {
 		plugin.checkingBotConnection = false;

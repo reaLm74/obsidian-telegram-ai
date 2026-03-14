@@ -9,7 +9,7 @@ import { ProgressBarType, _3MB, createProgressBar, deleteProgressBar, updateProg
 import { getInputPeer, getMessage } from "../convertors/botMessageToClientMessage";
 import { formatDateTime } from "src/utils/dateUtils";
 import { LogLevel, Logger } from "telegram/extensions/Logger";
-import { _1min, _5sec } from "src/utils/logUtils";
+import { _1min, _5sec, sleep } from "src/utils/logUtils";
 import * as config from "./config";
 import bigInt from "big-integer";
 import { PromisedWebSockets } from "telegram/extensions";
@@ -55,9 +55,8 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 	if (!client || _sessionType !== sessionType || _sessionId !== sessionId) {
 		await stop();
 		const logger = new Logger(LogLevel.ERROR);
-		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		logger.log = (level, message, color) => {
-			console.log(`Telegram Sync => User connection error: ${message}`);
+		logger.log = (_level, message, _color) => {
+			console.error(`Telegram Sync => User connection error: ${message}`);
 			// TODO in 2024: add user connection status checking and setting by controlling error and info logs
 			//if (message == "Automatic reconnection failed 2 time(s)")
 		};
@@ -82,7 +81,7 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 			if (sessionType == "user" && authorized && (await client.isBot()))
 				throw new Error("Stored session conflict. Try to log in again.");
 			if (!authorized) clientUser = undefined;
-			else if (!clientUser && authorized) clientUser = (await client.getMe()) as Api.User;
+			else if (!clientUser && authorized) clientUser = await client.getMe();
 		} catch (e) {
 			if (
 				sessionType == "user" &&
@@ -115,8 +114,8 @@ export async function signInAsBot(botToken: string) {
 		if (!_botToken) _botToken = botToken;
 		if (_botToken == botToken) return;
 	}
-	await client
-		.signInBot(
+	try {
+		const botUser = await client.signInBot(
 			{
 				apiId: config.dIipa,
 				apiHash: config.hsaHipa,
@@ -124,25 +123,22 @@ export async function signInAsBot(botToken: string) {
 			{
 				botAuthToken: botToken,
 			},
-		)
-		.then(async (botUser) => {
-			_botToken = botToken;
-			clientUser = botUser as Api.User;
-			return botUser;
-		})
-		.catch((e) => {
-			_botToken = undefined;
-			clientUser = undefined;
-			throw new Error(e);
-		});
+		);
+		_botToken = botToken;
+		clientUser = botUser as Api.User;
+	} catch (e: unknown) {
+		_botToken = undefined;
+		clientUser = undefined;
+		throw new Error(String(e));
+	}
 }
 
 export async function signInAsUserWithQrCode(container: HTMLDivElement, password?: string) {
 	if (!client) throw NotConnected;
 	if ((await client.checkAuthorization()) && (await client.isBot()))
 		throw new Error("User session is missed. Try to restart the plugin or Obsidian");
-	await client
-		.signInUserWithQrCode(
+	try {
+		const user = await client.signInUserWithQrCode(
 			{ apiId: config.dIipa, apiHash: config.hsaHipa },
 			{
 				qrCode: async (qrCode) => {
@@ -158,25 +154,22 @@ export async function signInAsUserWithQrCode(container: HTMLDivElement, password
 					}
 					container.appendChild(svg);
 				},
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				password: async (hint) => {
-					return password ? password : "";
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars -- `hint` is part of the GramJS password callback signature but the password comes from plugin settings
+				password: (hint) => {
+					return Promise.resolve(password ? password : "");
 				},
-				onError: async (error) => {
+				onError: (error) => {
 					container.setText(`Error: ${error.message}`);
-					console.log(`Telegram Sync => ${error}`);
-					return true;
+					console.error(`Telegram Sync => ${error}`);
+					return Promise.resolve(true);
 				},
 			},
-		)
-		.then((user) => {
-			clientUser = user as Api.User;
-			return clientUser;
-		})
-		.catch((e) => {
-			clientUser = undefined;
-			console.log(`Telegram Sync => ${e}`);
-		});
+		);
+		clientUser = user as Api.User;
+	} catch (e) {
+		clientUser = undefined;
+		console.error(`Telegram Sync => ${e}`);
+	}
 }
 
 async function checkBotService(): Promise<TelegramClient> {
@@ -211,25 +204,28 @@ export async function downloadMedia(
 
 	const progressBarMessage =
 		fileSize > _3MB ? await createProgressBar(bot, botMsg, ProgressBarType.DOWNLOADING) : undefined;
-	return await checkedClient
-		.downloadMedia(message || convertBotFileToMessageMedia(fileId || "", fileSize), {
-			progressCallback: async (receivedBytes, totalBytes) => {
-				stage = await updateProgressBar(
-					bot,
-					botMsg,
-					progressBarMessage,
-					totalBytes.toJSNumber() || fileSize,
-					receivedBytes.toJSNumber(),
-					stage,
-				);
+	try {
+		const data = await checkedClient.downloadMedia(
+			message || convertBotFileToMessageMedia(fileId || "", fileSize),
+			{
+				progressCallback: (receivedBytes, totalBytes) => {
+					void updateProgressBar(
+						bot,
+						botMsg,
+						progressBarMessage,
+						totalBytes.toJSNumber() || fileSize,
+						receivedBytes.toJSNumber(),
+						stage,
+					).then((s) => {
+						stage = s;
+					});
+				},
 			},
-		})
-		.then(async (data) => {
-			return data;
-		})
-		.finally(async () => {
-			await deleteProgressBar(bot, botMsg, progressBarMessage);
-		});
+		);
+		return data;
+	} finally {
+		await deleteProgressBar(bot, botMsg, progressBarMessage);
+	}
 }
 
 export async function sendReaction(botUser: TelegramBot.User, botMsg: TelegramBot.Message, emoticon: string) {
@@ -284,7 +280,7 @@ export async function transcribeAudio(
 			);
 			stage = await updateProgressBar(bot, botMsg, progressBarMessage, 14, i, stage);
 			if (transcribedAudio.pending)
-				await new Promise((resolve) => setTimeout(resolve, _5sec)); // 5 sec delay between updates
+				await sleep(_5sec); // 5 sec delay between updates
 			else if (i == limit * 14)
 				throw new Error("Very long audio. Transcribing can't be longer then 15 min lasting.");
 			else break;
@@ -304,7 +300,7 @@ export async function subscribedOnInsiderChannel(): Promise<boolean> {
 		const { checkedClient } = await checkUserService();
 		const messages = await checkedClient.getMessages(insiderChannel, { limit: 1 });
 		return messages.length > 0;
-	} catch (e) {
+	} catch (_e) {
 		return false;
 	}
 }

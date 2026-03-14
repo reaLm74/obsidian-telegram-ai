@@ -44,7 +44,7 @@ export async function isTopicFiltered(
 	return topicName == topic.name;
 }
 
-export async function isContentFiltered(msg: TelegramBot.Message, substring: string): Promise<boolean> {
+export function isContentFiltered(msg: TelegramBot.Message, substring: string): boolean {
 	return (msg.text || msg.caption || "").contains(substring);
 }
 
@@ -102,7 +102,7 @@ export async function isMessageFiltered(
 		case ConditionType.TOPIC:
 			return await isTopicFiltered(plugin, msg, condition.value);
 		case ConditionType.CONTENT:
-			return await isContentFiltered(msg, condition.value);
+			return isContentFiltered(msg, condition.value);
 		case ConditionType.VOICE_TRANSCRIPT:
 			return await isVoiceTranscriptFiltered(plugin, msg, condition.value);
 		case ConditionType.CATEGORY:

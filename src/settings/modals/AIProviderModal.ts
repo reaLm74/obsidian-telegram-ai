@@ -12,27 +12,6 @@ const OPENAI_MODELS: Record<string, string> = {
 	"gpt-4": "GPT-4",
 };
 
-/* Coming soon in future versions:
-const CLAUDE_MODELS: Record<string, string> = {
-	"claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet (Latest)",
-	"claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
-	"claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
-	"claude-3-opus-20240229": "Claude 3 Opus",
-	"claude-3-haiku-20240307": "Claude 3 Haiku",
-};
-*/
-
-/* Coming soon in future versions:
-const GEMINI_MODELS: Record<string, string> = {
-	"gemini-2.0-flash": "Gemini 2.0 Flash (Fast & Capable)",
-	"gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite",
-	"gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Experimental)",
-	"gemini-1.5-pro": "Gemini 1.5 Pro",
-	"gemini-1.5-flash": "Gemini 1.5 Flash",
-	"gemini-1.5-flash-8b": "Gemini 1.5 Flash 8B",
-};
-*/
-
 const CUSTOM_MODEL_VALUE = "__custom__";
 
 export class AIProviderModal extends Modal {
@@ -49,25 +28,24 @@ export class AIProviderModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: "AI Provider Settings" });
+		contentEl.createEl("h2", { text: "AI provider settings" });
 
 		// AI Provider Selection
 		new Setting(contentEl)
-			.setName("AI Provider")
+			.setName("AI provider")
 			.setDesc("Choose which AI service to use")
 			.addDropdown((dropdown) => {
 				dropdown
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.addOption("openai", "OpenAI (ChatGPT)")
-					/* Coming soon in future versions:
-					.addOption("claude", "Anthropic Claude")
-					.addOption("gemini", "Google Gemini")
-					*/
 					.setValue(this.plugin.settings.aiProvider || "openai")
-					.onChange(async (value) => {
-						this.plugin.settings.aiProvider = value as "openai" | "claude" | "gemini";
-						await this.plugin.saveSettings();
-						this.renderProviderSettings();
-						this.onUpdate();
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.aiProvider = value as "openai" | "claude" | "gemini";
+							await this.plugin.saveSettings();
+							this.renderProviderSettings();
+							this.onUpdate();
+						})();
 					});
 			});
 
@@ -75,13 +53,11 @@ export class AIProviderModal extends Modal {
 		this.renderProviderSettings(providerContainer);
 
 		// Advanced Settings Section
-		contentEl.createEl("h3", { text: "Advanced Settings" });
+		contentEl.createEl("h3", { text: "Advanced settings" });
 		this.addAdvancedSettings(contentEl);
 
 		// OK Button
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
-		buttonContainer.style.textAlign = "right";
-		buttonContainer.style.marginTop = "20px";
 
 		const okButton = buttonContainer.createEl("button", { text: "OK", cls: "mod-cta" });
 		okButton.addEventListener("click", () => {
@@ -101,59 +77,58 @@ export class AIProviderModal extends Modal {
 			case "openai":
 				this.addOpenAISettings(providerContainer);
 				break;
-			/* Coming soon in future versions:
-			case "claude":
-				this.addClaudeSettings(providerContainer);
-				break;
-			case "gemini":
-				this.addGeminiSettings(providerContainer);
-				break;
-			*/
 		}
 	}
 
 	private addOpenAISettings(container: HTMLElement) {
 		new Setting(container)
-			.setName("OpenAI API Key")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setName("OpenAI API key")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setDesc("Your OpenAI API key")
 			.addText((text) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder("sk-...")
 					.setValue(this.plugin.settings.openAIApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.openAIApiKey = value.trim();
-						await this.plugin.saveSettings();
-						this.onUpdate();
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.openAIApiKey = value.trim();
+							await this.plugin.saveSettings();
+							this.onUpdate();
+						})();
 					});
 				text.inputEl.type = "password";
-				text.inputEl.style.width = "300px";
+				text.inputEl.addClass("ai-input-wide");
 			})
 			.addButton((button) => {
 				button
-					.setButtonText("Test Key")
+					.setButtonText("Test key")
 					.setTooltip("Test API key validity")
-					.onClick(async () => {
-						button.setDisabled(true);
-						button.setButtonText("Testing...");
+					.onClick(() => {
+						void (async () => {
+							button.setDisabled(true);
+							button.setButtonText("Testing...");
 
-						const { testOpenAIApiKey } = await import("src/ai/openai");
-						const result = await testOpenAIApiKey(this.plugin.settings.openAIApiKey);
+							const { testOpenAIApiKey } = await import("src/ai/openai");
+							const result = await testOpenAIApiKey(this.plugin.settings.openAIApiKey);
 
-						button.setButtonText(result.success ? "✓" : "✗");
-						button.setTooltip(result.message);
+							button.setButtonText(result.success ? "✓" : "✗");
+							button.setTooltip(result.message);
 
-						// Show notification
-						if (result.success) {
-							new Notice(result.message);
-						} else {
-							new Notice(result.message, 5000);
-						}
+							// Show notification
+							if (result.success) {
+								new Notice(result.message);
+							} else {
+								new Notice(result.message, 5000);
+							}
 
-						// Reset button after 3 seconds
-						setTimeout(() => {
-							button.setButtonText("Test Key");
-							button.setTooltip("Test API key validity");
-							button.setDisabled(false);
-						}, 3000);
+							// Reset button after 3 seconds
+							setTimeout(() => {
+								button.setButtonText("Test key");
+								button.setTooltip("Test API key validity");
+								button.setDisabled(false);
+							}, 3000);
+						})();
 					});
 			});
 
@@ -172,13 +147,16 @@ export class AIProviderModal extends Modal {
 		);
 
 		new Setting(container)
-			.setName("Enable Vision API")
+			.setName("Enable vision API")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setDesc("Use GPT-4 Vision for image analysis (requires compatible model)")
 			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.aiVisionEnabled).onChange(async (value) => {
-					this.plugin.settings.aiVisionEnabled = value;
-					await this.plugin.saveSettings();
-					this.onUpdate();
+				toggle.setValue(this.plugin.settings.aiVisionEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.aiVisionEnabled = value;
+						await this.plugin.saveSettings();
+						this.onUpdate();
+					})();
 				});
 			});
 
@@ -190,162 +168,31 @@ export class AIProviderModal extends Modal {
 					.setLimits(0, 2, 0.1)
 					.setValue(this.plugin.settings.openAITemperature)
 					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.openAITemperature = value;
-						await this.plugin.saveSettings();
-						this.onUpdate();
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.openAITemperature = value;
+							await this.plugin.saveSettings();
+							this.onUpdate();
+						})();
 					});
 			});
 
 		new Setting(container)
-			.setName("Max Tokens")
+			.setName("Max tokens")
 			.setDesc("Maximum length of the response")
 			.addText((text) => {
 				text.setPlaceholder("2000")
 					.setValue(this.plugin.settings.openAIMaxTokens.toString())
-					.onChange(async (value) => {
-						const tokens = parseInt(value) || 2000;
-						this.plugin.settings.openAIMaxTokens = tokens;
-						await this.plugin.saveSettings();
-						this.onUpdate();
+					.onChange((value) => {
+						void (async () => {
+							const tokens = parseInt(value) || 2000;
+							this.plugin.settings.openAIMaxTokens = tokens;
+							await this.plugin.saveSettings();
+							this.onUpdate();
+						})();
 					});
 			});
 	}
-
-	/* Coming soon in future versions:
-	private addClaudeSettings(container: HTMLElement) {
-		new Setting(container)
-			.setName("Claude API Key")
-			.setDesc("Your Anthropic Claude API key")
-			.addText((text) => {
-				text.setPlaceholder("sk-ant-...")
-					.setValue(this.plugin.settings.claudeApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.claudeApiKey = value.trim();
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-				text.inputEl.type = "password";
-				text.inputEl.style.width = "300px";
-			});
-
-		this.addModelDropdown(
-			container,
-			"Claude Model",
-			"Claude model to use",
-			CLAUDE_MODELS,
-			this.plugin.settings.claudeModel,
-			async (value) => {
-				this.plugin.settings.claudeModel = value;
-				await this.plugin.saveSettings();
-				this.onUpdate();
-			},
-			"claude",
-		);
-
-		new Setting(container)
-			.setName("Temperature")
-			.setDesc("Controls randomness (0-1). Lower = more focused, higher = more creative")
-			.addSlider((slider) => {
-				slider
-					.setLimits(0, 1, 0.1)
-					.setValue(this.plugin.settings.claudeTemperature)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.claudeTemperature = value;
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-			});
-
-		new Setting(container)
-			.setName("Max Tokens")
-			.setDesc("Maximum length of the response")
-			.addText((text) => {
-				text.setPlaceholder("2000")
-					.setValue(this.plugin.settings.claudeMaxTokens.toString())
-					.onChange(async (value) => {
-						const tokens = parseInt(value) || 2000;
-						this.plugin.settings.claudeMaxTokens = tokens;
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-			});
-	}
-    */
-
-	/* Coming soon in future versions:
-	private addGeminiSettings(container: HTMLElement) {
-		new Setting(container)
-			.setName("Gemini API Key")
-			.setDesc("Your Google Gemini API key")
-			.addText((text) => {
-				text.setPlaceholder("AIza...")
-					.setValue(this.plugin.settings.geminiApiKey)
-					.onChange(async (value) => {
-						this.plugin.settings.geminiApiKey = value.trim();
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-				text.inputEl.type = "password";
-				text.inputEl.style.width = "300px";
-			});
-
-		this.addModelDropdown(
-			container,
-			"Gemini Model",
-			"Gemini model to use for both text and images",
-			GEMINI_MODELS,
-			this.plugin.settings.geminiModel,
-			async (value) => {
-				this.plugin.settings.geminiModel = value;
-				await this.plugin.saveSettings();
-				this.onUpdate();
-			},
-			"gemini",
-		);
-
-		new Setting(container)
-			.setName("Enable Gemini Vision")
-			.setDesc("Use the selected Gemini model for image analysis")
-			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.geminiVisionEnabled).onChange(async (value) => {
-					this.plugin.settings.geminiVisionEnabled = value;
-					await this.plugin.saveSettings();
-					this.onUpdate();
-				});
-			});
-
-		new Setting(container)
-			.setName("Temperature")
-			.setDesc("Controls randomness (0-2). Lower = more focused, higher = more creative")
-			.addSlider((slider) => {
-				slider
-					.setLimits(0, 2, 0.1)
-					.setValue(this.plugin.settings.geminiTemperature)
-					.setDynamicTooltip()
-					.onChange(async (value) => {
-						this.plugin.settings.geminiTemperature = value;
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-			});
-
-		new Setting(container)
-			.setName("Max Tokens")
-			.setDesc("Maximum length of the response")
-			.addText((text) => {
-				text.setPlaceholder("2000")
-					.setValue(this.plugin.settings.geminiMaxTokens.toString())
-					.onChange(async (value) => {
-						const tokens = parseInt(value) || 2000;
-						this.plugin.settings.geminiMaxTokens = tokens;
-						await this.plugin.saveSettings();
-						this.onUpdate();
-					});
-			});
-	}
-    */
 
 	private addModelDropdown(
 		container: HTMLElement,
@@ -366,19 +213,22 @@ export class AIProviderModal extends Modal {
 			for (const [id, label] of Object.entries(predefinedModels)) {
 				dropdown.addOption(id, label);
 			}
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other (custom model id)");
 			dropdown.setValue(dropdownValue);
-			dropdown.onChange(async (value) => {
+			dropdown.onChange((value) => {
 				if (value === CUSTOM_MODEL_VALUE) {
 					if (isPredefined || !currentValue) {
-						await onChange("enter-model-id");
+						void onChange("enter-model-id");
 					}
 					this.renderProviderSettings();
 					return;
 				}
 
-				await onChange(value);
-				this.renderProviderSettings();
+				void (async () => {
+					await onChange(dropdown.getValue());
+					this.renderProviderSettings();
+				})();
 			});
 		});
 
@@ -386,16 +236,18 @@ export class AIProviderModal extends Modal {
 			modelSetting.addText((text) => {
 				text.setPlaceholder("Enter model ID")
 					.setValue(currentValue)
-					.onChange(async (value) => {
-						const modelId = value.trim();
-						const settings = this.plugin.settings;
-						if (providerKey === "openai") settings.openAIModel = modelId;
-						else if (providerKey === "claude") settings.claudeModel = modelId;
-						else if (providerKey === "gemini") settings.geminiModel = modelId;
-						await this.plugin.saveSettings();
-						this.onUpdate();
+					.onChange((value) => {
+						void (async () => {
+							const modelId = value.trim();
+							const settings = this.plugin.settings;
+							if (providerKey === "openai") settings.openAIModel = modelId;
+							else if (providerKey === "claude") settings.claudeModel = modelId;
+							else if (providerKey === "gemini") settings.geminiModel = modelId;
+							await this.plugin.saveSettings();
+							this.onUpdate();
+						})();
 					});
-				text.inputEl.style.width = "200px";
+				text.inputEl.addClass("ai-input-medium");
 			});
 		}
 	}
@@ -407,13 +259,15 @@ export class AIProviderModal extends Modal {
 			.addText((text) => {
 				text.setPlaceholder("3")
 					.setValue(this.plugin.settings.aiRetryAttempts.toString())
-					.onChange(async (value) => {
-						const num = parseInt(value);
-						if (!isNaN(num) && num >= 0) {
-							this.plugin.settings.aiRetryAttempts = num;
-							await this.plugin.saveSettings();
-							this.onUpdate();
-						}
+					.onChange((value) => {
+						void (async () => {
+							const num = parseInt(value);
+							if (!isNaN(num) && num >= 0) {
+								this.plugin.settings.aiRetryAttempts = num;
+								await this.plugin.saveSettings();
+								this.onUpdate();
+							}
+						})();
 					});
 			});
 
@@ -423,13 +277,15 @@ export class AIProviderModal extends Modal {
 			.addText((text) => {
 				text.setPlaceholder("1000")
 					.setValue(this.plugin.settings.aiRetryDelay.toString())
-					.onChange(async (value) => {
-						const num = parseInt(value);
-						if (!isNaN(num) && num > 0) {
-							this.plugin.settings.aiRetryDelay = num;
-							await this.plugin.saveSettings();
-							this.onUpdate();
-						}
+					.onChange((value) => {
+						void (async () => {
+							const num = parseInt(value);
+							if (!isNaN(num) && num > 0) {
+								this.plugin.settings.aiRetryDelay = num;
+								await this.plugin.saveSettings();
+								this.onUpdate();
+							}
+						})();
 					});
 			});
 
@@ -439,13 +295,15 @@ export class AIProviderModal extends Modal {
 			.addText((text) => {
 				text.setPlaceholder("30000")
 					.setValue(this.plugin.settings.aiTimeout.toString())
-					.onChange(async (value) => {
-						const num = parseInt(value);
-						if (!isNaN(num) && num > 0) {
-							this.plugin.settings.aiTimeout = num;
-							await this.plugin.saveSettings();
-							this.onUpdate();
-						}
+					.onChange((value) => {
+						void (async () => {
+							const num = parseInt(value);
+							if (!isNaN(num) && num > 0) {
+								this.plugin.settings.aiTimeout = num;
+								await this.plugin.saveSettings();
+								this.onUpdate();
+							}
+						})();
 					});
 			});
 	}

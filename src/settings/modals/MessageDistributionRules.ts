@@ -26,9 +26,8 @@ export class MessageDistributionRulesModal extends Modal {
 		} else this.messageDistributionRule = createBlankMessageDistributionRule();
 	}
 
-	async display() {
-		this.modalEl.style.height = "90vh";
-		this.modalEl.style.width = "60vw";
+	display() {
+		this.modalEl.addClass("modal-height-90vh", "modal-width-60vw");
 		this.addHeader();
 		this.addMessageFilter();
 		this.addTemplateFilePath();
@@ -44,6 +43,7 @@ export class MessageDistributionRulesModal extends Modal {
 		this.messageDistributionRulesDiv = this.contentEl.createDiv();
 		this.titleEl.setText(`${this.editing ? "Editing" : "Adding"} message distribution rule`);
 		new Setting(this.messageDistributionRulesDiv).descEl.createEl("span", {
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			text: "🗎 Template variables documentation available in plugin docs",
 		});
 	}
@@ -56,7 +56,7 @@ export class MessageDistributionRulesModal extends Modal {
 			)
 			.addTextArea((text) => {
 				text.setValue(this.messageDistributionRule.messageFilterQuery)
-					.onChange(async (filterQuery: string) => {
+					.onChange((filterQuery: string) => {
 						this.messageDistributionRule.messageFilterQuery = filterQuery;
 						this.messageDistributionRule.messageFilterConditions =
 							extractConditionsFromFilterQuery(filterQuery);
@@ -74,7 +74,7 @@ export class MessageDistributionRulesModal extends Modal {
 				new FileSuggest(cb.inputEl, this.plugin);
 				cb.setPlaceholder("example: folder/zettelkasten.md")
 					.setValue(this.messageDistributionRule.templateFilePath)
-					.onChange(async (path) => {
+					.onChange((path) => {
 						this.messageDistributionRule.templateFilePath = path ? normalizePath(path) : path;
 					});
 			});
@@ -90,7 +90,7 @@ export class MessageDistributionRulesModal extends Modal {
 			.addTextArea((text) => {
 				text.setPlaceholder(`example: folder/${defaultNoteNameTemplate}`)
 					.setValue(this.messageDistributionRule.notePathTemplate)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.messageDistributionRule.notePathTemplate = value;
 					});
 			});
@@ -107,7 +107,7 @@ export class MessageDistributionRulesModal extends Modal {
 			.addTextArea((text) => {
 				text.setPlaceholder(`example: folder/${defaultFileNameTemplate}`)
 					.setValue(this.messageDistributionRule.filePathTemplate)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.messageDistributionRule.filePathTemplate = value;
 					});
 			});
@@ -120,9 +120,10 @@ export class MessageDistributionRulesModal extends Modal {
 			.setName("Heading")
 			.setDesc("Specify the heading under which new messages will be inserted")
 			.addText((text) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder(`example: ### Log`)
 					.setValue(this.messageDistributionRule.heading)
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.messageDistributionRule.heading = value;
 					});
 			});
@@ -134,11 +135,12 @@ export class MessageDistributionRulesModal extends Modal {
 		setting
 			.setName("Reversed order")
 			.setDesc(
-				`Turn on to have new messages appear at the beginning of the note, or, if a heading is specified, above it. Warning: If "Parallel Message Processing" turn on, it may disrupt message order`,
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				`Turn on to have new messages appear at the beginning of the note, or, if a heading is specified, above it. Warning: If "Parallel message processing" is on, it may disrupt message order`,
 			)
 			.addToggle((toggle) => {
 				toggle.setValue(this.messageDistributionRule.reversedOrder);
-				toggle.onChange(async (value) => {
+				toggle.onChange((value) => {
 					this.messageDistributionRule.reversedOrder = value;
 				});
 			});
@@ -179,10 +181,12 @@ export class MessageDistributionRulesModal extends Modal {
 		footerButtons.addExtraButton((b) => {
 			b.setIcon("cross")
 				.setTooltip("Cancel")
-				.onClick(async () => {
-					await this.plugin.loadSettings();
-					this.saved = false;
-					this.close();
+				.onClick(() => {
+					void (async () => {
+						await this.plugin.loadSettings();
+						this.saved = false;
+						this.close();
+					})();
 				});
 			return b;
 		});
@@ -192,19 +196,18 @@ export class MessageDistributionRulesModal extends Modal {
 	}
 }
 function setSettingStyles(setting: Setting) {
-	setting.infoEl.style.width = "55%";
-	setting.controlEl.style.width = "45%";
+	setting.infoEl.addClass("w-55pc");
+	setting.controlEl.addClass("w-45pc");
 	const el = setting.controlEl.firstElementChild;
 	if (!el) return;
 	if (el instanceof HTMLTextAreaElement) {
-		el.style.height = "4.5em";
-		el.style.width = "100%";
+		el.addClass("h-4_5em", "w-full");
 	}
 	if (el instanceof HTMLInputElement) {
-		el.style.width = "100%";
+		el.addClass("w-full");
 	}
 
 	if (el instanceof HTMLDivElement && el.className == "search-input-container") {
-		el.style.width = "100%";
+		el.addClass("w-full");
 	}
 }

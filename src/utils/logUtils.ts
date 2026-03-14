@@ -32,7 +32,7 @@ let persistentNotices: PersistentNotice[] = [];
 
 // Show notification and log message into console.
 export function displayAndLog(plugin: TelegramSyncPlugin, message: string, timeout?: number) {
-	console.log(`${plugin.manifest.name} => ${message}`);
+	console.debug(`${plugin.manifest.name} => ${message}`);
 
 	if (timeout == 0) return;
 	const notice = new Notice(message, timeout || _day);
@@ -64,7 +64,7 @@ export async function displayAndLogError(
 	let beautyError = `${error.name}: ${error.message.replace(/Error: /g, "")}\n${status || ""}\n${action || ""}`;
 	beautyError = beautyError.trim();
 	displayAndLog(plugin, beautyError, timeout);
-	if (error.stack) console.log(error.stack);
+	if (error.stack) console.debug(error.stack);
 	if (msg) {
 		await plugin.bot?.sendMessage(msg.chat.id, `...❌...\n\n${beautyError}`, {
 			reply_to_message_id: msg.message_id,
@@ -81,15 +81,17 @@ export function cleanErrorCache() {
 
 // changing GramJs version can cause cache issues and wrong alerts, so it's cure for it
 export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const originalAlert = window.alert as any;
+	/** Extended alert function type that carries an override marker flag */
+	type OverridableAlert = ((message?: unknown) => void) & { __isOverridden?: boolean };
+	const originalAlert = window.alert as OverridableAlert;
 	if (!originalAlert.__isOverridden) {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		window.alert = function (message?: any) {
-			if (message.includes("Missing MTProto Entity")) {
-				localStorage.removeItem("GramJs:apiCache");
+		window.alert = function (message?: unknown) {
+			if (typeof message === "string" && message.includes("Missing MTProto Entity")) {
+				plugin.app.saveLocalStorage("GramJs:apiCache", null);
 				plugin.settings.cacheCleanupAtStartup = true;
-				plugin.saveSettings();
+				void (async () => {
+					await plugin.saveSettings();
+				})();
 				displayAndLog(
 					plugin,
 					"Telegram AI got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
@@ -98,6 +100,10 @@ export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
 			}
 			originalAlert(message);
 		};
-		originalAlert.__isOverridden = true;
+		(window.alert as OverridableAlert).__isOverridden = true;
 	}
+}
+
+export function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }

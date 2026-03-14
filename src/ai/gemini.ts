@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
-import { displayAndLogError } from "src/utils/logUtils";
+import { displayAndLogError, sleep } from "src/utils/logUtils";
+import { requestUrl } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 
 interface AIErrorResponse {
@@ -57,7 +58,7 @@ function isRetryableError(error: unknown, status?: number): boolean {
 async function exponentialDelay(attempt: number, baseDelay: number): Promise<void> {
 	const delay = baseDelay * Math.pow(2, attempt - 1);
 	const jitter = Math.random() * 0.1 * delay;
-	await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+	await sleep(delay + jitter);
 }
 
 /**
@@ -77,7 +78,7 @@ async function getImageDataForGemini(
 
 		const chunks: Uint8Array[] = [];
 		for await (const chunk of fileStream) {
-			chunks.push(new Uint8Array(chunk));
+			chunks.push(new Uint8Array(chunk as ArrayBuffer));
 		}
 
 		const fileBuffer = new Uint8Array(
@@ -95,7 +96,7 @@ async function getImageDataForGemini(
 				data: base64Data,
 			},
 		};
-	} catch (error) {
+	} catch (_error) {
 		return null;
 	}
 }
@@ -155,7 +156,6 @@ export async function processWithGemini(
 
 	const maxAttempts = plugin.settings.aiRetryAttempts || 3;
 	const baseDelay = plugin.settings.aiRetryDelay || 1000;
-	const timeout = plugin.settings.aiTimeout || 30000;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
@@ -172,77 +172,56 @@ export async function processWithGemini(
 				},
 			};
 
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), timeout);
+			const model = plugin.settings.geminiModel || "gemini-1.5-flash";
+			const response = await requestUrl({
+				url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${plugin.settings.geminiApiKey}`,
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify(requestBody),
+				throw: false,
+			});
 
-			try {
-				const model = plugin.settings.geminiModel || "gemini-1.5-flash";
-				const response = await fetch(
-					`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${plugin.settings.geminiApiKey}`,
-					{
-						method: "POST",
-						headers: {
-							"Content-Type": "application/json",
-						},
-						body: JSON.stringify(requestBody),
-						signal: controller.signal,
-					},
-				);
+			if (response.status < 200 || response.status >= 300) {
+				let errorMessage = `HTTP ${response.status}`;
+				let errorData: unknown = null;
 
-				clearTimeout(timeoutId);
-
-				if (!response.ok) {
-					let errorMessage = `HTTP ${response.status}`;
-					let errorData: unknown = null;
-
-					try {
-						const data = (await response.json()) as AIErrorResponse;
-						errorData = data;
-						errorMessage = data.error?.message || data.error?.status || errorMessage;
-					} catch {
-						errorMessage = await response.text();
-					}
-
-					if (attempt < maxAttempts && isRetryableError(errorData, response.status)) {
-						await exponentialDelay(attempt, baseDelay);
-						continue;
-					}
-
-					throw new Error(`Gemini API error: ${errorMessage}`);
+				try {
+					const data = response.json as AIErrorResponse;
+					errorData = data;
+					errorMessage = data.error?.message || data.error?.status || errorMessage;
+				} catch {
+					errorMessage = response.text;
 				}
 
-				const data: GeminiResponse = await response.json();
-
-				if (
-					!data.candidates ||
-					data.candidates.length === 0 ||
-					!data.candidates[0].content ||
-					!data.candidates[0].content.parts ||
-					data.candidates[0].content.parts.length === 0
-				) {
-					throw new Error("Gemini API returned empty response");
+				if (attempt < maxAttempts && isRetryableError(errorData, response.status)) {
+					await exponentialDelay(attempt, baseDelay);
+					continue;
 				}
 
-				const result = data.candidates[0].content.parts[0].text;
-
-				if (!result || result.trim().length === 0) {
-					throw new Error("Gemini API returned empty content");
-				}
-
-				return result;
-			} catch (fetchError) {
-				clearTimeout(timeoutId);
-
-				if (fetchError.name === "AbortError") {
-					if (attempt < maxAttempts) {
-						await exponentialDelay(attempt, baseDelay);
-						continue;
-					}
-					throw new Error("Gemini API request timeout");
-				}
-
-				throw fetchError;
+				throw new Error(`Gemini API error: ${errorMessage}`);
 			}
+
+			const data = response.json as GeminiResponse;
+
+			if (
+				!data.candidates ||
+				data.candidates.length === 0 ||
+				!data.candidates[0].content ||
+				!data.candidates[0].content.parts ||
+				data.candidates[0].content.parts.length === 0
+			) {
+				throw new Error("Gemini API returned empty response");
+			}
+
+			const result = data.candidates[0].content.parts[0].text;
+
+			if (!result || result.trim().length === 0) {
+				throw new Error("Gemini API returned empty content");
+			}
+
+			return result;
 		} catch (error) {
 			if (attempt === maxAttempts || !isRetryableError(error)) {
 				const errorMessage = error instanceof Error ? error.message : String(error);

@@ -5,8 +5,7 @@ import { createProgressBar, updateProgressBar, deleteProgressBar, ProgressBarTyp
 import * as Client from "src/telegram/user/client";
 import { BotSettingsModal } from "./modals/BotSettings";
 import { UserLogInModal } from "./modals/UserLogin";
-import { releaseVersion, versionALessThanVersionB } from "release-notes.mjs";
-import { _15sec, _1sec, _5sec, displayAndLog, _day } from "src/utils/logUtils";
+import { _15sec, _1sec, displayAndLog, _day } from "src/utils/logUtils";
 import { getTopicId } from "src/telegram/bot/message/getters";
 import * as User from "../telegram/user/user";
 import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
@@ -215,7 +214,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		) {
 			try {
 				if (!this.refreshValues) this.refreshValues = {};
-				else await this.display();
+				else this.display();
 			} finally {
 				this.refreshValues.botConnected = botConnected;
 				this.refreshValues.userConnected = userConnected;
@@ -226,34 +225,35 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		}
 	}
 
-	async setRefreshInterval() {
+	setRefreshInterval() {
 		clearInterval(this.refreshIntervalId);
-		this.refreshIntervalId = setInterval(async () => {
-			await enqueue(this, this.refresh);
+		this.refreshIntervalId = setInterval(() => {
+			// eslint-disable-next-line @typescript-eslint/unbound-method
+			void enqueue(this, this.refresh);
 		}, _1sec);
 	}
 
-	async display(): Promise<void> {
+	display(): void {
 		this.containerEl.empty();
 		this.addSettingsHeader();
 
-		await this.addBot();
-		await this.addUser();
-		await this.addProcessOldMessages();
+		this.addBot();
+		this.addUser();
+		this.addProcessOldMessages();
 		this.addAdvancedSettings();
 
-		new Setting(this.containerEl).setName("Message Distribution & Base Categorization").setHeading();
-		await this.addMessageDistributionRules();
+		new Setting(this.containerEl).setName("Message distribution & base categorization").setHeading();
+		this.addMessageDistributionRules();
 
-		new Setting(this.containerEl).setName("AI Processing").setHeading();
+		new Setting(this.containerEl).setName("AI processing").setHeading();
 		this.addAISettings();
 
-		new Setting(this.containerEl).setName("Advanced Categorization").setHeading();
+		new Setting(this.containerEl).setName("Advanced categorization").setHeading();
 		this.addCategoriesSettings();
 
 		// Legacy rules section is now empty - moved above
 
-		await this.setRefreshInterval();
+		this.setRefreshInterval();
 	}
 
 	hide() {
@@ -263,26 +263,15 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 	addSettingsHeader() {
 		const versionContainer = this.containerEl.createDiv();
-		versionContainer.style.display = "flex";
-		versionContainer.style.justifyContent = "space-between";
-		versionContainer.createSpan().createEl("h1", {
-			text: `Telegram AI ${
-				versionALessThanVersionB(this.plugin.manifest.version, this.plugin.settings.betaVersion)
-					? this.plugin.settings.betaVersion
-					: releaseVersion
-			}`,
-		});
-
-		this.containerEl.createEl("div", { text: "Telegram AI Plugin" });
-		this.containerEl.createEl("br");
-		this.containerEl.createEl("br");
+		versionContainer.addClass("flex", "justify-between");
+		new Setting(versionContainer).setName(`Telegram AI`).setHeading();
 	}
 
-	async addBot() {
+	addBot() {
 		const botSettings = new Setting(this.containerEl)
 			.setName("Bot (required)")
-			.setDesc("Connect your telegram bot. It's required for all features.")
-			.addText(async (botStatus: TextComponent) => {
+			.setDesc("Connect your Telegram bot. It's required for all features.")
+			.addText((botStatus: TextComponent) => {
 				botStatus.setDisabled(true);
 				if (this.plugin.checkingBotConnection) {
 					botStatus.setValue("⏳ connecting...");
@@ -292,23 +281,26 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					botStatus.setValue("❌ disconnected");
 				}
 			})
-			.addButton(async (botSettingsButton: ButtonComponent) => {
+			.addButton((botSettingsButton: ButtonComponent) => {
 				if (this.plugin.checkingBotConnection) botSettingsButton.setButtonText("Restart");
 				else if (this.plugin.isBotConnected()) botSettingsButton.setButtonText("Settings");
 				else botSettingsButton.setButtonText("Connect");
-				botSettingsButton.onClick(async () => {
+				botSettingsButton.onClick(() => {
 					const botSettingsModal = new BotSettingsModal(this.plugin);
-					botSettingsModal.onClose = async () => {
-						if (botSettingsModal.saved) {
-							if (this.plugin.settings.telegramSessionType == "bot") {
-								this.plugin.settings.telegramSessionId = Client.getNewSessionId();
-								this.plugin.userConnected = false;
+					botSettingsModal.onClose = () => {
+						void (async () => {
+							if (botSettingsModal.saved) {
+								if (this.plugin.settings.telegramSessionType == "bot") {
+									this.plugin.settings.telegramSessionId = Client.getNewSessionId();
+									this.plugin.userConnected = false;
+								}
+								await this.plugin.saveSettings();
+								// Initialize the bot with the new token
+								this.plugin.setBotStatus("disconnected");
+								// eslint-disable-next-line @typescript-eslint/unbound-method
+								await enqueue(this.plugin, this.plugin.initTelegram);
 							}
-							await this.plugin.saveSettings();
-							// Initialize the bot with the new token
-							this.plugin.setBotStatus("disconnected");
-							await enqueue(this.plugin, this.plugin.initTelegram);
-						}
+						})();
 					};
 					botSettingsModal.open();
 				});
@@ -318,16 +310,17 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		botFatherLink.textContent = "To create a new bot click on -> ";
 		botFatherLink.createEl("a", {
 			href: "https://t.me/botfather",
-			text: "@botFather",
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			text: "@BotFather",
 		});
 		botSettings.descEl.appendChild(botFatherLink);
 	}
 
-	async addUser() {
+	addUser() {
 		const userSettings = new Setting(this.containerEl)
 			.setName("User (optionally)")
-			.setDesc("Connect your telegram user. It's required only for ")
-			.addText(async (userStatus: TextComponent) => {
+			.setDesc("Connect your Telegram user. It's required only for ")
+			.addText((userStatus: TextComponent) => {
 				userStatus.setDisabled(true);
 				if (this.plugin.checkingUserConnection) {
 					userStatus.setValue("⏳ connecting...");
@@ -335,39 +328,45 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					userStatus.setValue(`👨🏽‍💻 ${Client.clientUser?.username || "connected"}`);
 				} else userStatus.setValue("❌ disconnected");
 			})
-			.addButton(async (userLogInButton: ButtonComponent) => {
+			.addButton((userLogInButton: ButtonComponent) => {
 				if (this.plugin.settings.telegramSessionType == "user") userLogInButton.setButtonText("Log out");
 				else userLogInButton.setButtonText("Log in");
-				userLogInButton.onClick(async () => {
-					if (this.plugin.settings.telegramSessionType == "user") {
-						// Log Out
-						await User.connect(this.plugin, "bot");
-						displayAndLog(
-							this.plugin,
-							"Successfully logged out.\n\nBut you should also terminate the session manually in the Telegram app.",
-							_15sec,
-						);
-					} else {
-						// Log In
-						const initialSessionType = this.plugin.settings.telegramSessionType;
-						const userLogInModal = new UserLogInModal(this.plugin);
-						userLogInModal.onClose = async () => {
-							if (initialSessionType == "bot" && !this.plugin.userConnected) {
-								this.plugin.settings.telegramSessionType = initialSessionType;
-								await this.plugin.saveSettings();
-							}
-						};
-						userLogInModal.open();
-					}
+				userLogInButton.onClick(() => {
+					void (async () => {
+						if (this.plugin.settings.telegramSessionType == "user") {
+							// Log Out
+							await User.connect(this.plugin, "bot");
+							displayAndLog(
+								this.plugin,
+								"Successfully logged out.\n\nBut you should also terminate the session manually in the Telegram app.",
+								_15sec,
+							);
+						} else {
+							// Log In
+							const initialSessionType = this.plugin.settings.telegramSessionType;
+							const userLogInModal = new UserLogInModal(this.plugin);
+							userLogInModal.onClose = () => {
+								void (async () => {
+									if (initialSessionType == "bot" && !this.plugin.userConnected) {
+										this.plugin.settings.telegramSessionType = initialSessionType;
+										await this.plugin.saveSettings();
+									}
+								})();
+							};
+							userLogInModal.open();
+						}
+					})();
 				});
 			});
 		if (this.plugin.settings.telegramSessionType == "user" && !this.plugin.userConnected) {
-			userSettings.addExtraButton(async (refreshButton) => {
+			userSettings.addExtraButton((refreshButton) => {
 				refreshButton.setTooltip("Refresh");
 				refreshButton.setIcon("refresh-ccw");
-				refreshButton.onClick(async () => {
-					await User.connect(this.plugin, "user", this.plugin.settings.telegramSessionId);
-					refreshButton.setDisabled(true);
+				refreshButton.onClick(() => {
+					void (async () => {
+						await User.connect(this.plugin, "user", this.plugin.settings.telegramSessionId);
+						refreshButton.setDisabled(true);
+					})();
 				});
 			});
 		}
@@ -378,7 +377,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		});
 	}
 
-	async addProcessOldMessages() {
+	addProcessOldMessages() {
 		new Setting(this.containerEl)
 			.setName("Process old messages")
 			.setDesc(
@@ -388,7 +387,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				btn.setIcon("settings");
 				btn.setTooltip("Settings");
 				btn.setDisabled(!this.plugin.userConnected);
-				btn.onClick(async () => {
+				btn.onClick(() => {
 					const processOldMessagesSettingsModal = new ProcessOldMessagesSettingsModal(this.plugin);
 					processOldMessagesSettingsModal.open();
 				});
@@ -396,12 +395,14 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.userConnected ? this.plugin.settings.processOldMessages : false);
 				toggle.setDisabled(!this.plugin.userConnected);
-				toggle.onChange(async (value) => {
-					if (!value) clearCachedUnprocessedMessages();
-					else this.plugin.settings.processOldMessagesSettings.lastProcessingDate = getOffsetDate();
-					this.plugin.settings.processOldMessages = value;
+				toggle.onChange((value) => {
+					void (async () => {
+						if (!value) clearCachedUnprocessedMessages();
+						else this.plugin.settings.processOldMessagesSettings.lastProcessingDate = getOffsetDate();
+						this.plugin.settings.processOldMessages = value;
 
-					await this.plugin.saveSettings();
+						await this.plugin.saveSettings();
+					})();
 				});
 			});
 	}
@@ -410,79 +411,87 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).addButton((btn: ButtonComponent) => {
 			btn.setButtonText("Advanced settings");
 			btn.setClass("mod-cta");
-			btn.onClick(async () => {
+			btn.onClick(() => {
 				const advancedSettingsModal = new AdvancedSettingsModal(this.plugin);
 				advancedSettingsModal.open();
 			});
 		});
 	}
 
-	async addMessageDistributionRules() {
+	addMessageDistributionRules() {
 		this.plugin.settings.messageDistributionRules.forEach((rule, index) => {
 			const ruleInfo = getMessageDistributionRuleInfo(rule);
 			const setting = new Setting(this.containerEl);
 			setting.setName(ruleInfo.name);
 			setting.setDesc(ruleInfo.description);
-			setting.addExtraButton(async (btn) => {
+			setting.addExtraButton((btn) => {
 				btn.setIcon("up-chevron-glyph")
 					.setTooltip("Move up")
-					.onClick(async () => {
-						arrayMove(this.plugin.settings.messageDistributionRules, index, index - 1);
-						await this.plugin.saveSettings();
-						await this.display();
+					.onClick(() => {
+						void (async () => {
+							arrayMove(this.plugin.settings.messageDistributionRules, index, index - 1);
+							await this.plugin.saveSettings();
+							this.display();
+						})();
 					});
 			});
-			setting.addExtraButton(async (btn) => {
+			setting.addExtraButton((btn) => {
 				btn.setIcon("down-chevron-glyph")
 					.setTooltip("Move down")
-					.onClick(async () => {
-						arrayMove(this.plugin.settings.messageDistributionRules, index, index + 1);
-						await this.plugin.saveSettings();
-						await this.display();
+					.onClick(() => {
+						void (async () => {
+							arrayMove(this.plugin.settings.messageDistributionRules, index, index + 1);
+							await this.plugin.saveSettings();
+							this.display();
+						})();
 					});
 			});
-			setting.addExtraButton(async (btn) => {
+			setting.addExtraButton((btn) => {
 				btn.setIcon("pencil")
 					.setTooltip("Edit")
-					.onClick(async () => {
+					.onClick(() => {
 						const messageDistributionRulesModal = new MessageDistributionRulesModal(
 							this.plugin,
 							this.plugin.settings.messageDistributionRules[index],
 						);
-						messageDistributionRulesModal.onClose = async () => {
-							if (messageDistributionRulesModal.saved) await this.display();
+						messageDistributionRulesModal.onClose = () => {
+							if (messageDistributionRulesModal.saved) this.display();
 						};
 						messageDistributionRulesModal.open();
 					});
 			});
-			setting.addExtraButton(async (btn) => {
+			setting.addExtraButton((btn) => {
 				btn.setIcon("trash-2")
 					.setTooltip("Delete")
-					.onClick(async () => {
-						this.plugin.settings.messageDistributionRules.remove(
-							this.plugin.settings.messageDistributionRules[index],
-						);
-						if (this.plugin.settings.messageDistributionRules.length == 0) {
-							displayAndLog(
-								this.plugin,
-								"The default message distribution rule has been created, as at least one rule must exist!",
-								_15sec,
+					.onClick(() => {
+						void (async () => {
+							this.plugin.settings.messageDistributionRules.remove(
+								this.plugin.settings.messageDistributionRules[index],
 							);
-							this.plugin.settings.messageDistributionRules.push(createDefaultMessageDistributionRule());
-						}
-						await this.plugin.saveSettings();
-						await this.display();
+							if (this.plugin.settings.messageDistributionRules.length == 0) {
+								displayAndLog(
+									this.plugin,
+									"The default message distribution rule has been created, as at least one rule must exist!",
+									_15sec,
+								);
+								this.plugin.settings.messageDistributionRules.push(
+									createDefaultMessageDistributionRule(),
+								);
+							}
+							await this.plugin.saveSettings();
+							this.display();
+						})();
 					});
 			});
 		});
 
-		new Setting(this.containerEl).addButton(async (btn: ButtonComponent) => {
+		new Setting(this.containerEl).addButton((btn: ButtonComponent) => {
 			btn.setButtonText("Add rule");
 			btn.setClass("mod-cta");
-			btn.onClick(async () => {
+			btn.onClick(() => {
 				const messageDistributionRulesModal = new MessageDistributionRulesModal(this.plugin);
-				messageDistributionRulesModal.onClose = async () => {
-					if (messageDistributionRulesModal.saved) await this.display();
+				messageDistributionRulesModal.onClose = () => {
+					if (messageDistributionRulesModal.saved) this.display();
 				};
 				messageDistributionRulesModal.open();
 			});
@@ -494,16 +503,18 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			.setName("Enable AI processing")
 			.setDesc("Process messages through AI before saving. " + "Each content type can have its own prompt.")
 			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.aiEnabled).onChange(async (value) => {
-					this.plugin.settings.aiEnabled = value;
+				toggle.setValue(this.plugin.settings.aiEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.aiEnabled = value;
 
-					// If AI processing is disabled, also disable AI categorization
-					if (!value) {
-						this.plugin.settings.aiCategorizationEnabled = false;
-					}
+						// If AI processing is disabled, also disable AI categorization
+						if (!value) {
+							this.plugin.settings.aiCategorizationEnabled = false;
+						}
 
-					await this.plugin.saveSettings();
-					await this.display();
+						await this.plugin.saveSettings();
+						this.display();
+					})();
 				});
 			});
 
@@ -521,7 +532,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 		const hasApiKey = this.getApiKeyStatus(provider);
 		const statusIcon = hasApiKey ? "✓" : "⚠️";
-		const statusText = hasApiKey ? "Configured" : "API Key Required";
+		const statusText = hasApiKey ? "Configured" : "API key required";
 
 		new Setting(this.containerEl)
 			.setName(`AI Provider: ${providerNames[provider] || provider}`)
@@ -540,11 +551,11 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 		// Prompts Configuration
 		new Setting(this.containerEl)
-			.setName("Content Prompts")
+			.setName("Content prompts")
 			.setDesc("Configure AI prompts for different content types (text, voice, photos, etc.)")
 			.addButton((button) => {
 				button
-					.setButtonText("Configure Prompts")
+					.setButtonText("Configure prompts")
 					.setCta()
 					.onClick(() => {
 						const modal = new PromptsModal(this.app, this.plugin, () => {
@@ -556,14 +567,17 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 		// Local Document Text Extraction
 		new Setting(this.containerEl)
-			.setName("Local Document Extraction")
+			.setName("Local document extraction")
 			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				"Extract text from supported documents locally (TXT, JSON, CSV, XML, HTML, MD, code files) instead of sending to AI. Saves API costs and improves speed.",
 			)
 			.addToggle((toggle) => {
-				toggle.setValue(this.plugin.settings.enableLocalDocumentExtraction).onChange(async (value) => {
-					this.plugin.settings.enableLocalDocumentExtraction = value;
-					await this.plugin.saveSettings();
+				toggle.setValue(this.plugin.settings.enableLocalDocumentExtraction).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.enableLocalDocumentExtraction = value;
+						await this.plugin.saveSettings();
+					})();
 				});
 			});
 
@@ -612,10 +626,12 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			.setName("Enable categorization")
 			.setDesc("Automatically categorize notes based on content")
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.categoriesEnabled).onChange(async (value) => {
-					this.plugin.settings.categoriesEnabled = value;
-					await this.plugin.saveSettings();
-					this.display(); // Redraw settings
+				toggle.setValue(this.plugin.settings.categoriesEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.categoriesEnabled = value;
+						await this.plugin.saveSettings();
+						this.display(); // Redraw settings
+					})();
 				}),
 			);
 
@@ -627,10 +643,12 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					"Replaces default category for links.",
 			)
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.linksCategoryEnabled).onChange(async (value) => {
-					this.plugin.settings.linksCategoryEnabled = value;
-					await this.plugin.saveSettings();
-					this.display();
+				toggle.setValue(this.plugin.settings.linksCategoryEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.linksCategoryEnabled = value;
+						await this.plugin.saveSettings();
+						this.display();
+					})();
 				}),
 			);
 
@@ -642,9 +660,11 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					text
 						.setPlaceholder("Links")
 						.setValue(this.plugin.settings.linksCategoryFolder)
-						.onChange(async (value) => {
-							this.plugin.settings.linksCategoryFolder = value.trim() || "Links";
-							await this.plugin.saveSettings();
+						.onChange((value) => {
+							void (async () => {
+								this.plugin.settings.linksCategoryFolder = value.trim() || "Links";
+								await this.plugin.saveSettings();
+							})();
 						}),
 				);
 		}
@@ -659,10 +679,12 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				.setName("AI categorization")
 				.setDesc("Use AI to automatically determine note categories")
 				.addToggle((toggle) =>
-					toggle.setValue(this.plugin.settings.aiCategorizationEnabled).onChange(async (value) => {
-						this.plugin.settings.aiCategorizationEnabled = value;
-						await this.plugin.saveSettings();
-						this.display();
+					toggle.setValue(this.plugin.settings.aiCategorizationEnabled).onChange((value) => {
+						void (async () => {
+							this.plugin.settings.aiCategorizationEnabled = value;
+							await this.plugin.saveSettings();
+							this.display();
+						})();
 					}),
 				);
 		} else {
@@ -673,7 +695,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				.addText((text) => {
 					text.setValue("Requires AI processing to be enabled");
 					text.inputEl.disabled = true;
-					text.inputEl.style.opacity = "0.5";
+					text.inputEl.addClass("opacity-50");
 				});
 		}
 
@@ -682,9 +704,11 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			.setName("Category tags")
 			.setDesc("Add category tags to notes")
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.categoryTagsEnabled).onChange(async (value) => {
-					this.plugin.settings.categoryTagsEnabled = value;
-					await this.plugin.saveSettings();
+				toggle.setValue(this.plugin.settings.categoryTagsEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.categoryTagsEnabled = value;
+						await this.plugin.saveSettings();
+					})();
 				}),
 			);
 
@@ -692,9 +716,11 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			.setName("Category folders")
 			.setDesc("Save notes to folders based on categories")
 			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.categoryFoldersEnabled).onChange(async (value) => {
-					this.plugin.settings.categoryFoldersEnabled = value;
-					await this.plugin.saveSettings();
+				toggle.setValue(this.plugin.settings.categoryFoldersEnabled).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.categoryFoldersEnabled = value;
+						await this.plugin.saveSettings();
+					})();
 				}),
 			);
 
@@ -745,9 +771,11 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				dropdown.addOption(category.id, category.name);
 			}
 
-			dropdown.setValue(this.plugin.settings.defaultCategoryId || "").onChange(async (value) => {
-				this.plugin.settings.defaultCategoryId = value || undefined;
-				await this.plugin.saveSettings();
+			dropdown.setValue(this.plugin.settings.defaultCategoryId || "").onChange((value) => {
+				void (async () => {
+					this.plugin.settings.defaultCategoryId = value || undefined;
+					await this.plugin.saveSettings();
+				})();
 			});
 		});
 	}

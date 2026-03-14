@@ -10,8 +10,6 @@ import {
 	StatusMessages,
 	displayAndLogError,
 	hideMTProtoAlerts,
-	_1sec,
-	_5sec,
 	_day,
 } from "./utils/logUtils";
 import * as Client from "./telegram/user/client";
@@ -70,7 +68,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		this.lastPollingErrors = [];
 		this.messagesLeftCnt = 0;
 		if (this.settings.mainDeviceId && this.settings.mainDeviceId !== this.currentDeviceId) {
-			this.stopTelegram();
+			void this.stopTelegram();
 			displayAndLog(
 				this,
 				`Paused on this device. If you want the plugin to work here, change the value of "${mainDeviceIdSettingName}" to the current device id in the bot settings.`,
@@ -100,17 +98,18 @@ export default class TelegramSyncPlugin extends Plugin {
 	setRestartTelegramInterval(newRestartingIntervalTime: number, sessionType?: Client.SessionType) {
 		this.restartingIntervalTime = newRestartingIntervalTime;
 		clearInterval(this.restartingIntervalId);
-		this.restartingIntervalId = setInterval(
-			async () => await enqueue(this, this.restartTelegram, sessionType),
-			this.restartingIntervalTime,
-		);
+		this.restartingIntervalId = setInterval(() => {
+			// eslint-disable-next-line @typescript-eslint/unbound-method
+			void enqueue(this, this.restartTelegram, sessionType);
+		}, this.restartingIntervalTime);
 	}
 
 	setProcessOldMessagesInterval() {
 		this.clearProcessOldMessagesInterval();
-		this.processOldMessagesIntervalId = setInterval(async () => {
+		this.processOldMessagesIntervalId = setInterval(() => {
 			this.time4processOldMessages = true;
-			await enqueue(this, this.processOldMessages);
+			// eslint-disable-next-line @typescript-eslint/unbound-method
+			void enqueue(this, this.processOldMessages);
 		}, _day);
 	}
 
@@ -170,14 +169,16 @@ export default class TelegramSyncPlugin extends Plugin {
 		}
 	}
 
-	stopTelegram() {
+	async stopTelegram() {
 		this.checkingBotConnection = false;
 		this.checkingUserConnection = false;
 		this.clearProcessOldMessagesInterval();
-		clearInterval(this.restartingIntervalId);
-		this.restartingIntervalId = undefined;
-		Bot.disconnect(this);
-		User.disconnect(this);
+		if (this.restartingIntervalId) {
+			clearInterval(this.restartingIntervalId);
+			this.restartingIntervalId = undefined;
+		}
+		await Bot.disconnect(this);
+		await User.disconnect(this);
 	}
 
 	// Load the plugin, settings, and initialize the bot
@@ -193,18 +194,18 @@ export default class TelegramSyncPlugin extends Plugin {
 
 		// Initialize category manager
 		this.categoryManager = new CategoryManager(this);
+		await this.categoryManager.init();
 
 		hideMTProtoAlerts(this);
 		// Initialize the Telegram bot when Obsidian layout is fully loaded
-		this.app.workspace.onLayoutReady(async () => {
-			enqueue(this, this.initTelegram);
-		});
+		// eslint-disable-next-line @typescript-eslint/unbound-method
+		this.app.workspace.onLayoutReady(() => void enqueue(this, this.initTelegram));
 
 		this.status = "loaded";
 		displayAndLog(this, this.status, 0);
 	}
 
-	async onunload(): Promise<void> {
+	onunload(): void {
 		this.status = "unloading";
 		try {
 			clearTooManyRequestsInterval();
@@ -213,9 +214,11 @@ export default class TelegramSyncPlugin extends Plugin {
 			this.connectionStatusIndicator?.destroy();
 			this.connectionStatusIndicator = undefined;
 			this.settingsTab = undefined;
-			this.stopTelegram();
+			void (async () => {
+				await this.stopTelegram();
+			})();
 		} catch (e) {
-			displayAndLog(this, e, 0);
+			displayAndLog(this, String(e), 0);
 		} finally {
 			this.status = "unloaded";
 			displayAndLog(this, this.status, 0);
@@ -224,6 +227,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	// Load settings from the plugin's data
 	async loadSettings() {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
@@ -235,7 +239,7 @@ export default class TelegramSyncPlugin extends Plugin {
 	async upgradeSettings() {
 		let needToSaveSettings = false;
 		if (this.settings.cacheCleanupAtStartup) {
-			localStorage.removeItem("GramJs:apiCache");
+			this.app.saveLocalStorage("GramJs:apiCache", null);
 			this.settings.cacheCleanupAtStartup = false;
 			needToSaveSettings = true;
 		}
@@ -287,7 +291,7 @@ export default class TelegramSyncPlugin extends Plugin {
 			needToSaveSettings = true;
 		}
 
-		needToSaveSettings && (await this.saveSettings());
+		if (needToSaveSettings) await this.saveSettings();
 	}
 
 	async getBotUser(): Promise<TelegramBot.User> {
@@ -300,7 +304,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		return this.botStatus === "connected";
 	}
 
-	async setBotStatus(status: ConnectionStatus, error?: Error) {
+	setBotStatus(status: ConnectionStatus, error?: Error): void {
 		if (this.botStatus == status && !error) return;
 
 		this.botStatus = status;
@@ -308,7 +312,8 @@ export default class TelegramSyncPlugin extends Plugin {
 
 		if (this.isBotConnected()) displayAndLog(this, StatusMessages.BOT_CONNECTED, 0);
 		else if (!error) displayAndLog(this, StatusMessages.BOT_DISCONNECTED, 0);
-		else displayAndLogError(this, error, StatusMessages.BOT_DISCONNECTED, checkConnectionMessage, undefined, 0);
+		else
+			void displayAndLogError(this, error, StatusMessages.BOT_DISCONNECTED, checkConnectionMessage, undefined, 0);
 	}
 
 	async getBotToken(): Promise<string> {
@@ -317,7 +322,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		if (this.settings.encryptionByPinCode && !this.pinCode) {
 			await new Promise((resolve) => {
 				const pinCodeModal = new PinCodeModal(this, true);
-				pinCodeModal.onClose = async () => {
+				pinCodeModal.onClose = () => {
 					if (!this.pinCode) displayAndLog(this, "Plugin Telegram AI stopped. No pin code entered.");
 					resolve(undefined);
 				};
@@ -330,7 +335,11 @@ export default class TelegramSyncPlugin extends Plugin {
 	botTokenEncrypt(saveSettings = false) {
 		this.settings.botToken = encrypt(this.settings.botToken, this.pinCode);
 		this.settings.botTokenEncrypted = true;
-		saveSettings && this.saveSettings();
+		if (saveSettings) {
+			void (async () => {
+				await this.saveSettings();
+			})();
+		}
 		displayAndLog(this, "Bot token encrypted", 0);
 	}
 }

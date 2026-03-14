@@ -70,8 +70,10 @@ Respond with only the name of the most suitable category or "none" if none fits.
 				this.classificationCache.set(cacheKey, aiResult);
 				// Limit cache size
 				if (this.classificationCache.size > 100) {
-					const firstKey = this.classificationCache.keys().next().value;
-					this.classificationCache.delete(firstKey);
+					const firstKey: string | undefined = this.classificationCache.keys().next().value as
+						| string
+						| undefined;
+					if (firstKey !== undefined) this.classificationCache.delete(firstKey);
 				}
 			}
 

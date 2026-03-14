@@ -76,7 +76,7 @@ export async function getChatsForSearch(plugin: TelegramSyncPlugin, offsetDays: 
 		notice.setMessage(notification + progress);
 		progress = progress + ".";
 		const peer = dialog.inputEntity;
-		const dialogName = dialog.title || dialog.name || dialog.id?.toString() || peer.toString();
+		const dialogName = dialog.title || dialog.name || dialog.id?.toString() || JSON.stringify(peer);
 		if (dialog.isUser) {
 			chatsForSearch.push({ name: dialogName, peer });
 			continue;
@@ -103,7 +103,7 @@ export async function getChatsForSearch(plugin: TelegramSyncPlugin, offsetDays: 
 export async function getUnprocessedMessages(plugin: TelegramSyncPlugin): Promise<Api.Message[]> {
 	const botId = plugin.botUser?.id;
 	if (!botId) {
-		displayAndLogError(
+		void displayAndLogError(
 			plugin,
 			new Error("Can't execute searching for old unprocessed messages because can't identify bot id"),
 		);
@@ -127,10 +127,10 @@ export async function getUnprocessedMessages(plugin: TelegramSyncPlugin): Promis
 				offsetDate,
 				waitTime: 2,
 			});
-		} catch (e) {
-			displayAndLogError(
+		} catch (e: unknown) {
+			void displayAndLogError(
 				plugin,
-				e,
+				e instanceof Error ? e : new Error(String(e)),
 				`Search for old unprocessed messages in ${chat.name} cancelled!`,
 				undefined,
 				undefined,
@@ -200,10 +200,10 @@ export async function forwardUnprocessedMessages(plugin: TelegramSyncPlugin) {
 				const forwardedMessage = getFirstMessage(await message.forwardTo(message.inputChat || message.peerId));
 				if (!errorCache) processOldMessagesSettings.lastProcessingDate = message.editDate || message.date;
 				cachedUnprocessedMessages.push({ original: message, forwarded: forwardedMessage });
-			} catch (e) {
-				displayAndLogError(
+			} catch (e: unknown) {
+				void displayAndLogError(
 					plugin,
-					e,
+					e instanceof Error ? e : new Error(String(e)),
 					`Forwarding message "${message.message.slice(0, 100)}..." cancelled!`,
 					undefined,
 					undefined,
@@ -235,8 +235,10 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 	let mediaId = "";
 	if (!botMsg.text) {
 		const { fileObject } = getFileObject(botMsg);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		const fileObjectToUse = fileObject instanceof Array ? fileObject.pop() : fileObject;
-		mediaId = extractMediaId(fileObjectToUse.file_id);
+
+		mediaId = extractMediaId((fileObjectToUse as { file_id?: string })?.file_id ?? "");
 	}
 
 	const originalMessages = cachedUnprocessedMessages.map((userMsg) => userMsg.original);
@@ -244,8 +246,8 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 	const userMsg = findUserMsg(originalMessages, botMsg, mediaId);
 
 	if (userMsg) {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(botMsg as any).userMsg = userMsg;
+		// userMsg is a custom runtime property attached to forwarded messages to track the originating GramJS user message
+		(botMsg as unknown as Record<string, unknown>).userMsg = userMsg;
 		return;
 	}
 
@@ -269,8 +271,8 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 		botMsg.forward_from_message_id = originalMsg.fwdFrom?.channelPost;
 		botMsg.forward_sender_name = originalMsg.fwdFrom?.fromName;
 		botMsg.forward_signature = originalMsg.fwdFrom?.postAuthor;
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(botMsg as any).originalUserMsg = originalMsg;
+		// originalUserMsg is a custom runtime property used to mark a message for deletion via the user client
+		(botMsg as unknown as Record<string, unknown>).originalUserMsg = originalMsg;
 	} finally {
 		cachedUnprocessedMessages.remove(unprocessedMessage);
 	}

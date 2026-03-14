@@ -21,9 +21,11 @@ export async function createFolderIfNotExist(vault: Vault, folderPath: string) {
 		);
 	}
 
-	await vault.createFolder(folderPath).catch((error) => {
-		if (error.message !== "Folder already exists.") {
+	await vault.createFolder(folderPath).catch((error: unknown) => {
+		if (error instanceof Error && error.message !== "Folder already exists.") {
 			throw error;
+		} else if (typeof error === "string" && error !== "Folder already exists.") {
+			throw new Error(error);
 		}
 	});
 }
@@ -83,7 +85,8 @@ export async function appendContentToNote(
 	if (!notePath || !newContent.trim()) return;
 	if (startLine == undefined) startLine = "";
 
-	const noteFile: TFile = vault.getAbstractFileByPath(notePath) as TFile;
+	const abstractFile = vault.getAbstractFileByPath(notePath);
+	const noteFile = abstractFile instanceof TFile ? abstractFile : null;
 
 	let currentContent = "";
 	if (noteFile) currentContent = await vault.read(noteFile);
@@ -132,7 +135,8 @@ export async function replaceMainJs(vault: Vault, mainJs: Buffer | "main-prod.js
 	const mainProdJsPath = normalizePath(vault.configDir + "/plugins/telegram-sync/main-prod.js");
 	if (mainJs instanceof Buffer) {
 		await vault.adapter.writeBinary(mainProdJsPath, await vault.adapter.readBinary(mainJsPath));
-		await vault.adapter.writeBinary(mainJsPath, mainJs);
+		const arrayBuf = mainJs.buffer.slice(mainJs.byteOffset, mainJs.byteOffset + mainJs.byteLength) as ArrayBuffer;
+		await vault.adapter.writeBinary(mainJsPath, arrayBuf);
 	} else {
 		if (!(await vault.adapter.exists(mainProdJsPath))) return;
 		await vault.adapter.writeBinary(mainJsPath, await vault.adapter.readBinary(mainProdJsPath));

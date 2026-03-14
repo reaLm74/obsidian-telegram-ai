@@ -12,7 +12,7 @@ export class BotSettingsModal extends Modal {
 		super(plugin.app);
 	}
 
-	async display() {
+	display() {
 		this.addHeader();
 		this.addBotToken();
 		this.addAllowedChatsSetting();
@@ -25,18 +25,23 @@ export class BotSettingsModal extends Modal {
 		this.contentEl.empty();
 		this.botSettingsDiv = this.contentEl.createDiv();
 		this.titleEl.setText("Bot settings");
-		const limitations = new Setting(this.botSettingsDiv).setDesc("⚠ Limitations of Telegram bot:");
+		const limitations = new Setting(this.botSettingsDiv)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setDesc("⚠ Limitations of Telegram bot:");
 		const lim24Hours = document.createElement("div");
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		lim24Hours.setText("- It can get only messages sent within the last 24 hours");
-		lim24Hours.style.marginLeft = "10px";
+		lim24Hours.addClass("ml-10");
 		const limBlocks = document.createElement("div");
-		limBlocks.style.marginLeft = "10px";
+		limBlocks.addClass("ml-10");
+		// eslint-disable-next-line obsidianmd/ui/sentence-case
 		limBlocks.setText("- Use VPN or proxy to bypass blocks in China, Iran, and limited corporate networks ");
 		limBlocks.createEl("span", {
 			text: "([proxy configuration examples],",
 		});
 		limBlocks.createEl("a", {
 			href: "https://github.com/windingblack/obsidian-global-proxy",
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			text: " [Obsidian Global Proxy])",
 		});
 		limitations.descEl.appendChild(lim24Hours);
@@ -48,13 +53,14 @@ export class BotSettingsModal extends Modal {
 			.setName("Bot token (required)")
 			.setDesc("Enter your Telegram bot token.")
 			.addText(async (text) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				text.setPlaceholder("example: 6123456784:AAX9mXnFE2q9WahQ")
 					.setValue(await this.plugin.getBotToken())
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						if (!value) {
-							text.inputEl.style.borderColor = "red";
-							text.inputEl.style.borderWidth = "2px";
-							text.inputEl.style.borderStyle = "solid";
+							text.inputEl.addClass("error-border");
+						} else {
+							text.inputEl.removeClass("error-border");
 						}
 						this.plugin.settings.botToken = value;
 						this.plugin.settings.botTokenEncrypted = false;
@@ -66,18 +72,20 @@ export class BotSettingsModal extends Modal {
 		const allowedChatsSetting = new Setting(this.botSettingsDiv)
 			.setName("Allowed chats (required)")
 			.setDesc(
-				"Enter list of usernames or chat ids that should be processed. At least your username must be entered.",
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				"Enter list of usernames or chat IDs that should be processed. At least your username must be entered.",
 			)
 			.addTextArea((text) => {
 				const textArea = text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.setPlaceholder("example: username,1227636")
 					.setValue(this.plugin.settings.allowedChats.join(", "))
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						value = value.replace(/\s/g, "");
 						if (!value) {
-							textArea.inputEl.style.borderColor = "red";
-							textArea.inputEl.style.borderWidth = "2px";
-							textArea.inputEl.style.borderStyle = "solid";
+							textArea.inputEl.addClass("error-border");
+						} else {
+							textArea.inputEl.removeClass("error-border");
 						}
 						this.plugin.settings.allowedChats = value.split(",");
 					});
@@ -100,6 +108,7 @@ export class BotSettingsModal extends Modal {
 			)
 			.addText((text) =>
 				text
+					// eslint-disable-next-line obsidianmd/ui/sentence-case
 					.setPlaceholder("example: 98912984-c4e9-5ceb-8000-03882a0485e4")
 					.setValue(this.plugin.settings.mainDeviceId)
 					.onChange((value) => (this.plugin.settings.mainDeviceId = value)),
@@ -115,10 +124,9 @@ export class BotSettingsModal extends Modal {
 			})
 			.onClickEvent((evt) => {
 				evt.preventDefault();
-				// eslint-disable-next-line @typescript-eslint/no-explicit-any
-				let inputDeviceId: any;
+				let inputDeviceId: HTMLInputElement | null = null;
 				try {
-					inputDeviceId = deviceIdSetting.controlEl.firstElementChild;
+					inputDeviceId = deviceIdSetting.controlEl.firstElementChild as HTMLInputElement;
 					inputDeviceId.value = this.plugin.currentDeviceId;
 				} catch (error) {
 					displayAndLog(this.plugin, `Try to copy and paste device id manually. Error: ${error}`, _5sec);
@@ -130,28 +138,32 @@ export class BotSettingsModal extends Modal {
 
 	addEncryptionByPinCode() {
 		const botTokenSetting = new Setting(this.botSettingsDiv)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setName("Bot token encryption using a PIN code")
 			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				"Encrypt the bot token for enhanced security. When enabled, a PIN code is required at each Obsidian launch. ",
 			)
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.encryptionByPinCode);
-				toggle.onChange(async (value) => {
-					if (this.plugin.settings.botTokenEncrypted) {
-						this.plugin.settings.botToken = await this.plugin.getBotToken();
-						this.plugin.settings.botTokenEncrypted = false;
-					}
-					this.plugin.settings.encryptionByPinCode = value;
-					if (!value) {
-						this.plugin.pinCode = undefined;
-						return;
-					}
-					const pinCodeModal = new PinCodeModal(this.plugin, false);
-					pinCodeModal.onClose = async () => {
-						if (pinCodeModal.saved && this.plugin.pinCode) return;
-						this.plugin.settings.encryptionByPinCode = false;
-					};
-					pinCodeModal.open();
+				toggle.onChange((value) => {
+					void (async () => {
+						if (this.plugin.settings.botTokenEncrypted) {
+							this.plugin.settings.botToken = await this.plugin.getBotToken();
+							this.plugin.settings.botTokenEncrypted = false;
+						}
+						this.plugin.settings.encryptionByPinCode = value;
+						if (!value) {
+							this.plugin.pinCode = undefined;
+							return;
+						}
+						const pinCodeModal = new PinCodeModal(this.plugin, false);
+						pinCodeModal.onClose = () => {
+							if (pinCodeModal.saved && this.plugin.pinCode) return;
+							this.plugin.settings.encryptionByPinCode = false;
+						};
+						pinCodeModal.open();
+					})();
 				});
 			});
 		botTokenSetting.descEl.createEl("span", {
@@ -166,8 +178,8 @@ export class BotSettingsModal extends Modal {
 			b.setTooltip("Connect")
 				.setIcon("checkmark")
 				.onClick(async () => {
-					if (!this.plugin.settings.botTokenEncrypted) this.plugin.botTokenEncrypt();
-					await this.plugin.saveSettings();
+					if (!this.plugin.settings.botTokenEncrypted) this.plugin.botTokenEncrypt(true);
+					else await this.plugin.saveSettings();
 					this.saved = true;
 					this.close();
 				});
@@ -186,6 +198,6 @@ export class BotSettingsModal extends Modal {
 	}
 
 	onOpen() {
-		this.display();
+		void this.display();
 	}
 }

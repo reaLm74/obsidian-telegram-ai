@@ -34,10 +34,13 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 	if (error || !plugin.bot) {
 		return;
 	}
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const originalMsg: Api.Message | undefined = (msg as any).originalUserMsg;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const mediaMessages: TelegramBot.Message[] = (msg as any).mediaMessages || [];
+	// originalUserMsg is a runtime property attached by sync.ts to forwarded messages from the user client
+	const originalMsg: Api.Message | undefined = (msg as unknown as Record<string, unknown>).originalUserMsg as
+		| Api.Message
+		| undefined;
+	// mediaMessages is a runtime property attached by handleMediaGroup for grouped media processing
+	const mediaMessages: TelegramBot.Message[] =
+		((msg as unknown as Record<string, unknown>).mediaMessages as TelegramBot.Message[]) || [];
 
 	if (originalMsg) {
 		await plugin.bot.deleteMessage(msg.chat.id, msg.message_id);
@@ -102,8 +105,9 @@ export async function applyNoteContentTemplate(
 	let templateContent = "";
 	try {
 		if (templateFilePath) {
-			const templateFile = plugin.app.vault.getAbstractFileByPath(normalizePath(templateFilePath)) as TFile;
-			templateContent = await plugin.app.vault.read(templateFile);
+			const templateAbstract = plugin.app.vault.getAbstractFileByPath(normalizePath(templateFilePath));
+			if (!(templateAbstract instanceof TFile)) throw new Error(`Not a file: ${templateFilePath}`);
+			templateContent = await plugin.app.vault.read(templateAbstract);
 		}
 	} catch (e) {
 		throw new Error(`Template "${templateFilePath}" not found! ${e}`);
@@ -117,9 +121,9 @@ export async function applyNoteContentTemplate(
 		if (msg.photo && plugin.settings.aiEnabled && plugin.settings.aiVisionEnabled) {
 			const { processWithAI } = await import("../../../ai/processor");
 			const aiProcessedContent = await processWithAI(plugin, msg.caption || "", "photo", msg);
-			textContentMd = aiProcessedContent || (await convertMessageTextToMarkdown(msg));
+			textContentMd = aiProcessedContent || convertMessageTextToMarkdown(msg);
 		} else {
-			textContentMd = await convertMessageTextToMarkdown(msg);
+			textContentMd = convertMessageTextToMarkdown(msg);
 		}
 	}
 	// Check if the message is forwarded and extract the required information
@@ -153,11 +157,11 @@ export async function applyNoteContentTemplate(
 			}
 			return linkPreview;
 		}) // preview for first url from the message
-		.replace(/{{replace:(.*?)=>(.*?)}}/g, (_, replaceThis, replaceWith) => {
+		.replace(/{{replace:(.*?)=>(.*?)}}/g, (_, replaceThis: string, replaceWith: string) => {
 			itemsForReplacing.push([replaceThis, replaceWith]);
 			return "";
 		})
-		.replace(/{{replace:(.*?)}}/g, (_, replaceThis) => {
+		.replace(/{{replace:(.*?)}}/g, (_, replaceThis: string) => {
 			itemsForReplacing.push([replaceThis, ""]);
 			return "";
 		});
@@ -263,10 +267,10 @@ export async function processBasicVariables(
 	let processedContent = lines.join("\n");
 
 	processedContent = processedContent
-		.replace(/{{messageDate:(.*?)}}/g, (_, format) => formatDateTime(messageDateTime, format))
-		.replace(/{{messageTime:(.*?)}}/g, (_, format) => formatDateTime(messageDateTime, format))
-		.replace(/{{date:(.*?)}}/g, (_, format) => formatDateTime(dateTimeNow, format))
-		.replace(/{{time:(.*?)}}/g, (_, format) => formatDateTime(dateTimeNow, format))
+		.replace(/{{messageDate:(.*?)}}/g, (_, format: string) => formatDateTime(messageDateTime, format))
+		.replace(/{{messageTime:(.*?)}}/g, (_, format: string) => formatDateTime(messageDateTime, format))
+		.replace(/{{date:(.*?)}}/g, (_, format: string) => formatDateTime(dateTimeNow, format))
+		.replace(/{{time:(.*?)}}/g, (_, format: string) => formatDateTime(dateTimeNow, format))
 		.replace(/{{forwardFrom}}/g, getForwardFromLink(msg))
 		.replace(/{{forwardFrom:name}}/g, prepareIfPath(isPath, getForwardFromName(msg))) // name of forwarded message creator
 		.replace(/{{user}}/g, getUserLink(msg)) // link to the user who sent the message
@@ -285,13 +289,13 @@ export async function processBasicVariables(
 		.replace(/{{messageId}}/g, msg.message_id.toString())
 		.replace(/{{replyMessageId}}/g, getReplyMessageId(msg))
 		.replace(/{{domain}}/g, prepareIfPath(isPath, getDomainFromUrl(getUrl(msg))))
-		.replace(/{{hashtag:\[(\d+)\]}}/g, (_, num) => getHashtag(msg, num))
-		.replace(/{{creationDate:(.*?)}}/g, (_, format) => formatDateTime(creationDateTime, format)) // date, when the message was created
-		.replace(/{{creationTime:(.*?)}}/g, (_, format) => formatDateTime(creationDateTime, format)); // time, when the message was created
+		.replace(/{{hashtag:\[(\d+)\]}}/g, (_, num: string) => getHashtag(msg, parseInt(num)))
+		.replace(/{{creationDate:(.*?)}}/g, (_, format: string) => formatDateTime(creationDateTime, format)) // date, when the message was created
+		.replace(/{{creationTime:(.*?)}}/g, (_, format: string) => formatDateTime(creationDateTime, format)); // time, when the message was created
 
 	// Process AI parameters if they exist in template
 	if (processedContent.includes("{{ai:")) {
-		console.log("Processing AI variables in template:", processedContent);
+		console.debug("Processing AI variables in template:", processedContent);
 		processedContent = await processAIVariables(
 			plugin,
 			msg,
@@ -299,7 +303,7 @@ export async function processBasicVariables(
 			messageContent || messageText || "",
 			skipAIVariables,
 		);
-		console.log("AI variables processed result:", processedContent);
+		console.debug("AI variables processed result:", processedContent);
 	}
 
 	return processedContent;
@@ -319,7 +323,7 @@ async function processAIVariables(
 	content: string,
 	skipAIVariables = false,
 ): Promise<string> {
-	console.log("processAIVariables called with:", {
+	console.debug("processAIVariables called with:", {
 		template,
 		content,
 		aiEnabled: plugin.settings.aiEnabled,
@@ -328,10 +332,10 @@ async function processAIVariables(
 
 	// If AI is not enabled or skip requested (e.g. URL-only messages), use fallbacks
 	if (!plugin.settings.aiEnabled || skipAIVariables) {
-		console.log("AI disabled, using fallback values");
-		return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName) => {
+		console.debug("AI disabled, using fallback values");
+		return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
 			const fallbackValue = getFallbackValue(paramName, content);
-			console.log(`Replacing {{ai:${paramName}}} with fallback:`, fallbackValue);
+			console.debug(`Replacing {{ai:${paramName}}} with fallback:`, fallbackValue);
 			return fallbackValue;
 		});
 	}
@@ -352,7 +356,7 @@ async function processAIVariables(
 	for (const paramName of undefinedParams) {
 		const fallbackValue = getFallbackValue(paramName, content);
 		processedTemplate = processedTemplate.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
-		console.log(`Undefined parameter {{ai:${paramName}}} replaced with fallback:`, fallbackValue);
+		console.debug(`Undefined parameter {{ai:${paramName}}} replaced with fallback:`, fallbackValue);
 	}
 
 	// If there are no defined parameters, return the result
@@ -366,27 +370,27 @@ async function processAIVariables(
 	try {
 		// Get AI response with custom prompt
 		const aiResponse = await processWithCustomPrompt(plugin, content, aiPrompt, msg);
-		console.log("AI response:", aiResponse);
+		console.debug("AI response:", aiResponse);
 
 		if (!aiResponse) {
-			console.log("No AI response, using fallback values");
+			console.debug("No AI response, using fallback values");
 			// If AI didn't respond, use default values
-			return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName) => {
+			return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
 				const fallbackValue = getFallbackValue(paramName, content);
-				console.log(`Fallback for ${paramName}:`, fallbackValue);
+				console.debug(`Fallback for ${paramName}:`, fallbackValue);
 				return fallbackValue;
 			});
 		}
 
 		// Extract parameters from AI response
 		const extractedParams = extractAIParameters(aiResponse || "", definedParams);
-		console.log("Extracted AI params:", extractedParams);
+		console.debug("Extracted AI params:", extractedParams);
 
 		// Replace variables in processed template
 		let result = processedTemplate;
 		for (const [paramName, value] of Object.entries(extractedParams)) {
 			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), value);
-			console.log(`Replaced {{ai:${paramName}}} with:`, value);
+			console.debug(`Replaced {{ai:${paramName}}} with:`, value);
 		}
 
 		return result;
@@ -397,7 +401,7 @@ async function processAIVariables(
 		for (const paramName of definedParams) {
 			const fallbackValue = getFallbackValue(paramName, content);
 			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
-			console.log(`Error fallback for ${paramName}:`, fallbackValue);
+			console.debug(`Error fallback for ${paramName}:`, fallbackValue);
 		}
 		return result;
 	}
@@ -591,8 +595,8 @@ function pasteText(
 	const propertyRE = new RegExp(`{{${pasteType}:(.*?)}}`, "g");
 	const allRE = new RegExp(`{{${pasteType}}}`, "g");
 	return pasteHere
-		.replace(leadingRE, (_, leadingChars) => prepareIfPath(isPath, processText(content, leadingChars)))
-		.replace(leadingAndPropertyRE, (_, leadingChars, property) => {
+		.replace(leadingRE, (_, leadingChars: string) => prepareIfPath(isPath, processText(content, leadingChars)))
+		.replace(leadingAndPropertyRE, (_, leadingChars: string, property: string) => {
 			const processedText = processText(text, leadingChars, property);
 			if (!processedText && property && text) {
 				displayAndLog(plugin, `Template variable {{${pasteType}}:${property}}} isn't supported!`, _5sec);

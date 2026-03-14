@@ -13,19 +13,22 @@ export class CategoryManager {
 	constructor(plugin: TelegramSyncPlugin) {
 		this.plugin = plugin;
 		this.aiClassifier = new AIClassifier(plugin);
-		this.loadCategories();
+	}
+
+	async init() {
+		await this.loadCategories();
 		this.loadRules();
 	}
 
 	/**
 	 * Loads categories from settings
 	 */
-	private loadCategories(): void {
+	private async loadCategories(): Promise<void> {
 		this.categories.clear();
 
 		// If no categories, create defaults
 		if (this.plugin.settings.noteCategories.length === 0) {
-			this.initializeDefaultCategories();
+			await this.initializeDefaultCategories();
 		}
 
 		for (const category of this.plugin.settings.noteCategories) {
@@ -240,8 +243,15 @@ export class CategoryManager {
 			}
 
 			return null;
-		} catch (error) {
-			await displayAndLogError(this.plugin, error, "Category classification error", "", msg, 0);
+		} catch (error: unknown) {
+			await displayAndLogError(
+				this.plugin,
+				error instanceof Error ? error : new Error(String(error)),
+				"Category classification error",
+				"",
+				msg,
+				0,
+			);
 			return null;
 		}
 	}
@@ -309,14 +319,14 @@ export class CategoryManager {
 	 * Generates unique ID
 	 */
 	private generateId(): string {
-		return Date.now().toString(36) + Math.random().toString(36).substr(2);
+		return Date.now().toString(36) + Math.random().toString(36).substring(2);
 	}
 
 	/**
 	 * Reloads data from settings
 	 */
 	reload(): void {
-		this.loadCategories();
+		void this.loadCategories();
 		this.loadRules();
 	}
 

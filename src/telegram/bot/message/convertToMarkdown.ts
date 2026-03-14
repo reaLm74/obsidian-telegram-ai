@@ -1,7 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { getInlineUrls } from "./getters";
 
-export async function convertMessageTextToMarkdown(msg: TelegramBot.Message): Promise<string> {
+export function convertMessageTextToMarkdown(msg: TelegramBot.Message): string {
 	let text = msg.text || msg.caption || "";
 	const entities = msg.entities || msg.caption_entities || [];
 	const copiedEntities: TelegramBot.MessageEntity[] = structuredClone(entities);

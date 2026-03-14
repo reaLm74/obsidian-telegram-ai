@@ -3,9 +3,9 @@ import TelegramSyncPlugin from "./main";
 
 export const connectionStatusIndicatorSettingName = "Connection status indicator";
 export enum ConnectionStatusIndicatorType {
-	HIDDEN = "never show, log the errors",
-	CONSTANT = "show constantly all states",
-	ONLY_WHEN_ERRORS = "show only when connection errors",
+	HIDDEN = "Never show, log the errors",
+	CONSTANT = "Show constantly all states",
+	ONLY_WHEN_ERRORS = "Show only when connection errors",
 }
 export type KeysOfConnectionStatusIndicatorType = keyof typeof ConnectionStatusIndicatorType;
 export const checkConnectionMessage =
@@ -53,7 +53,7 @@ export default class ConnectionStatusIndicator {
 	private setConnected() {
 		if (!this.icon) return;
 		this.label?.setText("");
-		this.label?.removeAttribute("style");
+		this.label?.removeClass("status-indicator-error");
 		this.icon.removeAttribute("data-tooltip-position");
 		this.icon.removeAttribute("aria-label");
 	}
@@ -64,7 +64,7 @@ export default class ConnectionStatusIndicator {
 			"data-tooltip-position": "top",
 			"aria-label": `${error || ""}\n${checkConnectionMessage}`.trimStart(),
 		});
-		this.label?.setAttr("style", "position: relative; left: -3px; bottom: -3px; font-weight: bold; color:red;");
-		this.label?.setText("x");
+		this.label?.addClass("status-indicator-error");
+		this.label?.setText("X");
 	}
 }
