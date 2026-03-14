@@ -32,6 +32,7 @@ export async function connect(
 		plugin.userConnected = await Client.isAuthorizedAsUser();
 
 		if (sessionType == "bot" || !plugin.userConnected) {
+			// eslint-disable-next-line @typescript-eslint/unbound-method
 			await Client.signInAsBot(await enqueue(plugin, plugin.getBotToken));
 		}
 
@@ -46,11 +47,12 @@ export async function connect(
 			plugin.settings.telegramSessionType = sessionType;
 			await plugin.saveSettings();
 		}
-	} catch (error) {
-		if (!error.message.includes("API_ID_PUBLISHED_FLOOD")) {
+	} catch (error: unknown) {
+		const err = error instanceof Error ? error : new Error(String(error));
+		if (!err.message.includes("API_ID_PUBLISHED_FLOOD")) {
 			plugin.userConnected = false;
-			await displayAndLogError(plugin, error, "", "", undefined, 0);
-			return `Connection failed.\n${error.message}`;
+			await displayAndLogError(plugin, err, "", "", undefined, 0);
+			return `Connection failed.\n${err.message}`;
 		}
 	} finally {
 		plugin.checkingUserConnection = false;
@@ -63,12 +65,12 @@ export async function reconnect(plugin: TelegramSyncPlugin, displayError = false
 	try {
 		await Client.reconnect(false);
 		plugin.userConnected = await Client.isAuthorizedAsUser();
-	} catch (error) {
+	} catch (error: unknown) {
 		plugin.userConnected = false;
 		if (displayError && plugin.isBotConnected() && plugin.settings.telegramSessionType == "user") {
 			await displayAndLogError(
 				plugin,
-				error,
+				error instanceof Error ? error : new Error(String(error)),
 				StatusMessages.USER_DISCONNECTED,
 				"Try restore the connection manually by restarting Obsidian or by refresh button in the plugin settings!",
 			);

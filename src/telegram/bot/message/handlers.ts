@@ -1,4 +1,3 @@
-/* eslint-disable no-mixed-spaces-and-tabs */
 import TelegramSyncPlugin from "../../../main";
 import TelegramBot from "node-telegram-bot-api";
 import {
@@ -24,7 +23,7 @@ import { ProgressBarType, _3MB, createProgressBar, deleteProgressBar, updateProg
 import { getDomainFromUrl, getFileObject, getUrls, isTextOnlyUrl } from "./getters";
 import { TFile } from "obsidian";
 import { enqueue } from "src/utils/queues";
-import { _15sec, _1sec, displayAndLog, displayAndLogError } from "src/utils/logUtils";
+import { _15sec, displayAndLog, displayAndLogError } from "src/utils/logUtils";
 import { getMessageDistributionRule } from "./filterEvaluations";
 import { MessageDistributionRule, getMessageDistributionRuleInfo } from "src/settings/messageDistribution";
 import { getOffsetDate, unixTime2Date } from "src/utils/dateUtils";
@@ -46,6 +45,15 @@ interface MediaGroup {
 	isComplete: boolean;
 }
 
+/** Shape of a Telegram file object returned by the bot API */
+interface TelegramFileObject {
+	file_id: string;
+	file_unique_id: string;
+	file_size?: number;
+	file_name?: string;
+	mime_type?: string;
+}
+
 const mediaGroups: MediaGroup[] = [];
 
 let handleMediaGroupIntervalId: NodeJS.Timer | undefined;
@@ -57,11 +65,11 @@ export function clearHandleMediaGroupInterval() {
 
 		// Clean up incomplete media groups on stop
 		if (mediaGroups.length > 0) {
-			console.log(`Clearing ${mediaGroups.length} unprocessed media groups`);
+			console.debug(`Clearing ${mediaGroups.length} unprocessed media groups`);
 			mediaGroups.length = 0;
 		}
 
-		console.log("Media group processing interval cleared");
+		console.debug("Media group processing interval cleared");
 	}
 }
 
@@ -73,12 +81,13 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	}
 
 	// if user disconnected and should be connected then reconnect it
+	// eslint-disable-next-line @typescript-eslint/unbound-method
 	if (!plugin.userConnected) await enqueue(plugin, plugin.restartTelegram, "user");
 
 	const { fileObject, fileType } = getFileObject(msg);
 	// skip system messages
 
-	!isChannelPost && (await enqueue(ifNewReleaseThenShowChanges, plugin, msg));
+	if (!isChannelPost) await enqueue(ifNewReleaseThenShowChanges, plugin, msg);
 
 	if (!msg.text && !fileObject) {
 		displayAndLog(plugin, `System message skipped`, 0);
@@ -86,7 +95,8 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	}
 	let fileInfo = "binary";
 	if (fileType && fileObject) {
-		const uniqueId = fileObject instanceof Array ? fileObject[0]?.file_unique_id : fileObject.file_unique_id;
+		const fo = fileObject as TelegramFileObject | TelegramFileObject[];
+		const uniqueId = Array.isArray(fo) ? fo[0]?.file_unique_id : fo.file_unique_id;
 		fileInfo = `${fileType} ${uniqueId}`;
 	}
 
@@ -106,8 +116,8 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 
 	let msgText = (msg.text || msg.caption || fileInfo).replace("\n", "..");
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	if ((msg as any).userMsg) {
+	// userMsg is a custom property attached at runtime to forwarded messages processed by the user client
+	if ((msg as unknown as Record<string, unknown>).userMsg) {
 		displayAndLog(plugin, `Message skipped: already processed before!\n--- Message ---\n${msgText}\n<===`, 0);
 		return;
 	}
@@ -136,7 +146,7 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 
 	if (!allowedChats.includes(telegramUserName) && !allowedChats.includes(msg.chat.id.toString())) {
 		const telegramUserNameFull = telegramUserName ? `your username "${telegramUserName}" or` : "";
-		plugin.bot?.sendMessage(
+		void plugin.bot?.sendMessage(
 			msg.chat.id,
 			`Access denied. Add ${telegramUserNameFull} this chat id "${msg.chat.id}" in the plugin setting "Allowed Chats".`,
 			{ reply_to_message_id: msg.message_id },
@@ -181,8 +191,15 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 		} else {
 			await handleMessageText(plugin, msg, distributionRule);
 		}
-	} catch (error) {
-		await displayAndLogError(plugin, error, "", "", msg, _15sec);
+	} catch (error: unknown) {
+		await displayAndLogError(
+			plugin,
+			error instanceof Error ? error : new Error(String(error)),
+			"",
+			"",
+			msg,
+			_15sec,
+		);
 	} finally {
 		--plugin.messagesLeftCnt;
 		if (plugin.messagesLeftCnt == 0 && canUpdateProcessingDate) {
@@ -216,7 +233,7 @@ export async function handleMessageText(
 				const linkContent = noteFile instanceof TFile ? linkItem : linkItem;
 				const linkDelimiter = noteFile instanceof TFile ? delimiter : "";
 
-				createFolderIfNotExist(plugin.app.vault, path.dirname(notePath));
+				void createFolderIfNotExist(plugin.app.vault, path.dirname(notePath));
 
 				await enqueue(appendContentToNote, plugin.app.vault, notePath, linkContent, "", linkDelimiter, false);
 				displayAndLog(plugin, `Link saved to ${notePath}`, 0);
@@ -260,7 +277,7 @@ export async function handleMessageText(
 	formattedContent = categorization.finalContent;
 
 	let noteFolderPath = path.dirname(notePath);
-	if (noteFolderPath != ".") createFolderIfNotExist(plugin.app.vault, noteFolderPath);
+	if (noteFolderPath != ".") void createFolderIfNotExist(plugin.app.vault, noteFolderPath);
 	else noteFolderPath = "";
 
 	await enqueue(
@@ -278,11 +295,11 @@ export async function handleMessageText(
 /**
  * Creates combined content for media group for AI processing
  */
-async function createCombinedMediaGroupContent(
+function createCombinedMediaGroupContent(
 	plugin: TelegramSyncPlugin,
 	mediaGroup: MediaGroup,
 	_distributionRule: MessageDistributionRule,
-): Promise<string> {
+): string {
 	const allCaptions: string[] = [];
 	const fileTypes: string[] = [];
 
@@ -370,8 +387,9 @@ async function tryExtractDocumentText(
 		}
 
 		return null;
-	} catch (error) {
-		displayAndLog(plugin, `Failed to extract text from ${fileName}: ${error.message}`, 0);
+	} catch (error: unknown) {
+		const msg2 = error instanceof Error ? error.message : String(error);
+		displayAndLog(plugin, `Failed to extract text from ${fileName}: ${msg2}`, 0);
 		return null;
 	}
 }
@@ -395,9 +413,10 @@ async function createNoteContent(
 
 	if (!error) {
 		filesPaths.forEach((fp) => {
-			const filePath = plugin.app.vault.getAbstractFileByPath(fp) as TFile;
+			const abstract = plugin.app.vault.getAbstractFileByPath(fp);
+			if (!(abstract instanceof TFile)) return;
 			// Create embed link for file display
-			const markdownLink = plugin.app.fileManager.generateMarkdownLink(filePath, notePath);
+			const markdownLink = plugin.app.fileManager.generateMarkdownLink(abstract, notePath);
 			// Convert [[file]] to ![[file]] for embedding
 			const embedLink = markdownLink.replace(/^\[\[/, "![[");
 			filesLinks.push(embedLink);
@@ -569,7 +588,7 @@ async function applyCategorization(
 			// Create folder if it doesn't exist
 			const folderPath = path.dirname(finalNotePath);
 			if (folderPath !== ".") {
-				createFolderIfNotExist(plugin.app.vault, folderPath);
+				void createFolderIfNotExist(plugin.app.vault, folderPath);
 			}
 		}
 
@@ -591,8 +610,15 @@ async function applyCategorization(
 			finalContent,
 			category,
 		};
-	} catch (error) {
-		await displayAndLogError(plugin, error, "Category application error", "", msg, 0);
+	} catch (error: unknown) {
+		await displayAndLogError(
+			plugin,
+			error instanceof Error ? error : new Error(String(error)),
+			"Category application error",
+			"",
+			msg,
+			0,
+		);
 
 		return {
 			finalNotePath: notePath,
@@ -621,7 +647,7 @@ async function applyCategoryNotePathTemplate(
 	const msgDate = unixTime2Date(msg.date);
 	const offsetDate = new Date(getOffsetDate(0, msgDate) * 1000);
 
-	notePath = notePath.replace(/\{\{date:([^}]+)\}\}/g, (match, format) => {
+	notePath = notePath.replace(/\{\{date:([^}]+)\}\}/g, (match, format: string) => {
 		try {
 			return window.moment(offsetDate).format(format);
 		} catch (error) {
@@ -642,7 +668,7 @@ async function applyCategoryNotePathTemplate(
 	// Process basic variables (including content and AI)
 	// Use extracted file content if available for better AI title generation
 	const textContentMd = extractedFileContent || msg.text || msg.caption || "";
-	console.log("applyCategoryNotePathTemplate processing:", {
+	console.debug("applyCategoryNotePathTemplate processing:", {
 		notePath,
 		textContentMd,
 		hasExtractedContent: !!extractedFileContent,
@@ -692,7 +718,9 @@ export async function handleFiles(
 		// Iterate through each file type
 		const { fileType, fileObject } = getFileObject(msg);
 
-		const fileObjectToUse = fileObject instanceof Array ? fileObject.pop() : fileObject;
+		const fileObjectToUse: TelegramFileObject = (
+			Array.isArray(fileObject) ? (fileObject as TelegramFileObject[]).pop() : (fileObject as TelegramFileObject)
+		) as TelegramFileObject;
 		const fileId = fileObjectToUse.file_id;
 		telegramFileName = ("file_name" in fileObjectToUse && fileObjectToUse.file_name) || "";
 		let fileByteArray: Uint8Array;
@@ -715,16 +743,19 @@ export async function handleFiles(
 			let stage = 0;
 			// show progress bar only if file size > 3MB
 			const progressBarMessage =
-				totalBytes > _3MB ? await createProgressBar(plugin.bot, msg, ProgressBarType.DOWNLOADING) : undefined;
+				totalBytes && totalBytes > _3MB
+					? await createProgressBar(plugin.bot, msg, ProgressBarType.DOWNLOADING)
+					: undefined;
 			try {
 				for await (const chunk of fileStream) {
-					fileChunks.push(new Uint8Array(chunk));
-					receivedBytes += chunk.length;
+					fileChunks.push(new Uint8Array(chunk as ArrayBuffer));
+
+					receivedBytes += (chunk as { length: number }).length;
 					stage = await updateProgressBar(
 						plugin.bot,
 						msg,
 						progressBarMessage,
-						totalBytes,
+						totalBytes ?? 0,
 						receivedBytes,
 						stage,
 					);
@@ -739,13 +770,13 @@ export async function handleFiles(
 					return acc;
 				}, []),
 			);
-		} catch (e) {
-			error = e;
+		} catch (e: unknown) {
+			error = e instanceof Error ? e : new Error(String(e));
 			const media = await Client.downloadMedia(
 				plugin.bot,
 				msg,
 				fileId,
-				fileObjectToUse.file_size,
+				fileObjectToUse.file_size ?? 0,
 				plugin.botUser,
 			);
 			fileByteArray = new Uint8Array(media instanceof Buffer ? media : Buffer.alloc(0));
@@ -755,7 +786,7 @@ export async function handleFiles(
 		}
 		telegramFileName = (msg.document && msg.document.file_name) || telegramFileName;
 		const fileExtension =
-			path.extname(telegramFileName).replace(".", "") || extension(fileObject.mime_type) || "file";
+			path.extname(telegramFileName).replace(".", "") || extension(fileObjectToUse.mime_type || "") || "file";
 		const fileName = path.basename(telegramFileName, "." + fileExtension);
 
 		// Determine category for file (if categorization is enabled)
@@ -780,10 +811,11 @@ export async function handleFiles(
 			unixTime2Date(msg.date, msg.message_id),
 			fileExtension,
 		);
-		await plugin.app.vault.createBinary(filePath, fileByteArray.buffer as ArrayBuffer);
-	} catch (e) {
-		if (error) (error as Error).message = (error as Error).message + " | " + e;
-		else error = e;
+		await plugin.app.vault.createBinary(filePath, fileByteArray.buffer.slice(0) as ArrayBuffer);
+	} catch (e: unknown) {
+		const prevError = error as Error | undefined;
+		if (prevError) prevError.message = prevError.message + " | " + String(e);
+		else error = e instanceof Error ? e : new Error(String(e));
 	}
 
 	displayAndLog(
@@ -809,7 +841,9 @@ export async function handleFiles(
 		// Start interval for media group processing if not already started
 		if (!handleMediaGroupIntervalId) {
 			handleMediaGroupIntervalId = setInterval(
-				async () => await enqueue(handleMediaGroup, plugin, distributionRule),
+				() => {
+					void enqueue(handleMediaGroup, plugin, distributionRule);
+				},
 				500, // Check every 500ms for faster processing
 			);
 			displayAndLog(plugin, `Started media group processing interval`, 0);
@@ -850,10 +884,10 @@ async function handleMediaGroup(plugin: TelegramSyncPlugin, distributionRule: Me
 	for (const mg of completedGroups) {
 		try {
 			// Prepare combined content for AI processing
-			const combinedContent = await createCombinedMediaGroupContent(plugin, mg, distributionRule);
+			const combinedContent = createCombinedMediaGroupContent(plugin, mg, distributionRule);
 
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			(mg.initialMsg as any).mediaMessages = mg.mediaMessages;
+			// mediaMessages is a custom runtime property attached to the initial message for group processing
+			(mg.initialMsg as unknown as Record<string, unknown>).mediaMessages = mg.mediaMessages;
 
 			let noteContent = await createNoteContent(
 				plugin,
@@ -887,8 +921,8 @@ async function handleMediaGroup(plugin: TelegramSyncPlugin, distributionRule: Me
 				distributionRule.reversedOrder,
 			);
 			await finalizeMessageProcessing(plugin, mg.initialMsg, mg.error);
-		} catch (e) {
-			displayAndLogError(plugin, e, "", "", mg.initialMsg, 0);
+		} catch (e: unknown) {
+			void displayAndLogError(plugin, e instanceof Error ? e : new Error(String(e)), "", "", mg.initialMsg, 0);
 		} finally {
 			// Remove processed group
 			const index = mediaGroups.indexOf(mg);
@@ -985,9 +1019,10 @@ async function appendFileToNote(
 				} else {
 					displayAndLog(plugin, `⚠️ File too large for Whisper API (>25MB), skipping transcription`, 0);
 				}
-			} catch (e) {
+			} catch (e: unknown) {
 				console.error("Error reading/transcribing file:", e);
-				displayAndLog(plugin, `❌ Error transcribing file: ${e.message}`, 0);
+				const eMsg = e instanceof Error ? e.message : String(e);
+				displayAndLog(plugin, `❌ Error transcribing file: ${eMsg}`, 0);
 			}
 		}
 	}
@@ -1001,7 +1036,7 @@ async function appendFileToNote(
 	);
 
 	let noteFolderPath = path.dirname(notePath);
-	if (noteFolderPath != ".") createFolderIfNotExist(plugin.app.vault, noteFolderPath);
+	if (noteFolderPath != ".") void createFolderIfNotExist(plugin.app.vault, noteFolderPath);
 	else noteFolderPath = "";
 
 	if (msg.media_group_id) {

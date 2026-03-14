@@ -40,16 +40,20 @@ export async function enqueue<C, A extends unknown[], R>(
 
 	const queue = (queues.get(queueKey) || Promise.resolve())
 		.then(async () =>
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 			context ? await fn.call(context, ...args) : await (fn as AsyncStaticFunction<A, R>)(...args),
 		)
 		.catch((e) => {
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 			error = e;
 		});
 
 	queues.set(queueKey, queue);
 
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 	const result = await queue;
 	if (error) throw error;
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 	return result;
 }
 
@@ -77,7 +81,7 @@ export async function enqueueByCondition<C, A extends unknown[], R>(
 			if (fnOrArgs) rest.unshift(fnOrArgs);
 			return enqueue(contextOrFn as AsyncStaticFunction<A, R>, ...rest);
 		} else {
-			return enqueue(contextOrFn as C, fnOrArgs as AsyncInstanceFunction<C, A, R>, ...rest);
+			return enqueue(contextOrFn, fnOrArgs as AsyncInstanceFunction<C, A, R>, ...rest);
 		}
 	} else {
 		let context: C | undefined;
@@ -92,6 +96,7 @@ export async function enqueueByCondition<C, A extends unknown[], R>(
 			fn = fnOrArgs as AsyncInstanceFunction<C, A, R>;
 		}
 
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 		return context ? fn.call(context, ...args) : (fn as AsyncStaticFunction<A, R>)(...args);
 	}
 }

@@ -12,13 +12,13 @@ export class PinCodeModal extends Modal {
 		super(plugin.app);
 	}
 
-	async display() {
+	display() {
 		this.addHeader();
 		this.addPinCode();
 		this.addFooterButtons();
 	}
 
-	success = async () => {
+	success = () => {
 		this.saved = true;
 		this.close();
 	};
@@ -26,19 +26,22 @@ export class PinCodeModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.pinCodeDiv = this.contentEl.createDiv();
-		this.titleEl.setText("Telegram Sync: " + (this.decrypt ? "Decrypting" : "Encrypting") + "  bot token");
+		this.titleEl.setText("Telegram sync: " + (this.decrypt ? "Decrypting" : "Encrypting") + " bot token");
 	}
 
 	addPinCode() {
 		new Setting(this.pinCodeDiv)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setName("PIN code")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setDesc("Enter your PIN code. Numbers and letters only.")
 			.addText((text) => {
-				text.setPlaceholder("example: 1234").onChange(async (value: string) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
+				text.setPlaceholder("example: 1234").onChange((value: string) => {
 					if (!value) {
-						text.inputEl.style.borderColor = "red";
-						text.inputEl.style.borderWidth = "2px";
-						text.inputEl.style.borderStyle = "solid";
+						text.inputEl.addClass("border-red");
+					} else {
+						text.inputEl.removeClass("border-red");
 					}
 					this.plugin.pinCode = value;
 				});
@@ -59,7 +62,7 @@ export class PinCodeModal extends Modal {
 		footerButtons.addExtraButton((b) => {
 			b.setIcon("cross")
 				.setTooltip("Cancel")
-				.onClick(async () => {
+				.onClick(() => {
 					this.saved = false;
 					this.plugin.pinCode = undefined;
 					this.close();

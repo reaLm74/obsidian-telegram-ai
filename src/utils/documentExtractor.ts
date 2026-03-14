@@ -102,14 +102,19 @@ export async function extractTextFromDocument(
 		// Handle PDF
 		if (extension === "pdf") {
 			try {
-				// eslint-disable-next-line @typescript-eslint/no-var-requires
-				const pdf = require("pdf-parse");
+				const pdfModule = await import("pdf-parse");
+				const pdf = pdfModule.default || pdfModule;
+				// @ts-expect-error -- pdf-parse expects a Node.js Buffer; Obsidian's renderer provides a compatible Buffer via the polyfill
+				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 				const data = await pdf(Buffer.from(fileBuffer));
 				return {
+					// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
 					text: data.text,
 					success: true,
 					metadata: {
+						// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
 						pages: data.numpages,
+						// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
 						wordCount: data.text.split(/\s+/).length,
 						format: "pdf",
 					},
@@ -123,8 +128,7 @@ export async function extractTextFromDocument(
 		// Handle DOCX
 		if (extension === "docx") {
 			try {
-				// eslint-disable-next-line @typescript-eslint/no-var-requires
-				const mammoth = require("mammoth");
+				const mammoth = await import("mammoth");
 				const result = await mammoth.extractRawText({ buffer: Buffer.from(fileBuffer) });
 				return {
 					text: result.value,
@@ -194,11 +198,12 @@ export async function extractTextFromDocument(
 				// Try as plain text
 				return extractPlainText(textContent);
 		}
-	} catch (error) {
+	} catch (error: unknown) {
+		const errMsg = error instanceof Error ? error.message : String(error);
 		return {
 			text: "",
 			success: false,
-			error: `Failed to extract text: ${error.message}`,
+			error: `Failed to extract text: ${errMsg}`,
 		};
 	}
 }
@@ -231,6 +236,7 @@ function extractPlainText(content: string): DocumentExtractionResult {
  */
 function extractJsonText(content: string): DocumentExtractionResult {
 	try {
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		const jsonData = JSON.parse(content);
 		const readableText = JSON.stringify(jsonData, null, 2);
 
@@ -242,7 +248,7 @@ function extractJsonText(content: string): DocumentExtractionResult {
 				format: "JSON",
 			},
 		};
-	} catch (error) {
+	} catch (_error) {
 		// If not valid JSON, process as plain text
 		return extractPlainText(content);
 	}

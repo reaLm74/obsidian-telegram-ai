@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import bigInt from "big-integer";
 import { Api } from "telegram";
 import { Buffer } from "buffer";
@@ -74,7 +73,7 @@ export function convertBotFileToMessageMedia(fileId: string, fileSize: number): 
 		// Fake type to return url
 		const webpage = new Api.WebPage({
 			id: bigInt(accessHash),
-			hash: Number(accessHash.toString),
+			hash: Number(accessHash.toString()),
 			url: url,
 			displayUrl: url,
 			attributes: [],
@@ -178,7 +177,7 @@ function rle_decode(s: Buffer): Buffer {
 		}
 
 		if (z) {
-			r.push(...Array(b).fill(0));
+			r.push(...(Array(b).fill(0) as number[]));
 			z = false;
 		} else {
 			r.push(b);

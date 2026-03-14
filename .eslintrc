@@ -6,13 +6,15 @@
 	},
 	"plugins": [
 		"prettier",
-		"@typescript-eslint"
+		"@typescript-eslint",
+		"obsidianmd"
 	],
 	"extends": [
 		"prettier",
 		"eslint:recommended",
 		"plugin:@typescript-eslint/eslint-recommended",
-		"plugin:@typescript-eslint/recommended"
+		"plugin:@typescript-eslint/recommended",
+		"plugin:obsidianmd/recommended"
 	],
 	"parserOptions": {
 		"sourceType": "module"

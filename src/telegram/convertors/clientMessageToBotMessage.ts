@@ -73,8 +73,8 @@ export function convertClientMsgToBotMsg(clientMsg: Api.Message): Message {
 	const botChatType: TelegramBot.ChatType = getChatType(clientMsg.chat);
 	const botChat: TelegramBot.Chat = { id: clientMsg.chatId?.toJSNumber() || 0, type: botChatType };
 	const botMsg: Message = { chat: botChat, date: clientMsg.date, message_id: clientMsg.id };
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	(botMsg as any).clientId = clientMsg.id;
+	// clientId is a custom runtime property used to track the originating GramJS message ID
+	(botMsg as unknown as Record<string, unknown>).clientId = clientMsg.id;
 
 	// Map similar fields
 	// _TODO text must be undefined if message with file

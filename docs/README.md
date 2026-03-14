@@ -38,7 +38,7 @@ Welcome to the comprehensive documentation for Telegram AI! This collection of g
 ## 🎯 Feature Highlights
 
 ### 🤖 AI-Powered Processing
-- **Multi-Provider Support**: OpenAI, Claude, Gemini
+- **AI-Powered Processing**: Supports OpenAI (GPT-4) for intelligent content analysis
 - **Smart Analysis**: Automatic content structuring and enhancement
 - **Custom Parameters**: Dynamic variables like `{{ai:title}}`
 - **Cost Optimization**: Up to 50% reduction in API calls
@@ -77,7 +77,7 @@ Each guide is designed to be:
 ### Related Resources
 - **Obsidian**: [Official Documentation](https://help.obsidian.md/)
 - **Telegram Bots**: [Bot API Documentation](https://core.telegram.org/bots/api)
-- **AI Providers**: [OpenAI](https://platform.openai.com/docs), [Anthropic](https://docs.anthropic.com/), [Google AI](https://ai.google.dev/)
+- **AI Providers**: [OpenAI](https://platform.openai.com/docs)
 
 ## 🆘 Getting Help
 

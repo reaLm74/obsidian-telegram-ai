@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
-import { displayAndLogError } from "src/utils/logUtils";
+import { displayAndLogError, sleep } from "src/utils/logUtils";
+import { requestUrl } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 
 interface AIErrorResponse {
@@ -83,7 +84,7 @@ function isRetryableError(error: unknown, status?: number): boolean {
 async function exponentialDelay(attempt: number, baseDelay: number): Promise<void> {
 	const delay = baseDelay * Math.pow(2, attempt - 1);
 	const jitter = Math.random() * 0.1 * delay; // 10% jitter
-	await new Promise((resolve) => setTimeout(resolve, delay + jitter));
+	await sleep(delay + jitter);
 }
 
 /**
@@ -97,7 +98,7 @@ async function getImageUrl(plugin: TelegramSyncPlugin, msg: TelegramBot.Message)
 		const photo = msg.photo[msg.photo.length - 1];
 		const fileLink = await plugin.bot.getFileLink(photo.file_id);
 		return fileLink;
-	} catch (error) {
+	} catch (_error) {
 		return null;
 	}
 }
@@ -167,7 +168,6 @@ export async function processWithOpenAI(
 
 	const maxAttempts = plugin.settings.aiRetryAttempts || 3;
 	const baseDelay = plugin.settings.aiRetryDelay || 1000;
-	const timeout = plugin.settings.aiTimeout || 30000;
 
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		try {
@@ -198,106 +198,85 @@ export async function processWithOpenAI(
 				max_tokens: plugin.settings.openAIMaxTokens || 2000,
 			};
 
-			// Create AbortController for timeout
-			const controller = new AbortController();
-			const timeoutId = setTimeout(() => controller.abort(), timeout);
+			const response = await requestUrl({
+				url: "https://api.openai.com/v1/chat/completions",
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					Authorization: `Bearer ${plugin.settings.openAIApiKey}`,
+				},
+				body: JSON.stringify(requestBody),
+				throw: false,
+			});
 
-			try {
-				const response = await fetch("https://api.openai.com/v1/chat/completions", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${plugin.settings.openAIApiKey}`,
-					},
-					body: JSON.stringify(requestBody),
-					signal: controller.signal,
-				});
+			if (response.status < 200 || response.status >= 300) {
+				let errorMessage = `HTTP ${response.status}`;
+				let errorData: unknown = null;
+				let userFriendlyMessage = "";
 
-				clearTimeout(timeoutId);
+				try {
+					const data = response.json as AIErrorResponse;
+					errorData = data;
+					const errorBody = data.error;
+					errorMessage = errorBody?.message || errorBody?.type || errorMessage;
 
-				if (!response.ok) {
-					let errorMessage = `HTTP ${response.status}`;
-					let errorData: unknown = null;
-					let userFriendlyMessage = "";
+					// Check for specific error types
+					const errorType = errorBody?.type || "";
+					const errorCode = errorBody?.code || "";
 
-					try {
-						const data = (await response.json()) as AIErrorResponse;
-						errorData = data;
-						const errorBody = data.error;
-						errorMessage = errorBody?.message || errorBody?.type || errorMessage;
-
-						// Check for specific error types
-						const errorType = errorBody?.type || "";
-						const errorCode = errorBody?.code || "";
-
-						// Quota exceeded (no money)
-						if (
-							errorType === "insufficient_quota" ||
-							errorCode === "insufficient_quota" ||
-							response.status === 429 ||
-							response.status === 402 ||
-							errorMessage.toLowerCase().includes("quota") ||
-							errorMessage.toLowerCase().includes("exceeded your current quota")
-						) {
-							userFriendlyMessage = "💳 Quota exceeded. Please top up balance at platform.openai.com";
-						}
-						// Invalid or blocked API key
-						else if (
-							errorType === "invalid_api_key" ||
-							errorType === "access_terminated" ||
-							errorCode === "invalid_api_key" ||
-							errorCode === "access_terminated" ||
-							response.status === 401 ||
-							errorMessage.toLowerCase().includes("invalid") ||
-							errorMessage.toLowerCase().includes("terminated")
-						) {
-							userFriendlyMessage = "🔑 API key is invalid or revoked";
-						}
-					} catch {
-						errorMessage = await response.text();
+					// Quota exceeded (no money)
+					if (
+						errorType === "insufficient_quota" ||
+						errorCode === "insufficient_quota" ||
+						response.status === 429 ||
+						response.status === 402 ||
+						errorMessage.toLowerCase().includes("quota") ||
+						errorMessage.toLowerCase().includes("exceeded your current quota")
+					) {
+						userFriendlyMessage = "💳 Quota exceeded. Please top up balance at platform.openai.com";
 					}
-
-					// Check if request should be retried (don't retry quota/auth errors)
-					if (attempt < maxAttempts && isRetryableError(errorData, response.status)) {
-						await exponentialDelay(attempt, baseDelay);
-						continue;
+					// Invalid or blocked API key
+					else if (
+						errorType === "invalid_api_key" ||
+						errorType === "access_terminated" ||
+						errorCode === "invalid_api_key" ||
+						errorCode === "access_terminated" ||
+						response.status === 401 ||
+						errorMessage.toLowerCase().includes("invalid") ||
+						errorMessage.toLowerCase().includes("terminated")
+					) {
+						userFriendlyMessage = "🔑 API key is invalid or revoked";
 					}
-
-					// Throw error with user-friendly message if available
-					const finalMessage = userFriendlyMessage || `OpenAI API error: ${errorMessage}`;
-					throw new Error(finalMessage);
+				} catch {
+					errorMessage = response.text;
 				}
 
-				const data: OpenAIResponse = await response.json();
-
-				if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
-					throw new Error("OpenAI API returned empty response");
+				// Don't retry quota/auth errors
+				if (attempt < maxAttempts && isRetryableError(errorData, response.status)) {
+					await exponentialDelay(attempt, baseDelay);
+					continue;
 				}
 
-				const result =
-					typeof data.choices[0].message.content === "string"
-						? data.choices[0].message.content
-						: JSON.stringify(data.choices[0].message.content);
-
-				if (!result || result.trim().length === 0) {
-					throw new Error("OpenAI API returned empty content");
-				}
-
-				return result;
-			} catch (fetchError) {
-				clearTimeout(timeoutId);
-
-				// If this is cancellation error (timeout)
-				if (fetchError.name === "AbortError") {
-					if (attempt < maxAttempts) {
-						await exponentialDelay(attempt, baseDelay);
-						continue;
-					}
-					throw new Error("OpenAI API request timeout");
-				}
-
-				throw fetchError;
+				const finalMessage = userFriendlyMessage || `OpenAI API error: ${errorMessage}`;
+				throw new Error(finalMessage);
 			}
+
+			const data = response.json as OpenAIResponse;
+
+			if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
+				throw new Error("OpenAI API returned empty response");
+			}
+
+			const result =
+				typeof data.choices[0].message.content === "string"
+					? data.choices[0].message.content
+					: JSON.stringify(data.choices[0].message.content);
+
+			if (!result || result.trim().length === 0) {
+				throw new Error("OpenAI API returned empty content");
+			}
+
+			return result;
 		} catch (error) {
 			// If this is last attempt or error is not retryable
 			if (attempt === maxAttempts || !isRetryableError(error)) {
@@ -356,35 +335,44 @@ export async function transcribeOpenAI(
 	if (!plugin.settings.aiEnabled || !plugin.settings.openAIApiKey) return null;
 
 	try {
-		const formData = new FormData();
-		// OpenAI Whisper only supports specific extensions. Map common ones.
-		let ext = fileExtension.toLowerCase();
-		if (ext === "oga") ext = "mp3"; // OGA usually works as is, but mp3 is safer or ogg
-
 		// Whisper supports: mp3, mp4, mpeg, mpga, m4a, wav, and webm.
-		// Construct a filename that Whisper accepts
+		let ext = fileExtension.toLowerCase();
+		if (ext === "oga") ext = "mp3";
 		const filename = `audio.${ext}`;
 
-		formData.append("model", "whisper-1");
-		// Create a Blob from the buffer. MIME type is optional but good practice.
-		formData.append("file", new Blob([fileBuffer]), filename);
+		// Build multipart/form-data body manually since requestUrl accepts ArrayBuffer or string
+		const boundary = `----FormBoundary${Math.random().toString(36).slice(2)}`;
+		const encoder = new TextEncoder();
+		const preamble = encoder.encode(
+			`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n` +
+				`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: application/octet-stream\r\n\r\n`,
+		);
+		const epilogue = encoder.encode(`\r\n--${boundary}--\r\n`);
+		const body = new Uint8Array(preamble.byteLength + fileBuffer.byteLength + epilogue.byteLength);
+		body.set(preamble, 0);
+		body.set(new Uint8Array(fileBuffer), preamble.byteLength);
+		body.set(epilogue, preamble.byteLength + fileBuffer.byteLength);
 
-		const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+		const response = await requestUrl({
+			url: "https://api.openai.com/v1/audio/transcriptions",
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${plugin.settings.openAIApiKey}`,
-				// Content-Type header is explicitly NOT set here so browser/engine sets boundary
+				"Content-Type": `multipart/form-data; boundary=${boundary}`,
 			},
-			body: formData,
+			body: body.buffer,
+			throw: false,
 		});
 
-		if (!response.ok) {
-			const errorText = await response.text();
+		if (response.status < 200 || response.status >= 300) {
+			const errorText = response.text;
 			throw new Error(`Whisper API error (${response.status}): ${errorText}`);
 		}
 
-		const data = await response.json();
-		return data.text || null;
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		const result = response.json;
+
+		return (result as { text?: string }).text || null;
 	} catch (error) {
 		console.error("Transcription error:", error);
 		await displayAndLogError(
@@ -408,26 +396,22 @@ export async function testOpenAIApiKey(apiKey: string): Promise<{ success: boole
 	}
 
 	try {
-		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-		const response = await fetch("https://api.openai.com/v1/models", {
+		const response = await requestUrl({
+			url: "https://api.openai.com/v1/models",
 			method: "GET",
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
 			},
-			signal: controller.signal,
+			throw: false,
 		});
 
-		clearTimeout(timeoutId);
-
-		if (response.ok) {
+		if (response.status >= 200 && response.status < 300) {
 			return { success: true, message: "✅ API key is valid" };
 		}
 
 		let errorMessage = `HTTP ${response.status}`;
 		try {
-			const errorData = await response.json();
+			const errorData = response.json as { error?: { type?: string; code?: string; message?: string } };
 			const errorType = errorData.error?.type || "";
 			const errorCode = errorData.error?.code || "";
 
@@ -457,10 +441,8 @@ export async function testOpenAIApiKey(apiKey: string): Promise<{ success: boole
 		}
 
 		return { success: false, message: `❌ Error: ${errorMessage}` };
-	} catch (error) {
-		if (error.name === "AbortError") {
-			return { success: false, message: "⏱️ Request timed out" };
-		}
-		return { success: false, message: `❌ Error: ${error.message}` };
+	} catch (error: unknown) {
+		const msg = error instanceof Error ? error.message : String(error);
+		return { success: false, message: `❌ Error: ${msg}` };
 	}
 }

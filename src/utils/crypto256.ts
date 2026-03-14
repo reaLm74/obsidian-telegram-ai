@@ -12,8 +12,8 @@ const defaultIV = base64ToString(id1) + base64ToString(id3);
 export function encrypt(text: string, key = defaultKey, iv = defaultIV): string {
 	const cipher = crypto.createCipheriv(
 		algorithm,
-		Buffer.from(padOrTrim(key, 32), "utf8"),
-		Buffer.from(padOrTrim(iv, 16), "utf8"),
+		Uint8Array.from(Buffer.from(padOrTrim(key, 32), "utf8")),
+		Uint8Array.from(Buffer.from(padOrTrim(iv, 16), "utf8")),
 	);
 	let encrypted = cipher.update(text, "utf8", "hex");
 	encrypted += cipher.final("hex");
@@ -23,8 +23,8 @@ export function encrypt(text: string, key = defaultKey, iv = defaultIV): string 
 export function decrypt(encryptedText: string, key = defaultKey, iv = defaultIV): string {
 	const decipher = crypto.createDecipheriv(
 		algorithm,
-		Buffer.from(padOrTrim(key, 32), "utf8"),
-		Buffer.from(padOrTrim(iv, 16), "utf8"),
+		Uint8Array.from(Buffer.from(padOrTrim(key, 32), "utf8")),
+		Uint8Array.from(Buffer.from(padOrTrim(iv, 16), "utf8")),
 	);
 	let decrypted = decipher.update(encryptedText, "hex", "utf8");
 	decrypted += decipher.final("utf8");

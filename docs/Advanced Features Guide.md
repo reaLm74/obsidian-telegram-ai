@@ -54,17 +54,6 @@ For users with Telegram Premium subscriptions:
 - **Vision Pro**: Enhanced image analysis capabilities
 - **Longer Context**: Support for larger documents and conversations
 - **Custom Models**: Access to fine-tuned models (when available)
-
-#### Anthropic Claude Features
-- **Constitutional AI**: More reliable and safe responses
-- **Extended Context**: Very long document processing capabilities
-- **Specialized Models**: Access to domain-specific Claude variants
-
-#### Google Gemini Features
-- **Multimodal Processing**: Combined text, image, and audio analysis
-- **Code Understanding**: Enhanced programming and technical content analysis
-- **Real-time Data**: Access to current information (when available)
-
 ## Advanced Configuration
 
 ### Custom AI Parameters

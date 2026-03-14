@@ -220,13 +220,13 @@ export function getReplyMessageId(msg: TelegramBot.Message): string {
 	return "";
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getFileObject(msg: TelegramBot.Message): { fileType: string; fileObject?: any } {
+// TelegramBot.Message is a dynamic object where file types are accessed by string keys;
+// using a typed record cast avoids `any` while still supporting dynamic access.
+export function getFileObject(msg: TelegramBot.Message): { fileType: string; fileObject?: unknown } {
+	const msgRecord = msg as unknown as Record<string, unknown>;
 	for (const fileType of fileTypes) {
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		if ((msg as any)[fileType]) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			return { fileType: fileType, fileObject: (msg as any)[fileType] };
+		if (msgRecord[fileType]) {
+			return { fileType: fileType, fileObject: msgRecord[fileType] };
 		}
 	}
 	return { fileType: "undefined", fileObject: undefined };

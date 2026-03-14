@@ -14,7 +14,7 @@ export class UserLogInModal extends Modal {
 		this.addHeader();
 		this.addPassword();
 		this.addScanner();
-		await this.addQrCode();
+		this.addQrCode();
 		this.addCheck();
 		this.addFooterButtons();
 	}
@@ -29,12 +29,13 @@ export class UserLogInModal extends Modal {
 		new Setting(this.userLoginDiv)
 			.setName("1. Enter password (optionally)")
 			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				"Enter your password before scanning QR code only if you use two-step authorization. Password will not be stored",
 			)
 			.addText((text) => {
 				text.setPlaceholder("*************")
 					.setValue("")
-					.onChange(async (value: string) => {
+					.onChange((value: string) => {
 						this.password = value;
 					});
 			});
@@ -42,27 +43,34 @@ export class UserLogInModal extends Modal {
 
 	addScanner() {
 		new Setting(this.userLoginDiv)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setName("2. Prepare QR code scanner")
-			.setDesc("Open Telegram on your phone. Go to Settings > Devices > Link Desktop Device");
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			.setDesc("Open Telegram on your phone. Go to Settings > Devices > Link desktop device");
 	}
 
-	async addQrCode() {
+	addQrCode() {
 		new Setting(this.userLoginDiv)
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setName("3. Generate & scan QR code")
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
 			.setDesc(`Generate QR code and point your phone at it to confirm login`)
 			.addButton((b) => {
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				b.setButtonText("Generate QR code");
-				b.onClick(async () => {
-					await this.showQrCodeGeneratingState("🔵 QR code generating...\n", "#007BFF");
-					const error = await User.connect(
-						this.plugin,
-						"user",
-						undefined,
-						this.qrCodeContainer,
-						this.password,
-					);
-					if (error) await this.showQrCodeGeneratingState(`🔴 ${error}\n`, "#FF0000");
-					else await this.showQrCodeGeneratingState("🟢 Successfully logged in!\n", "#008000");
+				b.onClick(() => {
+					void (async () => {
+						this.showQrCodeGeneratingState("🔵 QR code generating...\n", "text-blue");
+						const error = await User.connect(
+							this.plugin,
+							"user",
+							undefined,
+							this.qrCodeContainer,
+							this.password,
+						);
+						if (error) this.showQrCodeGeneratingState(`🔴 ${error}\n`, "text-error");
+						else this.showQrCodeGeneratingState("🟢 Successfully logged in!\n", "text-success");
+					})();
 				});
 			});
 		this.qrCodeContainer = this.userLoginDiv.createDiv({
@@ -71,19 +79,18 @@ export class UserLogInModal extends Modal {
 	}
 
 	addCheck() {
-		new Setting(this.userLoginDiv)
-			.setName("4. Check active sessions")
-			.setDesc(
-				`If the login is successful, you will find the 'Obsidian Telegram Sync' session in the list of active sessions. If you find it in the list of inactive sessions, then you have probably entered the wrong password`,
-			);
+		new Setting(this.userLoginDiv).setName("4. Check active sessions").setDesc(
+			// eslint-disable-next-line obsidianmd/ui/sentence-case
+			`If the login is successful, you will find the 'Obsidian Telegram Sync' session in the list of active sessions. If you find it in the list of inactive sessions, then you have probably entered the wrong password`,
+		);
 	}
 	addFooterButtons() {
 		this.userLoginDiv.createEl("br");
 		const footerButtons = new Setting(this.contentEl.createDiv());
 		footerButtons.addButton((b) => {
 			b.setIcon("checkmark");
-			b.setButtonText("ok");
-			b.onClick(async () => this.close());
+			b.setButtonText("OK");
+			b.onClick(() => this.close());
 		});
 	}
 
@@ -97,11 +104,10 @@ export class UserLogInModal extends Modal {
 		}
 	}
 
-	async showQrCodeGeneratingState(text: string, color?: string) {
+	showQrCodeGeneratingState(text: string, cls?: string) {
 		this.cleanQrContainer();
 		const message = this.qrCodeContainer.createEl("pre", { text });
-		if (color) message.style.color = color;
-		message.style.fontWeight = "bold";
-		message.style.whiteSpace = "pre-wrap";
+		if (cls) message.addClass(cls);
+		message.addClass("text-bold", "white-space-pre-wrap");
 	}
 }

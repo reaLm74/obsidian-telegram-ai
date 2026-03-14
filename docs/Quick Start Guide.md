@@ -9,7 +9,7 @@ This guide will help you get Telegram AI up and running quickly. Follow these st
 Before starting, ensure you have:
 - **Obsidian** v1.0.0 or higher
 - **Telegram account** with access to create bots
-- **AI Provider account** (OpenAI, Claude, or Gemini) - optional but recommended
+- **AI Provider account** (OpenAI) - optional but recommended
 
 ## Step 1: Install the Plugin
 
@@ -58,21 +58,6 @@ Select one of the supported providers:
 3. In plugin settings: AI Provider → OpenAI
 4. Enter your API key
 5. Choose model: `gpt-4o-mini` (recommended for cost efficiency)
-
-#### Anthropic Claude
-1. Go to [Anthropic Console](https://console.anthropic.com/)
-2. Create an API key
-3. In plugin settings: AI Provider → Claude
-4. Enter your API key
-5. Choose model: `claude-3-haiku-20240307`
-
-#### Google Gemini
-1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Create an API key
-3. In plugin settings: AI Provider → Gemini
-4. Enter your API key
-5. Choose model: `gemini-1.5-flash`
-
 ### Configure AI Prompts
 1. Go to Settings → AI Configuration → Prompts
 2. Set up prompts for different content types:

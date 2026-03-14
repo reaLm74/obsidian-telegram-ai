@@ -35,7 +35,7 @@ export class FileSuggest extends TextInputSuggest<TFile> {
 		el.setText(file.path);
 	}
 
-	selectSuggestion(file: TFile): void {
+	selectSuggestion(file: TFile, _event: MouseEvent | KeyboardEvent): void {
 		this.inputEl.value = file.path;
 		this.inputEl.trigger("input");
 		this.close();

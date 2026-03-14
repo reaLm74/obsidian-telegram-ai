@@ -14,7 +14,7 @@ export class AdvancedSettingsModal extends Modal {
 		super(plugin.app);
 	}
 
-	async display() {
+	display() {
 		this.addHeader();
 
 		this.addConnectionStatusIndicator();
@@ -35,9 +35,11 @@ export class AdvancedSettingsModal extends Modal {
 			.setDesc("Turn off for using a custom delimiter, which you can set in the template file")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.defaultMessageDelimiter);
-				toggle.onChange(async (value) => {
-					this.plugin.settings.defaultMessageDelimiter = value;
-					await this.plugin.saveSettings();
+				toggle.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.defaultMessageDelimiter = value;
+						await this.plugin.saveSettings();
+					})();
 				});
 			});
 	}
@@ -48,9 +50,11 @@ export class AdvancedSettingsModal extends Modal {
 			.setDesc("Turn on for faster message and file processing. Caution: may disrupt message order")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.parallelMessageProcessing);
-				toggle.onChange(async (value) => {
-					this.plugin.settings.parallelMessageProcessing = value;
-					await this.plugin.saveSettings();
+				toggle.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.parallelMessageProcessing = value;
+						await this.plugin.saveSettings();
+					})();
 				});
 			});
 	}
@@ -62,10 +66,13 @@ export class AdvancedSettingsModal extends Modal {
 			.addDropdown((dropDown) => {
 				dropDown.addOptions(ConnectionStatusIndicatorType);
 				dropDown.setValue(this.plugin.settings.connectionStatusIndicatorType);
-				dropDown.onChange(async (value) => {
-					this.plugin.settings.connectionStatusIndicatorType = value as KeysOfConnectionStatusIndicatorType;
-					this.plugin.connectionStatusIndicator?.update();
-					await this.plugin.saveSettings();
+				dropDown.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.connectionStatusIndicatorType =
+							value as KeysOfConnectionStatusIndicatorType;
+						this.plugin.connectionStatusIndicator?.update();
+						await this.plugin.saveSettings();
+					})();
 				});
 			});
 	}
@@ -74,6 +81,7 @@ export class AdvancedSettingsModal extends Modal {
 		new Setting(this.advancedSettingsDiv)
 			.setName("Processed message action")
 			.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case
 				"Set the action to mark a message as processed. DELETE will remove messages from Telegram after processing.",
 			)
 			.addDropdown((dropdown) => {
@@ -81,10 +89,12 @@ export class AdvancedSettingsModal extends Modal {
 					.addOption("EMOJI", "React with emoji")
 					.addOption("DELETE", "Delete message")
 					.setValue(this.plugin.settings.processedMessageAction)
-					.onChange(async (value) => {
-						this.plugin.settings.processedMessageAction = value;
-						await this.plugin.saveSettings();
-						this.display(); // Re-render to show/hide emoji setting
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.processedMessageAction = value;
+							await this.plugin.saveSettings();
+							this.display(); // Re-render to show/hide emoji setting
+						})();
 					});
 			});
 
@@ -95,23 +105,38 @@ export class AdvancedSettingsModal extends Modal {
 				.setDesc("Emoji to react with when message is processed")
 				.addDropdown((dropdown) => {
 					dropdown
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("✅", "✅ Check mark")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("❤️", "❤️ Red heart")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("👍", "👍 Thumbs up")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("🎉", "🎉 Party popper")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("🔥", "🔥 Fire")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("😍", "😍 Smiling face with heart-eyes")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("😮", "😮 Face with open mouth")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("😢", "😢 Crying face")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("😡", "😡 Pouting face")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("👎", "👎 Thumbs down")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("💩", "💩 Pile of poo")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("🤡", "🤡 Clown face")
+						// eslint-disable-next-line obsidianmd/ui/sentence-case
 						.addOption("🥳", "🥳 Partying face")
 						.setValue(this.plugin.settings.emojiForProcessedMessages)
-						.onChange(async (value) => {
-							this.plugin.settings.emojiForProcessedMessages = value;
-							await this.plugin.saveSettings();
+						.onChange((value) => {
+							void (async () => {
+								this.plugin.settings.emojiForProcessedMessages = value;
+								await this.plugin.saveSettings();
+							})();
 						});
 				});
 		}

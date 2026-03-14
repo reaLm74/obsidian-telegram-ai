@@ -2,14 +2,14 @@
 
 ## Overview
 
-Telegram AI supports automatic processing of messages through various AI providers before saving them to Obsidian. The plugin supports OpenAI (GPT-4), Anthropic Claude, and Google Gemini, allowing you to transform raw Telegram messages into structured, intelligent notes.
+Telegram AI supports automatic processing of messages through OpenAI (GPT-4) before saving them to Obsidian, allowing you to transform raw Telegram messages into structured, intelligent notes.
 
 ## Key Features
 
-- **Multiple AI Providers**: OpenAI (GPT-4), Anthropic Claude, Google Gemini
+- **AI Provider**: OpenAI (GPT-4)
 - **Smart Content Analysis**: Automatic processing of text, images, videos, audio, and documents
 - **URL-Only Skip**: Messages containing only links (Instagram, YouTube, etc.) skip AI processing
-- **Vision API Support**: Advanced image analysis capabilities (OpenAI, Gemini)
+- **Vision API Support**: Advanced image analysis capabilities
 - **Hierarchical Prompts**: Content-specific prompts + general formatting prompts
 - **Custom AI Parameters**: Create dynamic variables like `{{ai:title}}` for intelligent file naming
 - **Local Document Processing**: Extract text locally from supported formats to reduce API costs
@@ -58,23 +58,6 @@ Telegram AI supports automatic processing of messages through various AI provide
 API Key: Your OpenAI API key
 Model: gpt-4o-mini (recommended for cost efficiency)
 Temperature: 0.3 (for consistent results)
-Max Tokens: 4000
-Vision: Enabled (for image analysis)
-```
-
-### Anthropic Claude
-```
-API Key: Your Anthropic API key
-Model: claude-3-haiku-20240307 (fast and economical)
-Temperature: 0.3
-Max Tokens: 4000
-```
-
-### Google Gemini
-```
-API Key: Your Google AI API key
-Model: gemini-1.5-flash (fast and free tier available)
-Temperature: 0.3
 Max Tokens: 4000
 Vision: Enabled (for image analysis)
 ```

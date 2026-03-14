@@ -104,7 +104,7 @@ Result: Research/2026/01/Machine-Learning-Basics.md
 ### Enabling AI Classification
 1. Go to Settings → AI Configuration
 2. Enable "AI Categorization"
-3. Configure AI provider (OpenAI, Claude, or Gemini)
+3. Configure AI provider (OpenAI)
 4. Set up categorization prompt
 
 ### Custom Categorization Prompt

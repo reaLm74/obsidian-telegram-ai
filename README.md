@@ -8,11 +8,11 @@
   <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg">
 </a>
 
-An advanced plugin that syncs Telegram messages to your vault with AI-powered processing (OpenAI, Claude, Gemini), smart categorization, and automated content organization.
+An advanced plugin that syncs Telegram messages to your vault with AI-powered processing (OpenAI), smart categorization, and automated content organization.
 
 ## ✨ Key Features
 
-* **🤖 AI Intelligence**: Supports **OpenAI (GPT-4 & Whisper)**, **Anthropic Claude**, and **Google Gemini**. Automatically analyzes text, images, and seamlessly transcribes voice messages, audio, and video files.
+* **🤖 AI Intelligence**: Supports **OpenAI (GPT-4 & Whisper)**. Automatically analyzes text, images, and seamlessly transcribes voice messages, audio, and video files.
 * **📂 Local Processing**: Extracts text from documents (**PDF**, **DOCX**, TXT, Code files) locally to protect privacy and save API costs, with AI processing as a fallback.
 * **📸 Media Albums**: Smartly handles Telegram media groups/albums, keeping context together in a single note.
 * **🔗 Smart Logic**: URL-only messages skip AI to save tokens; distinct prompts can be applied based on the content type.
@@ -54,7 +54,7 @@ Using the built-in wide-modal prompt editor, you can define specific behavior an
 - **Connection Status**: Real-time connection monitoring.
 
 ### AI Configuration
-- **Provider Selection**: OpenAI, Claude, or Gemini.
+- **Provider Selection**: OpenAI.
 - **Model Settings**: Temperature, max tokens, timeout.
 - **Prompt Management**: Content-specific, unified media, and general prompts with a dedicated full-width editing interface.
 - **Processing Toggles**: Enable/disable AI parsing for each content type (Text, Photos, Audio/Video, Documents).

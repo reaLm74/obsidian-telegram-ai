@@ -10,10 +10,10 @@ export function clearTooManyRequestsInterval() {
 	clearInterval(tooManyRequestsIntervalId);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function checkIfTooManyRequests(error: any): boolean {
+// error is typed as unknown because it comes from a generic catch block
+export function checkIfTooManyRequests(error: unknown): boolean {
 	try {
-		const errorCode = error.response.body.error_code;
+		const errorCode = (error as { response?: { body?: { error_code?: number } } }).response?.body?.error_code;
 		isTooManyRequests = errorCode == 429;
 		return isTooManyRequests;
 	} catch {
