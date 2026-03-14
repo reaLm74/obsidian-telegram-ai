@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.1.3](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.1.2...0.1.3) (2026-03-14)
+
+
+### Bug Fixes
+
+* Introduce AI provider configuration modal with OpenAI settings and establish core AI processing infrastructure. ([7584c20](https://github.com/reaLm74/obsidian-telegram-ai/commit/7584c201ac224cb8c3833497aa144eb8f836f089))
+
 ## [0.1.2](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.1.1...0.1.2) (2026-02-27)
 
 

@@ -456,6 +456,7 @@ async function processWithCustomPrompt(
 				result = await processWithOpenAI(plugin, content, customPrompt, msg);
 				break;
 			}
+			/* Coming soon in future versions:
 			case "claude": {
 				const { processWithClaude } = await import("../../../ai/claude");
 				result = await processWithClaude(plugin, content, customPrompt, msg);
@@ -466,6 +467,7 @@ async function processWithCustomPrompt(
 				result = await processWithGemini(plugin, content, customPrompt, msg);
 				break;
 			}
+			*/
 			default: {
 				const { processWithOpenAI } = await import("../../../ai/openai");
 				result = await processWithOpenAI(plugin, content, customPrompt, msg);
