@@ -11,7 +11,7 @@ const newFeatures = `🎉 Version 0.1.5: Refactoring, stability improvements, an
 - 📁 Enhanced document processing and prompt formatting
 - ⚡ Better type safety in AI modules (OpenAI)`;
 
-export const breakingChanges = `🔄 Migrated repository to 'obsidian-telegram-ai'. This update ensures full compatibility with the new repository name and plugin ID.`;
+export const breakingChanges = `🔄 Migrated repository to 'obsidian-telegram-ai'.`;
 
 export const telegramChannelLink = "https://t.me/realm74"; // Your personal Telegram
 export const insiderFeaturesLink = "https://github.com/reaLm74/obsidian-telegram-ai";
