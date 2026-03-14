@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.2.0](https://github.com/reaLm74/obsidian-telegram-ai/compare/v0.1.5...0.2.0) (2026-03-14)
+
+
+### Features
+
+* Initial setup of the Telegram AI Sync plugin ([ce271f6](https://github.com/reaLm74/obsidian-telegram-ai/commit/ce271f666f78d06f58beea50e600193247d91e83))
+* Initial setup of the Telegram AI Sync plugin ([3638077](https://github.com/reaLm74/obsidian-telegram-ai/commit/3638077022d3b79d5483c5c24ae70e508b26ee21))
+* update version to 0.1.0 ([661b0b2](https://github.com/reaLm74/obsidian-telegram-ai/commit/661b0b26e98f30d10efb7b8efdb48cfd258b6a75))
+
+
+### Bug Fixes
+
+* comprehensive codebase cleanup, linting fixes, and type safety improvements ([cdf6302](https://github.com/reaLm74/obsidian-telegram-ai/commit/cdf63021ba409082af4db7bd389bb7a0f3c62fa8))
+* Introduce AI provider configuration modal with OpenAI settings and establish core AI processing infrastructure. ([7584c20](https://github.com/reaLm74/obsidian-telegram-ai/commit/7584c201ac224cb8c3833497aa144eb8f836f089))
+* resolve @eslint/json dependency conflict for obsidianmd plugin ([9595321](https://github.com/reaLm74/obsidian-telegram-ai/commit/95953216eaa4dbfe29416606c0b3eeb763a832be))
+* update documentation and configuration files ([63dd3e7](https://github.com/reaLm74/obsidian-telegram-ai/commit/63dd3e74a29eab4e8e9e07f1dd84a60f824fbe0b))
+* update plugin name and descriptions to "Telegram AI" ([125a5e1](https://github.com/reaLm74/obsidian-telegram-ai/commit/125a5e13061192c47f776cf660defa8ed159e7d5))
+* update version ([24144da](https://github.com/reaLm74/obsidian-telegram-ai/commit/24144da2c85179c5b48a4bd21cf23be9198b5250))
+
 ## [0.1.5](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.1.4...0.1.5) (2026-03-14)
 
 
