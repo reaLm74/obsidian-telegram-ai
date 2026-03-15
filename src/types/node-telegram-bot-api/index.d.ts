@@ -24,7 +24,7 @@ declare module "node-telegram-bot-api" {
 			chat: Chat;
 			message_id: number;
 			user?: User;
-			actor_chat?: any;
+			actor_chat?: Chat;
 			date: number;
 			old_reaction: ReactionType[];
 			new_reaction: ReactionType[];
@@ -1452,126 +1452,126 @@ declare module "node-telegram-bot-api" {
 		}
 
 		interface TelegramEvents {
-			message: (message: Message, metadata: Metadata) => any;
-			text: (message: Message, metadata: Metadata) => any;
-			animation: (message: Message, metadata: Metadata) => any;
-			audio: (message: Message, metadata: Metadata) => any;
-			channel_chat_created: (message: Message, metadata: Metadata) => any;
-			contact: (message: Message, metadata: Metadata) => any;
-			delete_chat_photo: (message: Message, metadata: Metadata) => any;
-			document: (message: Message, metadata: Metadata) => any;
-			game: (message: Message, metadata: Metadata) => any;
-			group_chat_created: (message: Message, metadata: Metadata) => any;
-			invoice: (message: Message, metadata: Metadata) => any;
-			left_chat_member: (message: Message, metadata: Metadata) => any;
-			location: (message: Message, metadata: Metadata) => any;
-			migrate_from_chat_id: (message: Message, metadata: Metadata) => any;
-			migrate_to_chat_id: (message: Message, metadata: Metadata) => any;
-			new_chat_members: (message: Message, metadata: Metadata) => any;
-			new_chat_photo: (message: Message, metadata: Metadata) => any;
-			new_chat_title: (message: Message, metadata: Metadata) => any;
-			passport_data: (message: Message, metadata: Metadata) => any;
-			photo: (message: Message, metadata: Metadata) => any;
-			pinned_message: (message: Message, metadata: Metadata) => any;
-			sticker: (message: Message, metadata: Metadata) => any;
-			successful_payment: (message: Message, metadata: Metadata) => any;
-			supergroup_chat_created: (message: Message, metadata: Metadata) => any;
-			video: (message: Message, metadata: Metadata) => any;
-			video_note: (message: Message, metadata: Metadata) => any;
-			voice: (message: Message, metadata: Metadata) => any;
-			video_chat_started: (message: Message, metadata: Metadata) => any;
-			video_chat_ended: (message: Message, metadata: Metadata) => any;
-			video_chat_participants_invited: (message: Message, metadata: Metadata) => any;
-			video_chat_scheduled: (message: Message, metadata: Metadata) => any;
-			message_auto_delete_timer_changed: (message: Message, metadata: Metadata) => any;
-			chat_invite_link: (message: Message, metadata: Metadata) => any;
-			chat_member_updated: (message: Message, metadata: Metadata) => any;
-			web_app_data: (message: Message, metadata: Metadata) => any;
-			callback_query: (query: CallbackQuery) => any;
-			inline_query: (query: InlineQuery) => any;
-			poll: (pollObject: Poll) => any;
-			poll_answer: (poll: PollAnswer) => any;
-			chat_member: (member: ChatMemberUpdated) => any;
-			my_chat_member: (member: ChatMemberUpdated) => any;
-			chosen_inline_result: (result: ChosenInlineResult) => any;
-			channel_post: (message: Message) => any;
-			edited_message: (message: Message) => any;
-			edited_message_text: (message: Message) => any;
-			edited_message_caption: (message: Message) => any;
-			edited_channel_post: (message: Message) => any;
-			edited_channel_post_text: (message: Message) => any;
-			edited_channel_post_caption: (message: Message) => any;
-			shipping_query: (query: ShippingQuery) => any;
-			pre_checkout_query: (query: PreCheckoutQuery) => any;
-			polling_error: (error: Error) => any;
-			webhook_error: (error: Error) => any;
-			chat_join_request: (query: ChatJoinRequest) => any;
-			message_reaction: (reaction: MessageReactionUpdated) => any;
+			message: (message: Message, metadata: Metadata) => void;
+			text: (message: Message, metadata: Metadata) => void;
+			animation: (message: Message, metadata: Metadata) => void;
+			audio: (message: Message, metadata: Metadata) => void;
+			channel_chat_created: (message: Message, metadata: Metadata) => void;
+			contact: (message: Message, metadata: Metadata) => void;
+			delete_chat_photo: (message: Message, metadata: Metadata) => void;
+			document: (message: Message, metadata: Metadata) => void;
+			game: (message: Message, metadata: Metadata) => void;
+			group_chat_created: (message: Message, metadata: Metadata) => void;
+			invoice: (message: Message, metadata: Metadata) => void;
+			left_chat_member: (message: Message, metadata: Metadata) => void;
+			location: (message: Message, metadata: Metadata) => void;
+			migrate_from_chat_id: (message: Message, metadata: Metadata) => void;
+			migrate_to_chat_id: (message: Message, metadata: Metadata) => void;
+			new_chat_members: (message: Message, metadata: Metadata) => void;
+			new_chat_photo: (message: Message, metadata: Metadata) => void;
+			new_chat_title: (message: Message, metadata: Metadata) => void;
+			passport_data: (message: Message, metadata: Metadata) => void;
+			photo: (message: Message, metadata: Metadata) => void;
+			pinned_message: (message: Message, metadata: Metadata) => void;
+			sticker: (message: Message, metadata: Metadata) => void;
+			successful_payment: (message: Message, metadata: Metadata) => void;
+			supergroup_chat_created: (message: Message, metadata: Metadata) => void;
+			video: (message: Message, metadata: Metadata) => void;
+			video_note: (message: Message, metadata: Metadata) => void;
+			voice: (message: Message, metadata: Metadata) => void;
+			video_chat_started: (message: Message, metadata: Metadata) => void;
+			video_chat_ended: (message: Message, metadata: Metadata) => void;
+			video_chat_participants_invited: (message: Message, metadata: Metadata) => void;
+			video_chat_scheduled: (message: Message, metadata: Metadata) => void;
+			message_auto_delete_timer_changed: (message: Message, metadata: Metadata) => void;
+			chat_invite_link: (message: Message, metadata: Metadata) => void;
+			chat_member_updated: (message: Message, metadata: Metadata) => void;
+			web_app_data: (message: Message, metadata: Metadata) => void;
+			callback_query: (query: CallbackQuery) => void;
+			inline_query: (query: InlineQuery) => void;
+			poll: (pollObject: Poll) => void;
+			poll_answer: (poll: PollAnswer) => void;
+			chat_member: (member: ChatMemberUpdated) => void;
+			my_chat_member: (member: ChatMemberUpdated) => void;
+			chosen_inline_result: (result: ChosenInlineResult) => void;
+			channel_post: (message: Message) => void;
+			edited_message: (message: Message) => void;
+			edited_message_text: (message: Message) => void;
+			edited_message_caption: (message: Message) => void;
+			edited_channel_post: (message: Message) => void;
+			edited_channel_post_text: (message: Message) => void;
+			edited_channel_post_caption: (message: Message) => void;
+			shipping_query: (query: ShippingQuery) => void;
+			pre_checkout_query: (query: PreCheckoutQuery) => void;
+			polling_error: (error: Error) => void;
+			webhook_error: (error: Error) => void;
+			chat_join_request: (query: ChatJoinRequest) => void;
+			message_reaction: (reaction: MessageReactionUpdated) => void;
 		}
 	}
 
-	class TelegramBotEventEmitter<E extends Record<string, any>> {
+	class TelegramBotEventEmitter<E extends Record<string, unknown>> {
 		on<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		on<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		off<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		off<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		addListener<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		addListener<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		removeListener<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		removeListener<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		prependListener<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		prependListener<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		prependOnceListener<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		prependOnceListener<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		once<K extends Exclude<keyof E, number>>(event: K, listener: E[K]): TelegramBotEventEmitter<E>;
 		once<K extends string | symbol>(
 			event: Exclude<K, keyof E>,
-			listener: (...args: any[]) => any,
+			listener: (...args: unknown[]) => void,
 		): TelegramBotEventEmitter<E>;
 
 		removeAllListeners<K extends Exclude<keyof E, number>>(event?: K): TelegramBotEventEmitter<E>;
 		removeAllListeners<K extends string | symbol>(event?: Exclude<K, keyof E>): TelegramBotEventEmitter<E>;
 
 		emit<K extends Exclude<keyof E, number>>(event: K, ...args: E[K]): boolean;
-		emit<K extends string | symbol>(event: Exclude<K, keyof E>, ...args: any[]): boolean;
+		emit<K extends string | symbol>(event: Exclude<K, keyof E>, ...args: unknown[]): boolean;
 	}
 
 	class TelegramBot extends TelegramBotEventEmitter<TelegramBot.TelegramEvents> {
 		constructor(token: string, options?: TelegramBot.ConstructorOptions);
 
-		startPolling(options?: TelegramBot.StartPollingOptions): Promise<any>;
+		startPolling(options?: TelegramBot.StartPollingOptions): Promise<void>;
 
-		stopPolling(options?: TelegramBot.StopPollingOptions): Promise<any>;
+		stopPolling(options?: TelegramBot.StopPollingOptions): Promise<void>;
 
 		isPolling(): boolean;
 
-		openWebHook(): Promise<any>;
+		openWebHook(): Promise<void>;
 
-		closeWebHook(): Promise<any>;
+		closeWebHook(): Promise<void>;
 
 		hasOpenWebHook(): boolean;
 
@@ -1585,7 +1585,7 @@ declare module "node-telegram-bot-api" {
 			url: string,
 			options?: TelegramBot.SetWebHookOptions,
 			fileOptions?: TelegramBot.FileOptions,
-		): Promise<any>;
+		): Promise<boolean>;
 
 		deleteWebHook(): Promise<boolean>;
 
@@ -2004,7 +2004,7 @@ declare module "node-telegram-bot-api" {
 			options?: TelegramBot.GetGameHighScoresOptions,
 		): Promise<TelegramBot.GameHighScore[]>;
 
-		deleteMessage(chatId: TelegramBot.ChatId, messageId: number, options?: any): Promise<boolean>;
+		deleteMessage(chatId: TelegramBot.ChatId, messageId: number, options?: Record<string, unknown>): Promise<boolean>;
 
 		sendInvoice(
 			chatId: TelegramBot.ChatId,
@@ -2029,11 +2029,11 @@ declare module "node-telegram-bot-api" {
 			options?: TelegramBot.AnswerPreCheckoutQueryOptions,
 		): Promise<boolean>;
 
-		listeners(event: keyof TelegramBot.TelegramEvents): Array<(data: any, metadata?: TelegramBot.Metadata) => void>;
+		listeners(event: keyof TelegramBot.TelegramEvents): Array<(data: unknown, metadata?: TelegramBot.Metadata) => void>;
 
 		rawListeners(
 			event: keyof TelegramBot.TelegramEvents,
-		): Array<(data: any, metadata?: TelegramBot.Metadata) => void>;
+		): Array<(data: unknown, metadata?: TelegramBot.Metadata) => void>;
 
 		eventNames(): Array<keyof TelegramBot.TelegramEvents>;
 
@@ -2086,4 +2086,3 @@ declare module "node-telegram-bot-api" {
 	export = TelegramBot;
 }
 /* eslint-enable @typescript-eslint/ban-types -- end of third-party type declaration file */
-/* eslint-enable @typescript-eslint/no-explicit-any -- end of third-party type declaration file */

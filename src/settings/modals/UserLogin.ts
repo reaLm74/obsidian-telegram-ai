@@ -87,7 +87,7 @@ export class UserLogInModal extends Modal {
 		});
 	}
 
-	async onOpen() {
+	onOpen() {
 		this.display();
 	}
 
