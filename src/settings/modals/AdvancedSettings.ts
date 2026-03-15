@@ -1,6 +1,6 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
-import { _5sec } from "src/utils/logUtils";
+
 import {
 	ConnectionStatusIndicatorType,
 	KeysOfConnectionStatusIndicatorType,
@@ -81,8 +81,7 @@ export class AdvancedSettingsModal extends Modal {
 		new Setting(this.advancedSettingsDiv)
 			.setName("Processed message action")
 			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Set the action to mark a message as processed. DELETE will remove messages from Telegram after processing.",
+				"Set the action to mark a message as processed. Delete will remove messages from Telegram after processing.",
 			)
 			.addDropdown((dropdown) => {
 				dropdown
@@ -105,32 +104,19 @@ export class AdvancedSettingsModal extends Modal {
 				.setDesc("Emoji to react with when message is processed")
 				.addDropdown((dropdown) => {
 					dropdown
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("✅", "✅ Check mark")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("❤️", "❤️ Red heart")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("👍", "👍 Thumbs up")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("🎉", "🎉 Party popper")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("🔥", "🔥 Fire")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("😍", "😍 Smiling face with heart-eyes")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("😮", "😮 Face with open mouth")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("😢", "😢 Crying face")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("😡", "😡 Pouting face")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("👎", "👎 Thumbs down")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("💩", "💩 Pile of poo")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("🤡", "🤡 Clown face")
-						// eslint-disable-next-line obsidianmd/ui/sentence-case
-						.addOption("🥳", "🥳 Partying face")
+						.addOption("✅", "Check mark")
+						.addOption("❤️", "Red heart")
+						.addOption("👍", "Thumbs up")
+						.addOption("🎉", "Party popper")
+						.addOption("🔥", "Fire")
+						.addOption("😍", "Smiling face with heart-eyes")
+						.addOption("😮", "Face with open mouth")
+						.addOption("😢", "Crying face")
+						.addOption("😡", "Pouting face")
+						.addOption("👎", "Thumbs down")
+						.addOption("💩", "Pile of poo")
+						.addOption("🤡", "Clown face")
+						.addOption("🥳", "Partying face")
 						.setValue(this.plugin.settings.emojiForProcessedMessages)
 						.onChange((value) => {
 							void (async () => {

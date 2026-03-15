@@ -235,10 +235,10 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 	let mediaId = "";
 	if (!botMsg.text) {
 		const { fileObject } = getFileObject(botMsg);
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const fileObjectToUse = fileObject instanceof Array ? fileObject.pop() : fileObject;
-
-		mediaId = extractMediaId((fileObjectToUse as { file_id?: string })?.file_id ?? "");
+		const fileObjectToUse = (Array.isArray(fileObject) ? fileObject[fileObject.length - 1] : fileObject) as {
+			file_id?: string;
+		};
+		mediaId = extractMediaId(fileObjectToUse?.file_id ?? "");
 	}
 
 	const originalMessages = cachedUnprocessedMessages.map((userMsg) => userMsg.original);

@@ -99,7 +99,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		this.restartingIntervalTime = newRestartingIntervalTime;
 		clearInterval(this.restartingIntervalId);
 		this.restartingIntervalId = setInterval(() => {
-			// eslint-disable-next-line @typescript-eslint/unbound-method
+			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.restartTelegram, sessionType);
 		}, this.restartingIntervalTime);
 	}
@@ -108,7 +108,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		this.clearProcessOldMessagesInterval();
 		this.processOldMessagesIntervalId = setInterval(() => {
 			this.time4processOldMessages = true;
-			// eslint-disable-next-line @typescript-eslint/unbound-method
+			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.processOldMessages);
 		}, _day);
 	}
@@ -198,7 +198,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 		hideMTProtoAlerts(this);
 		// Initialize the Telegram bot when Obsidian layout is fully loaded
-		// eslint-disable-next-line @typescript-eslint/unbound-method
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 		this.app.workspace.onLayoutReady(() => void enqueue(this, this.initTelegram));
 
 		this.status = "loaded";
@@ -227,8 +227,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	// Load settings from the plugin's data
 	async loadSettings() {
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<TelegramSyncSettings>);
 	}
 
 	// Save settings to the plugin's data

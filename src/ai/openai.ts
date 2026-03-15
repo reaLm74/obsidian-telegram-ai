@@ -98,7 +98,7 @@ async function getImageUrl(plugin: TelegramSyncPlugin, msg: TelegramBot.Message)
 		const photo = msg.photo[msg.photo.length - 1];
 		const fileLink = await plugin.bot.getFileLink(photo.file_id);
 		return fileLink;
-	} catch (_error) {
+	} catch {
 		return null;
 	}
 }
@@ -369,8 +369,7 @@ export async function transcribeOpenAI(
 			throw new Error(`Whisper API error (${response.status}): ${errorText}`);
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const result = response.json;
+		const result = response.json as { text?: string };
 
 		return (result as { text?: string }).text || null;
 	} catch (error) {

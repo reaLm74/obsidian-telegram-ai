@@ -1,10 +1,10 @@
 import TelegramSyncPlugin from "src/main";
 
-type AsyncStaticFunction<A extends unknown[] = unknown[], R = unknown> = (...args: A) => Promise<R>;
+type AsyncStaticFunction<A extends unknown[] = unknown[], R = unknown> = (...args: A) => Promise<R> | R;
 type AsyncInstanceFunction<C = undefined, A extends unknown[] = unknown[], R = unknown> = (
 	this: C,
 	...args: A
-) => Promise<R>;
+) => Promise<R> | R;
 const queues = new Map<string, Promise<unknown>>();
 
 export async function enqueue<A extends unknown[], R>(fn: AsyncStaticFunction<A, R>, ...args: A): Promise<R>;
@@ -39,21 +39,18 @@ export async function enqueue<C, A extends unknown[], R>(
 	if (!queueKey) throw new Error("Function should have a name");
 
 	const queue = (queues.get(queueKey) || Promise.resolve())
-		.then(async () =>
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-			context ? await fn.call(context, ...args) : await (fn as AsyncStaticFunction<A, R>)(...args),
+		.then(
+			async () =>
+				(context ? await fn.call(context, ...args) : await (fn as AsyncStaticFunction<A, R>)(...args)) as R,
 		)
 		.catch((e) => {
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-			error = e;
+			error = e instanceof Error ? e : new Error(String(e));
 		});
 
 	queues.set(queueKey, queue);
 
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-	const result = await queue;
+	const result = (await queue) as R;
 	if (error) throw error;
-	// eslint-disable-next-line @typescript-eslint/no-unsafe-return
 	return result;
 }
 
@@ -96,7 +93,6 @@ export async function enqueueByCondition<C, A extends unknown[], R>(
 			fn = fnOrArgs as AsyncInstanceFunction<C, A, R>;
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-return
-		return context ? fn.call(context, ...args) : (fn as AsyncStaticFunction<A, R>)(...args);
+		return (context ? fn.call(context, ...args) : (fn as AsyncStaticFunction<A, R>)(...args)) as Promise<R>;
 	}
 }

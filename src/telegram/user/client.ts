@@ -154,8 +154,7 @@ export async function signInAsUserWithQrCode(container: HTMLDivElement, password
 					}
 					container.appendChild(svg);
 				},
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars -- `hint` is part of the GramJS password callback signature but the password comes from plugin settings
-				password: (hint) => {
+				password: (_hint) => {
 					return Promise.resolve(password ? password : "");
 				},
 				onError: (error) => {
@@ -300,7 +299,7 @@ export async function subscribedOnInsiderChannel(): Promise<boolean> {
 		const { checkedClient } = await checkUserService();
 		const messages = await checkedClient.getMessages(insiderChannel, { limit: 1 });
 		return messages.length > 0;
-	} catch (_e) {
+	} catch {
 		return false;
 	}
 }

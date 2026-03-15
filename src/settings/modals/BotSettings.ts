@@ -25,24 +25,19 @@ export class BotSettingsModal extends Modal {
 		this.contentEl.empty();
 		this.botSettingsDiv = this.contentEl.createDiv();
 		this.titleEl.setText("Bot settings");
-		const limitations = new Setting(this.botSettingsDiv)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("⚠ Limitations of Telegram bot:");
+		const limitations = new Setting(this.botSettingsDiv).setDesc("Limitations of the bot:");
 		const lim24Hours = document.createElement("div");
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		lim24Hours.setText("- It can get only messages sent within the last 24 hours");
+		lim24Hours.setText("- it can get only messages sent within the last 24 hours");
 		lim24Hours.addClass("ml-10");
 		const limBlocks = document.createElement("div");
 		limBlocks.addClass("ml-10");
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		limBlocks.setText("- Use VPN or proxy to bypass blocks in China, Iran, and limited corporate networks ");
+		limBlocks.setText("Use a proxy to bypass blocks in some countries and limited corporate networks ");
 		limBlocks.createEl("span", {
 			text: "([proxy configuration examples],",
 		});
 		limBlocks.createEl("a", {
 			href: "https://github.com/windingblack/obsidian-global-proxy",
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			text: " [Obsidian Global Proxy])",
+			text: " [Obsidian global proxy])",
 		});
 		limitations.descEl.appendChild(lim24Hours);
 		limitations.descEl.appendChild(limBlocks);
@@ -53,8 +48,7 @@ export class BotSettingsModal extends Modal {
 			.setName("Bot token (required)")
 			.setDesc("Enter your Telegram bot token.")
 			.addText(async (text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("example: 6123456784:AAX9mXnFE2q9WahQ")
+				text.setPlaceholder("Example: 123456789")
 					.setValue(await this.plugin.getBotToken())
 					.onChange((value: string) => {
 						if (!value) {
@@ -72,13 +66,11 @@ export class BotSettingsModal extends Modal {
 		const allowedChatsSetting = new Setting(this.botSettingsDiv)
 			.setName("Allowed chats (required)")
 			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Enter list of usernames or chat IDs that should be processed. At least your username must be entered.",
+				"Enter list of usernames or chat ids that should be processed. At least your username must be entered.",
 			)
 			.addTextArea((text) => {
 				const textArea = text
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					.setPlaceholder("example: username,1227636")
+					.setPlaceholder("Example: username,1227636")
 					.setValue(this.plugin.settings.allowedChats.join(", "))
 					.onChange((value: string) => {
 						value = value.replace(/\s/g, "");
@@ -108,8 +100,7 @@ export class BotSettingsModal extends Modal {
 			)
 			.addText((text) =>
 				text
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					.setPlaceholder("example: 98912984-c4e9-5ceb-8000-03882a0485e4")
+					.setPlaceholder("Example: 98912984-c4e9-5ceb-8000-03882a0485e4")
 					.setValue(this.plugin.settings.mainDeviceId)
 					.onChange((value) => (this.plugin.settings.mainDeviceId = value)),
 			);
@@ -138,11 +129,9 @@ export class BotSettingsModal extends Modal {
 
 	addEncryptionByPinCode() {
 		const botTokenSetting = new Setting(this.botSettingsDiv)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName("Bot token encryption using a PIN code")
+			.setName("Bot token encryption using a pin code")
 			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Encrypt the bot token for enhanced security. When enabled, a PIN code is required at each Obsidian launch. ",
+				"Encrypt the bot token for enhanced security. When enabled, a pin code is required at each Obsidian launch. ",
 			)
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.encryptionByPinCode);

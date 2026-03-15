@@ -81,7 +81,7 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	}
 
 	// if user disconnected and should be connected then reconnect it
-	// eslint-disable-next-line @typescript-eslint/unbound-method
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 	if (!plugin.userConnected) await enqueue(plugin, plugin.restartTelegram, "user");
 
 	const { fileObject, fileType } = getFileObject(msg);

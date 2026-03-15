@@ -80,8 +80,7 @@ export class PromptsModal extends Modal {
 		// --- Photos ---
 		new Setting(contentEl)
 			.setName("Photos")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Processing for images (requires Vision API)")
+			.setDesc("Processing for images (requires vision API)")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessPhoto).onChange((value) => {
 					void (async () => {
@@ -107,9 +106,8 @@ export class PromptsModal extends Modal {
 
 		// --- Audio & Video ---
 		new Setting(contentEl)
-			.setName("Audio & video files")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Processing for voice messages, audio files, and videos (uses Whisper API)")
+			.setName("Audio and video files")
+			.setDesc("Processing for voice messages, audio files, and videos")
 			.addToggle((toggle) => {
 				// Use voice setting as the master toggle for UI
 				toggle.setValue(this.plugin.settings.aiProcessVoice).onChange((value) => {
@@ -138,9 +136,8 @@ export class PromptsModal extends Modal {
 
 		// --- Documents ---
 		new Setting(contentEl)
-			.setName("Documents")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Processing for document files (PDF, DOCX, etc.)")
+			.setName("Document processing")
+			.setDesc("Processing for document files")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessDocument).onChange((value) => {
 					void (async () => {

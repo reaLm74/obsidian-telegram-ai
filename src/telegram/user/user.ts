@@ -32,7 +32,7 @@ export async function connect(
 		plugin.userConnected = await Client.isAuthorizedAsUser();
 
 		if (sessionType == "bot" || !plugin.userConnected) {
-			// eslint-disable-next-line @typescript-eslint/unbound-method
+			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			await Client.signInAsBot(await enqueue(plugin, plugin.getBotToken));
 		}
 

@@ -18,7 +18,7 @@ export async function connect(plugin: TelegramSyncPlugin) {
 			return;
 		}
 		// Create a new bot instance and start polling
-		// eslint-disable-next-line @typescript-eslint/unbound-method
+		// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 		plugin.bot = new TelegramBot(await enqueue(plugin, plugin.getBotToken));
 		const bot = plugin.bot;
 		// Set connected flag to false and log errors when a polling error occurs

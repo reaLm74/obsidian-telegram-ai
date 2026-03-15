@@ -96,7 +96,7 @@ async function getImageDataForGemini(
 				data: base64Data,
 			},
 		};
-	} catch (_error) {
+	} catch {
 		return null;
 	}
 }
