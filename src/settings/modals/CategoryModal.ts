@@ -108,8 +108,7 @@ export class CategoryModal extends Modal {
 					"Used for AI classification and additional tagging.",
 			)
 			.addTextArea((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("keyword1, keyword2, keyword3")
+				text.setPlaceholder("Keyword1, keyword2, keyword3")
 					.setValue(keywords)
 					.onChange((value) => {
 						keywords = value;

@@ -26,8 +26,7 @@ export class CustomAIParametersModal extends Modal {
 		hintEl.createEl("span", { text: "💡 " });
 		hintEl.createEl("strong", { text: "Tip:" });
 		hintEl.appendText(" The ");
-		// eslint-disable-next-line obsidianmd/ui/sentence-case
-		hintEl.createEl("code", { text: "title" });
+		hintEl.createEl("code", { text: "Title" });
 		hintEl.appendText(" parameter is already configured by default. Use ");
 		hintEl.createEl("code", { text: "{{ai:title}}" });
 		hintEl.appendText(" in path templates for automatic note title generation.");
@@ -123,8 +122,7 @@ export class CustomAIParametersModal extends Modal {
 			.setName("Parameter name")
 			.setDesc("Name of the parameter (will be used as {{ai:name}})")
 			.addText((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("e.g., project_name")
+				text.setPlaceholder("E.g., project_name")
 					.setValue(paramName)
 					.onChange((value) => {
 						paramName = value;
@@ -135,8 +133,7 @@ export class CustomAIParametersModal extends Modal {
 			.setName("AI prompt")
 			.setDesc("Prompt that describes what AI should generate for this parameter")
 			.addTextArea((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("e.g., determine project name from text (maximum 20 characters)")
+				text.setPlaceholder("E.g., determine project name from text (maximum 20 characters)")
 					.setValue(paramPrompt)
 					.onChange((value) => {
 						paramPrompt = value;

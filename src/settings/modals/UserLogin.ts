@@ -10,7 +10,7 @@ export class UserLogInModal extends Modal {
 		super(plugin.app);
 	}
 
-	async display() {
+	display() {
 		this.addHeader();
 		this.addPassword();
 		this.addScanner();
@@ -27,10 +27,9 @@ export class UserLogInModal extends Modal {
 
 	addPassword() {
 		new Setting(this.userLoginDiv)
-			.setName("1. Enter password (optionally)")
+			.setName("Enter password (optional)")
 			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Enter your password before scanning QR code only if you use two-step authorization. Password will not be stored",
+				"Enter your password before scanning the code only if you use two-step authorization. Password will not be stored",
 			)
 			.addText((text) => {
 				text.setPlaceholder("*************")
@@ -43,21 +42,16 @@ export class UserLogInModal extends Modal {
 
 	addScanner() {
 		new Setting(this.userLoginDiv)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName("2. Prepare QR code scanner")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Open Telegram on your phone. Go to Settings > Devices > Link desktop device");
+			.setName("Prepare code scanner")
+			.setDesc("Open the Telegram app and link your device");
 	}
 
 	addQrCode() {
 		new Setting(this.userLoginDiv)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName("3. Generate & scan QR code")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc(`Generate QR code and point your phone at it to confirm login`)
+			.setName("Generate and scan code")
+			.setDesc(`Generate code and point your phone at it to confirm login`)
 			.addButton((b) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				b.setButtonText("Generate QR code");
+				b.setButtonText("Generate qr code");
 				b.onClick(() => {
 					void (async () => {
 						this.showQrCodeGeneratingState("🔵 QR code generating...\n", "text-blue");
@@ -79,10 +73,9 @@ export class UserLogInModal extends Modal {
 	}
 
 	addCheck() {
-		new Setting(this.userLoginDiv).setName("4. Check active sessions").setDesc(
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			`If the login is successful, you will find the 'Obsidian Telegram Sync' session in the list of active sessions. If you find it in the list of inactive sessions, then you have probably entered the wrong password`,
-		);
+		new Setting(this.userLoginDiv)
+			.setName("Check active sessions")
+			.setDesc("The session will appear in the list of active sessions");
 	}
 	addFooterButtons() {
 		this.userLoginDiv.createEl("br");
@@ -95,7 +88,7 @@ export class UserLogInModal extends Modal {
 	}
 
 	async onOpen() {
-		await this.display();
+		this.display();
 	}
 
 	cleanQrContainer() {

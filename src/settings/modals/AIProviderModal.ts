@@ -32,12 +32,11 @@ export class AIProviderModal extends Modal {
 
 		// AI Provider Selection
 		new Setting(contentEl)
-			.setName("AI provider")
-			.setDesc("Choose which AI service to use")
+			.setName("Artificial intelligence provider")
+			.setDesc("Choose which service to use")
 			.addDropdown((dropdown) => {
 				dropdown
-					// eslint-disable-next-line obsidianmd/ui/sentence-case
-					.addOption("openai", "OpenAI (ChatGPT)")
+					.addOption("openai", "Openai (chatgpt)")
 					.setValue(this.plugin.settings.aiProvider || "openai")
 					.onChange((value) => {
 						void (async () => {
@@ -82,13 +81,10 @@ export class AIProviderModal extends Modal {
 
 	private addOpenAISettings(container: HTMLElement) {
 		new Setting(container)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName("OpenAI API key")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Your OpenAI API key")
+			.setName("Openai key")
+			.setDesc("Your key for the service")
 			.addText((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("sk-...")
+				text.setPlaceholder("Sk-...")
 					.setValue(this.plugin.settings.openAIApiKey)
 					.onChange((value) => {
 						void (async () => {
@@ -147,9 +143,8 @@ export class AIProviderModal extends Modal {
 		);
 
 		new Setting(container)
-			.setName("Enable vision API")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Use GPT-4 Vision for image analysis (requires compatible model)")
+			.setName("Enable vision")
+			.setDesc("Use vision for image analysis (requires compatible model)")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiVisionEnabled).onChange((value) => {
 					void (async () => {
@@ -213,8 +208,7 @@ export class AIProviderModal extends Modal {
 			for (const [id, label] of Object.entries(predefinedModels)) {
 				dropdown.addOption(id, label);
 			}
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other (custom model id)");
+			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other custom model");
 			dropdown.setValue(dropdownValue);
 			dropdown.onChange((value) => {
 				if (value === CUSTOM_MODEL_VALUE) {

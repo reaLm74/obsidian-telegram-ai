@@ -126,10 +126,10 @@ export async function getMessage(
 
 	if (!botMsg.text && !mediaId) {
 		const { fileObject } = getFileObject(botMsg);
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const fileObjectToUse = fileObject instanceof Array ? fileObject.pop() : fileObject;
-
-		mediaId = extractMediaId((fileObjectToUse as { file_id?: string })?.file_id ?? "");
+		const fileObjectToUse = (Array.isArray(fileObject) ? fileObject[fileObject.length - 1] : fileObject) as {
+			file_id?: string;
+		};
+		mediaId = extractMediaId(fileObjectToUse?.file_id ?? "");
 	}
 	const skipMsgIds = cachedMessageCouples
 		.filter((msgCouple) => Math.abs(botMsg.date - msgCouple.date) <= 1 && msgCouple.botMsgId != botMsg.message_id)

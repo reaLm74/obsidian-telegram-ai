@@ -105,16 +105,12 @@ export async function extractTextFromDocument(
 				const pdfModule = await import("pdf-parse");
 				const pdf = pdfModule.default || pdfModule;
 				// @ts-expect-error -- pdf-parse expects a Node.js Buffer; Obsidian's renderer provides a compatible Buffer via the polyfill
-				// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-				const data = await pdf(Buffer.from(fileBuffer));
+				const data = (await pdf(Buffer.from(fileBuffer))) as { text: string; numpages: number };
 				return {
-					// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
 					text: data.text,
 					success: true,
 					metadata: {
-						// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
 						pages: data.numpages,
-						// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
 						wordCount: data.text.split(/\s+/).length,
 						format: "pdf",
 					},
@@ -236,8 +232,7 @@ function extractPlainText(content: string): DocumentExtractionResult {
  */
 function extractJsonText(content: string): DocumentExtractionResult {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const jsonData = JSON.parse(content);
+		const jsonData = JSON.parse(content) as unknown;
 		const readableText = JSON.stringify(jsonData, null, 2);
 
 		return {
@@ -248,7 +243,7 @@ function extractJsonText(content: string): DocumentExtractionResult {
 				format: "JSON",
 			},
 		};
-	} catch (_error) {
+	} catch {
 		// If not valid JSON, process as plain text
 		return extractPlainText(content);
 	}

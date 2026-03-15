@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types -- third-party type declaration file; `{}` types must match the original library signatures exactly */
-/* eslint-disable @typescript-eslint/no-explicit-any -- third-party type declaration file; `any` types must match the original library signatures exactly */
 declare module "node-telegram-bot-api" {
 	import { ServerOptions } from "https";
-	import { Options } from "request";
+
 	import { Readable, Stream } from "stream";
 	namespace TelegramBot {
 		type ReactionType = ReactionTypeEmoji | ReactionTypeCustomEmoji;
@@ -2086,5 +2085,5 @@ declare module "node-telegram-bot-api" {
 	}
 	export = TelegramBot;
 }
-/* eslint-enable @typescript-eslint/ban-types */
-/* eslint-enable @typescript-eslint/no-explicit-any */
+/* eslint-enable @typescript-eslint/ban-types -- end of third-party type declaration file */
+/* eslint-enable @typescript-eslint/no-explicit-any -- end of third-party type declaration file */

@@ -1,6 +1,5 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
-import { _5sec } from "src/utils/logUtils";
 
 export class PinCodeModal extends Modal {
 	pinCodeDiv: HTMLDivElement;
@@ -31,13 +30,10 @@ export class PinCodeModal extends Modal {
 
 	addPinCode() {
 		new Setting(this.pinCodeDiv)
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setName("PIN code")
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			.setDesc("Enter your PIN code. Numbers and letters only.")
+			.setName("Pin code")
+			.setDesc("Enter your pin code. Numbers and letters only.")
 			.addText((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder("example: 1234").onChange((value: string) => {
+				text.setPlaceholder("Example: 1234").onChange((value: string) => {
 					if (!value) {
 						text.inputEl.addClass("border-red");
 					} else {

@@ -43,8 +43,7 @@ export class MessageDistributionRulesModal extends Modal {
 		this.messageDistributionRulesDiv = this.contentEl.createDiv();
 		this.titleEl.setText(`${this.editing ? "Editing" : "Adding"} message distribution rule`);
 		new Setting(this.messageDistributionRulesDiv).descEl.createEl("span", {
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			text: "🗎 Template variables documentation available in plugin docs",
+			text: "Template variables documentation is available in the plugin docs",
 		});
 	}
 
@@ -61,7 +60,7 @@ export class MessageDistributionRulesModal extends Modal {
 						this.messageDistributionRule.messageFilterConditions =
 							extractConditionsFromFilterQuery(filterQuery);
 					})
-					.setPlaceholder("example: {{topic=Notes}}{{user=username}}");
+					.setPlaceholder("Example: {{topic=Notes}}{{user=username}}");
 			});
 		setSettingStyles(setting);
 	}
@@ -72,7 +71,7 @@ export class MessageDistributionRulesModal extends Modal {
 			.setDesc("Specify path to template file you want to apply to new notes")
 			.addSearch((cb) => {
 				new FileSuggest(cb.inputEl, this.plugin);
-				cb.setPlaceholder("example: folder/zettelkasten.md")
+				cb.setPlaceholder("Example: folder/zettelkasten.md")
 					.setValue(this.messageDistributionRule.templateFilePath)
 					.onChange((path) => {
 						this.messageDistributionRule.templateFilePath = path ? normalizePath(path) : path;
@@ -88,7 +87,7 @@ export class MessageDistributionRulesModal extends Modal {
 				"Specify path template for storage folders and note names. Leave empty if you don't want to create any notes from filtrated messages",
 			)
 			.addTextArea((text) => {
-				text.setPlaceholder(`example: folder/${defaultNoteNameTemplate}`)
+				text.setPlaceholder(`Example: folder/${defaultNoteNameTemplate}`)
 					.setValue(this.messageDistributionRule.notePathTemplate)
 					.onChange((value: string) => {
 						this.messageDistributionRule.notePathTemplate = value;
@@ -105,7 +104,7 @@ export class MessageDistributionRulesModal extends Modal {
 				"Specify path template for storage folders and file names. Leave empty if you don't want to save any files from filtrated messages",
 			)
 			.addTextArea((text) => {
-				text.setPlaceholder(`example: folder/${defaultFileNameTemplate}`)
+				text.setPlaceholder(`Example: folder/${defaultFileNameTemplate}`)
 					.setValue(this.messageDistributionRule.filePathTemplate)
 					.onChange((value: string) => {
 						this.messageDistributionRule.filePathTemplate = value;
@@ -120,8 +119,7 @@ export class MessageDistributionRulesModal extends Modal {
 			.setName("Heading")
 			.setDesc("Specify the heading under which new messages will be inserted")
 			.addText((text) => {
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				text.setPlaceholder(`example: ### Log`)
+				text.setPlaceholder("Example: ### log")
 					.setValue(this.messageDistributionRule.heading)
 					.onChange((value: string) => {
 						this.messageDistributionRule.heading = value;
@@ -135,8 +133,7 @@ export class MessageDistributionRulesModal extends Modal {
 		setting
 			.setName("Reversed order")
 			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				`Turn on to have new messages appear at the beginning of the note, or, if a heading is specified, above it. Warning: If "Parallel message processing" is on, it may disrupt message order`,
+				"Turn on to have new messages appear at the beginning of the note, or, if a heading is specified, above it. This may disrupt message order if parallel processing is enabled",
 			)
 			.addToggle((toggle) => {
 				toggle.setValue(this.messageDistributionRule.reversedOrder);

@@ -5,7 +5,7 @@ import { createProgressBar, updateProgressBar, deleteProgressBar, ProgressBarTyp
 import * as Client from "src/telegram/user/client";
 import { BotSettingsModal } from "./modals/BotSettings";
 import { UserLogInModal } from "./modals/UserLogin";
-import { _15sec, _1sec, displayAndLog, _day } from "src/utils/logUtils";
+import { _15sec, _1sec, displayAndLog } from "src/utils/logUtils";
 import { getTopicId } from "src/telegram/bot/message/getters";
 import * as User from "../telegram/user/user";
 import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
@@ -198,7 +198,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	async refresh() {
+	refresh() {
 		const botConnected = this.plugin.isBotConnected();
 		const userConnected = this.plugin.userConnected;
 		const checkingBotConnection = this.plugin.checkingBotConnection;
@@ -228,7 +228,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 	setRefreshInterval() {
 		clearInterval(this.refreshIntervalId);
 		this.refreshIntervalId = setInterval(() => {
-			// eslint-disable-next-line @typescript-eslint/unbound-method
+			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.refresh);
 		}, _1sec);
 	}
@@ -245,7 +245,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		new Setting(this.containerEl).setName("Message distribution & base categorization").setHeading();
 		this.addMessageDistributionRules();
 
-		new Setting(this.containerEl).setName("AI processing").setHeading();
+		new Setting(this.containerEl).setName("Artificial intelligence processing").setHeading();
 		this.addAISettings();
 
 		new Setting(this.containerEl).setName("Advanced categorization").setHeading();
@@ -264,7 +264,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 	addSettingsHeader() {
 		const versionContainer = this.containerEl.createDiv();
 		versionContainer.addClass("flex", "justify-between");
-		new Setting(versionContainer).setName(`Telegram AI`).setHeading();
+		new Setting(versionContainer).setName(`Telegram artificial intelligence`).setHeading();
 	}
 
 	addBot() {
@@ -297,7 +297,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 								await this.plugin.saveSettings();
 								// Initialize the bot with the new token
 								this.plugin.setBotStatus("disconnected");
-								// eslint-disable-next-line @typescript-eslint/unbound-method
+								// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 								await enqueue(this.plugin, this.plugin.initTelegram);
 							}
 						})();
@@ -310,15 +310,14 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		botFatherLink.textContent = "To create a new bot click on -> ";
 		botFatherLink.createEl("a", {
 			href: "https://t.me/botfather",
-			// eslint-disable-next-line obsidianmd/ui/sentence-case
-			text: "@BotFather",
+			text: "@botfather",
 		});
 		botSettings.descEl.appendChild(botFatherLink);
 	}
 
 	addUser() {
 		const userSettings = new Setting(this.containerEl)
-			.setName("User (optionally)")
+			.setName("User (optional)")
 			.setDesc("Connect your Telegram user. It's required only for ")
 			.addText((userStatus: TextComponent) => {
 				userStatus.setDisabled(true);
@@ -535,7 +534,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		const statusText = hasApiKey ? "Configured" : "API key required";
 
 		new Setting(this.containerEl)
-			.setName(`AI Provider: ${providerNames[provider] || provider}`)
+			.setName(`Artificial intelligence provider: ${providerNames[provider] || provider}`)
 			.setDesc(`${statusIcon} ${statusText} - Click to configure AI settings`)
 			.addButton((button) => {
 				button
@@ -568,10 +567,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		// Local Document Text Extraction
 		new Setting(this.containerEl)
 			.setName("Local document extraction")
-			.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case
-				"Extract text from supported documents locally (TXT, JSON, CSV, XML, HTML, MD, code files) instead of sending to AI. Saves API costs and improves speed.",
-			)
+			.setDesc("Extract text from documents locally to save costs and improve speed")
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.enableLocalDocumentExtraction).onChange((value) => {
 					void (async () => {
@@ -580,8 +576,6 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					})();
 				});
 			});
-
-		// Custom AI Parameters
 	}
 
 	async storeTopicName(msg: TelegramBot.Message) {
@@ -676,7 +670,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		// AI categorization (only if main AI processing is enabled)
 		if (this.plugin.settings.aiEnabled) {
 			new Setting(this.containerEl)
-				.setName("AI categorization")
+				.setName("Artificial intelligence categorization")
 				.setDesc("Use AI to automatically determine note categories")
 				.addToggle((toggle) =>
 					toggle.setValue(this.plugin.settings.aiCategorizationEnabled).onChange((value) => {
@@ -690,7 +684,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		} else {
 			// Show information that AI processing needs to be enabled
 			new Setting(this.containerEl)
-				.setName("AI categorization")
+				.setName("Artificial intelligence categorization")
 				.setDesc("Enable AI processing first to use AI categorization")
 				.addText((text) => {
 					text.setValue("Requires AI processing to be enabled");
