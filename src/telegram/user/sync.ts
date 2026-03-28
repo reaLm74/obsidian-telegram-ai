@@ -88,7 +88,7 @@ export async function getChatsForSearch(plugin: TelegramSyncPlugin, offsetDays: 
 				search: botUserName,
 			});
 		} catch (e) {
-			if (e instanceof Error && e.message.contains("CHAT_ADMIN_REQUIRED")) continue;
+			if (e instanceof Error && e.message.includes("CHAT_ADMIN_REQUIRED")) continue;
 			notice.setMessage(
 				`Search for ${botUserName} in ${dialogName} participants cancelled!\nError: ${JSON.stringify(e)}`,
 			);

@@ -46,7 +46,7 @@ export function getChat(entity: Entity): TelegramBot.Chat | undefined {
 		return {
 			id: entity.id.toJSNumber(),
 			username: entity.username,
-			title: entity.firstName + " " + entity.lastName,
+			title: `${entity.firstName || ""} ${entity.lastName || ""}`.trim(),
 			first_name: entity.firstName,
 			last_name: entity.lastName,
 			type: getChatType(entity),

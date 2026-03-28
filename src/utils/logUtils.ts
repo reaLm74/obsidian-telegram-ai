@@ -37,10 +37,10 @@ export function displayAndLog(plugin: TelegramSyncPlugin, message: string, timeo
 	if (timeout == 0) return;
 	const notice = new Notice(message, timeout || _day);
 
-	const hideBotDisconnectedMessages = message.contains(StatusMessages.BOT_CONNECTED);
+	const hideBotDisconnectedMessages = message.includes(StatusMessages.BOT_CONNECTED);
 	persistentNotices = persistentNotices.filter((persistentNotice) => {
 		const shouldHide =
-			(hideBotDisconnectedMessages && persistentNotice.message.contains(StatusMessages.BOT_DISCONNECTED)) ||
+			(hideBotDisconnectedMessages && persistentNotice.message.includes(StatusMessages.BOT_DISCONNECTED)) ||
 			persistentNotice.message == message;
 		if (shouldHide) {
 			persistentNotice.notice.hide();
@@ -48,7 +48,13 @@ export function displayAndLog(plugin: TelegramSyncPlugin, message: string, timeo
 		return !shouldHide;
 	});
 
-	if (!timeout) persistentNotices.push({ notice, message });
+	if (!timeout) {
+		persistentNotices.push({ notice, message });
+		// Prevent unbounded growth: remove oldest notices beyond limit
+		while (persistentNotices.length > 50) {
+			persistentNotices.shift();
+		}
+	}
 }
 
 // Show error to console, telegram, display

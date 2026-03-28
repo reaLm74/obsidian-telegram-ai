@@ -33,15 +33,30 @@ let cachedMessageCouples: MessageCouple[] = [];
 let cachedMessagesRequests: MessagesRequests[] = [];
 const cachedUserCouples: UserCouple[] = [];
 
-// clean every 2 hours message request and couples if needed
-const cachedMessagesIntervalId = setInterval(() => {
-	if (cachedMessageCouples.length < 5000) return;
-	const lastMessageCouple = cachedMessageCouples.last();
-	if (lastMessageCouple && new Date().getTime() - lastMessageCouple.creationTime.getTime() > _1h) {
-		cachedMessagesRequests = [];
-		cachedMessageCouples = [];
-	}
-}, _2h);
+// clean every 10 minutes message request and couples if needed
+const cachedMessagesIntervalId = setInterval(
+	() => {
+		const now = new Date().getTime();
+
+		// Keep only message couples newer than 1 hour or at minimum the last 500
+		if (cachedMessageCouples.length > 500) {
+			const recentCouples = cachedMessageCouples.filter((mc) => now - mc.creationTime.getTime() <= _1h);
+			// Keep at least 500, or all recent ones
+			if (recentCouples.length < 500 && cachedMessageCouples.length >= 500) {
+				cachedMessageCouples = cachedMessageCouples.slice(-500);
+			} else {
+				cachedMessageCouples = recentCouples;
+			}
+		}
+
+		// Clean requests similarly based on time (msgDate is unix timestamp in sec, _1h is ms)
+		if (cachedMessagesRequests.length > 200) {
+			const oneHourAgoSec = (now - _1h) / 1000;
+			cachedMessagesRequests = cachedMessagesRequests.filter((rq) => rq.msgDate >= oneHourAgoSec);
+		}
+	},
+	10 * 60 * 1000,
+); // Check every 10 mins
 
 export function clearCachedMessagesInterval() {
 	clearInterval(cachedMessagesIntervalId);
@@ -136,7 +151,7 @@ export async function getMessage(
 		.map((msgCouple) => msgCouple.userMsg && msgCouple.userMsg.id);
 
 	const messages = messagesRequests.map((rq) => rq.messages).reduce((accumulator, msgs) => accumulator.concat(msgs));
-	const unprocessedMessages = messages.filter((msg) => !skipMsgIds.contains(msg.id));
+	const unprocessedMessages = messages.filter((msg) => !skipMsgIds.includes(msg.id));
 	// add dateOffset, because different date rounding between bot api and user api for unknown reason
 	const userMsg = findUserMsg(unprocessedMessages, botMsg, mediaId);
 

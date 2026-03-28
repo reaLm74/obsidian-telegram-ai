@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { displayAndLogError, sleep } from "src/utils/logUtils";
+import { displayAndLog, displayAndLogError, sleep } from "src/utils/logUtils";
 import { requestUrl } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 
@@ -88,23 +88,64 @@ async function exponentialDelay(attempt: number, baseDelay: number): Promise<voi
 }
 
 /**
- * Gets image URL from message for Vision API
+ * Downloads image from Telegram and returns as base64 data URL.
+ * Uses base64 instead of Telegram file URLs because:
+ * - Telegram URLs are temporary (~1 hour lifetime)
+ * - Telegram URLs may be inaccessible from OpenAI's servers
+ * - Telegram URLs contain the bot token which is a security concern
  */
-async function getImageUrl(plugin: TelegramSyncPlugin, msg: TelegramBot.Message): Promise<string | null> {
-	if (!msg.photo || !plugin.bot) return null;
+async function getImageBase64(plugin: TelegramSyncPlugin, msg: TelegramBot.Message): Promise<string | null> {
+	if (!msg.photo || !plugin.bot) {
+		displayAndLog(plugin, `🖼️ Vision: No photo data or bot not available`, 0);
+		return null;
+	}
 
 	try {
-		// Take largest image
+		// Take largest image (last in array)
 		const photo = msg.photo[msg.photo.length - 1];
-		const fileLink = await plugin.bot.getFileLink(photo.file_id);
-		return fileLink;
-	} catch {
+		displayAndLog(
+			plugin,
+			`🖼️ Vision: Downloading image (file_id: ${photo.file_id}, size: ${photo.file_size || "unknown"} bytes)`,
+			0,
+		);
+
+		const fileStream = plugin.bot.getFileStream(photo.file_id);
+		if (!fileStream) {
+			displayAndLog(plugin, `🖼️ Vision: Failed to get file stream`, 0);
+			return null;
+		}
+
+		const chunks: Uint8Array[] = [];
+		for await (const chunk of fileStream) {
+			chunks.push(new Uint8Array(chunk as ArrayBuffer));
+		}
+
+		const fileBuffer = new Uint8Array(
+			chunks.reduce<number[]>((acc, val) => {
+				acc.push(...val);
+				return acc;
+			}, []),
+		);
+
+		const base64Data = Buffer.from(fileBuffer).toString("base64");
+		const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+		displayAndLog(
+			plugin,
+			`🖼️ Vision: Image downloaded and encoded (${Math.round(base64Data.length / 1024)} KB base64)`,
+			0,
+		);
+
+		return dataUrl;
+	} catch (error: unknown) {
+		const errorMsg = error instanceof Error ? error.message : String(error);
+		displayAndLog(plugin, `🖼️ Vision: Error downloading image: ${errorMsg}`, 0);
 		return null;
 	}
 }
 
 /**
- * Creates messages for Vision API
+ * Creates messages for Vision API with base64 image data
  */
 async function createVisionMessages(
 	plugin: TelegramSyncPlugin,
@@ -112,15 +153,18 @@ async function createVisionMessages(
 	prompt: string,
 	msg: TelegramBot.Message,
 ): Promise<OpenAIMessage[]> {
-	const imageUrl = await getImageUrl(plugin, msg);
+	const imageDataUrl = await getImageBase64(plugin, msg);
 
-	if (!imageUrl) {
+	if (!imageDataUrl) {
+		displayAndLog(plugin, `🖼️ Vision: Image unavailable, falling back to text-only processing`, 0);
 		// Fallback to regular text message
 		return [
 			{ role: "system", content: prompt },
 			{ role: "user", content: content },
 		];
 	}
+
+	displayAndLog(plugin, `🖼️ Vision: Creating Vision API request with base64 image`, 0);
 
 	return [
 		{ role: "system", content: prompt },
@@ -134,7 +178,7 @@ async function createVisionMessages(
 				{
 					type: "image_url",
 					image_url: {
-						url: imageUrl,
+						url: imageDataUrl,
 						detail: "high",
 					},
 				},
@@ -175,14 +219,18 @@ export async function processWithOpenAI(
 			const contentType = msg ? getMessageContentType(msg) : "text";
 			const useVision = plugin.settings.aiVisionEnabled && contentType === "photo" && msg;
 
+			if (useVision) {
+				displayAndLog(plugin, `🖼️ Vision: Starting processing (attempt ${attempt})`, 0);
+			}
+
 			let messages: OpenAIMessage[];
 			let model = plugin.settings.openAIModel || "gpt-4o-mini";
 
 			if (useVision) {
 				messages = await createVisionMessages(plugin, content, prompt, msg);
-				// Vision API needs model with image support
-				if (model.includes("mini")) {
-					model = "gpt-4o";
+				// If fallback to text occurred and image wasn't attached, log it
+				if (messages.length === 2 && messages[1].content === content) {
+					displayAndLog(plugin, `🖼️ Vision: Image attachment failed, proceeding with text-only in OpenAI`, 0);
 				}
 			} else {
 				messages = [
@@ -197,6 +245,10 @@ export async function processWithOpenAI(
 				temperature: plugin.settings.openAITemperature !== undefined ? plugin.settings.openAITemperature : 0.7,
 				max_tokens: plugin.settings.openAIMaxTokens || 2000,
 			};
+
+			if (useVision) {
+				displayAndLog(plugin, `🖼️ Vision: Sending request to OpenAI API using model ${model}...`, 0);
+			}
 
 			const response = await requestUrl({
 				url: "https://api.openai.com/v1/chat/completions",

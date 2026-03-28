@@ -38,7 +38,7 @@ export async function connect(
 
 		if (sessionType == "user" && !plugin.userConnected) {
 			let qrError = qrCodeContainer?.getText();
-			qrError = qrError?.contains("Error") ? qrError : "See errors in console (CTRL + SHIFT + I)";
+			qrError = qrError?.includes("Error") ? qrError : "See errors in console (CTRL + SHIFT + I)";
 			return `Connection failed.\n${qrError}`;
 		}
 

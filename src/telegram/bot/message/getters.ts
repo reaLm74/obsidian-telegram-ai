@@ -14,9 +14,9 @@ export function getForwardFromName(msg: TelegramBot.Message): string {
 				msg.forward_from.first_name + (msg.forward_from.last_name ? " " + msg.forward_from.last_name : "");
 		} else if (msg.forward_from_chat) {
 			forwardFromName =
-				msg.forward_from_chat.title + (msg.forward_signature ? `(${msg.forward_signature})` : "") ||
-				msg.forward_from_chat.username ||
-				"";
+				(msg.forward_from_chat.title
+					? msg.forward_from_chat.title + (msg.forward_signature ? ` (${msg.forward_signature})` : "")
+					: msg.forward_from_chat.username) || "";
 		} else if (msg.forward_sender_name) {
 			forwardFromName = msg.forward_sender_name;
 		} else if (msg.from) {

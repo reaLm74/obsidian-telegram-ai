@@ -448,10 +448,6 @@ async function processWithCustomPrompt(
 	const provider = plugin.settings.aiProvider || "openai";
 
 	try {
-		// Create temporary prompt in settings for processing
-		const originalPrompt = plugin.settings.aiPromptText;
-		plugin.settings.aiPromptText = customPrompt;
-
 		let result: string | null = null;
 
 		switch (provider) {
@@ -478,9 +474,6 @@ async function processWithCustomPrompt(
 				break;
 			}
 		}
-
-		// Restore original prompt
-		plugin.settings.aiPromptText = originalPrompt;
 
 		return result;
 	} catch (error) {

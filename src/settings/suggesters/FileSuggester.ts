@@ -23,7 +23,7 @@ export class FileSuggest extends TextInputSuggest<TFile> {
 		const lower_input_str = input_str.toLowerCase();
 
 		all_files.forEach((file: TAbstractFile) => {
-			if (file instanceof TFile && file.extension === "md" && file.path.toLowerCase().contains(lower_input_str)) {
+			if (file instanceof TFile && file.extension === "md" && file.path.toLowerCase().includes(lower_input_str)) {
 				files.push(file);
 			}
 		});
