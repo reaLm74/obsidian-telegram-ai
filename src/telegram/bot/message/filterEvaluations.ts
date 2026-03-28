@@ -45,7 +45,7 @@ export async function isTopicFiltered(
 }
 
 export function isContentFiltered(msg: TelegramBot.Message, substring: string): boolean {
-	return (msg.text || msg.caption || "").contains(substring);
+	return (msg.text || msg.caption || "").includes(substring);
 }
 
 export async function isCategoryFiltered(
@@ -82,7 +82,7 @@ export async function isVoiceTranscriptFiltered(
 ): Promise<boolean> {
 	let voiceTranscript = "";
 	if (plugin.bot) voiceTranscript = await Client.transcribeAudio(plugin.bot, msg, await plugin.getBotUser());
-	return voiceTranscript.contains(substring);
+	return voiceTranscript.includes(substring);
 }
 
 export async function isMessageFiltered(

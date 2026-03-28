@@ -4,12 +4,13 @@ import path from "path";
 
 export const defaultDelimiter = "\n\n***\n\n";
 
-// Create a folder path if it does not exist
+// Create a folder path if it does not exist (recursive)
 export async function createFolderIfNotExist(vault: Vault, folderPath: string) {
-	if (!vault || !folderPath) {
+	if (!vault || !folderPath || folderPath === "/") {
 		return;
 	}
-	const folder = vault.getAbstractFileByPath(normalizePath(folderPath));
+	const normalizedPath = normalizePath(folderPath);
+	const folder = vault.getAbstractFileByPath(normalizedPath);
 
 	if (folder && folder instanceof TFolder) {
 		return;
@@ -21,7 +22,13 @@ export async function createFolderIfNotExist(vault: Vault, folderPath: string) {
 		);
 	}
 
-	await vault.createFolder(folderPath).catch((error: unknown) => {
+	// Recursively create parent folders
+	const parentFolder = normalizedPath.substring(0, normalizedPath.lastIndexOf("/"));
+	if (parentFolder && parentFolder !== "") {
+		await createFolderIfNotExist(vault, parentFolder);
+	}
+
+	await vault.createFolder(normalizedPath).catch((error: unknown) => {
 		if (error instanceof Error && error.message !== "Folder already exists.") {
 			throw error;
 		} else if (typeof error === "string" && error !== "Folder already exists.") {
@@ -71,6 +78,7 @@ export async function getUniqueFilePath(
 		filePath = fileFolderPath ? `${fileFolderPath}/${fileName}` : fileName;
 	}
 	createdFilePaths.push(filePath);
+	if (createdFilePaths.length > 500) createdFilePaths.shift();
 	return filePath;
 }
 
