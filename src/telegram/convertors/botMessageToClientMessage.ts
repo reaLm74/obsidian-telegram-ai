@@ -3,7 +3,7 @@ import { Api, TelegramClient } from "telegram";
 import { getFileObject } from "../bot/message/getters";
 import { extractMediaId } from "./botFileToMessageMedia";
 import { TotalList } from "telegram/Helpers";
-import { _1h, _1sec, _2h, sleep } from "src/utils/logUtils";
+import { _1h, _1sec, sleep } from "src/utils/logUtils";
 import { unixTime2Date } from "src/utils/dateUtils";
 
 const cantFindTheMessage = "Can't find the message for connected user.";
