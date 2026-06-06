@@ -1,17 +1,15 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.1.5";
+export const releaseVersion = "0.1.6";
 export const showNewFeatures = true;
-export let showBreakingChanges = true; // Repository migration notice
+export let showBreakingChanges = true;
 
-const newFeatures = `🎉 Version 0.1.5: Refactoring, stability improvements, and bug fixes:
-- 🛠️ Fixed linting and formatting issues for better cross-platform builds
-- 🎤 Improved audio processing: voice transcripts are now correctly passed to AI
-- 🤖 Updated AI model lists and fixed custom model selection bug
-- 📁 Enhanced document processing and prompt formatting
-- ⚡ Better type safety in AI modules (OpenAI)`;
+const newFeatures = `🎉 Version 0.1.6: Stability & compatibility improvements:
+- 🌐 Fixed web link content processing
+- 🎯 Better multi-window support
+- 🛠️ General stability and performance improvements`;
 
-export const breakingChanges = `🔄 Migrated repository to 'obsidian-telegram-ai'.`;
+export const breakingChanges = `⚠️ Minimum Obsidian version raised to 1.13.0 (was 1.8.7).`;
 
 export const telegramChannelLink = "https://t.me/realm74"; // Your personal Telegram
 export const insiderFeaturesLink = "https://github.com/reaLm74/obsidian-telegram-ai";
