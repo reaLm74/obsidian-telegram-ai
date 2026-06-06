@@ -63,7 +63,7 @@ export class CategoryModal extends Modal {
 			.setName("Color")
 			.setDesc("Category color (hex)")
 			.addText((text) => {
-				text.setPlaceholder("#3498db")
+				text.setPlaceholder("#349800")
 					.setValue(color)
 					.onChange((value) => {
 						color = value;

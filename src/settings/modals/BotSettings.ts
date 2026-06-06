@@ -26,10 +26,10 @@ export class BotSettingsModal extends Modal {
 		this.botSettingsDiv = this.contentEl.createDiv();
 		this.titleEl.setText("Bot settings");
 		const limitations = new Setting(this.botSettingsDiv).setDesc("Limitations of the bot:");
-		const lim24Hours = document.createElement("div");
+		const lim24Hours = activeDocument.createElement("div");
 		lim24Hours.setText("- it can get only messages sent within the last 24 hours");
 		lim24Hours.addClass("ml-10");
-		const limBlocks = document.createElement("div");
+		const limBlocks = activeDocument.createElement("div");
 		limBlocks.addClass("ml-10");
 		limBlocks.setText("Use a proxy to bypass blocks in some countries and limited corporate networks ");
 		limBlocks.createEl("span", {
@@ -83,7 +83,7 @@ export class BotSettingsModal extends Modal {
 					});
 			});
 		// add link to Telegram FAQ about getting username
-		const howDoIGetUsername = document.createElement("div");
+		const howDoIGetUsername = activeDocument.createElement("div");
 		howDoIGetUsername.textContent = "To get help click on -> ";
 		howDoIGetUsername.createEl("a", {
 			href: "https://telegram.org/faq?setln=en#q-what-are-usernames-how-do-i-get-one",

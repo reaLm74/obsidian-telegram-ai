@@ -1,0 +1,63 @@
+#!/usr/bin/env sh
+
+# Pre-commit hook: Lint, type-check, and validate bundle size
+# Runs before every commit to catch issues that would fail the Obsidian community plugin review
+
+echo "🔍 Running pre-commit checks..."
+
+# 1. ESLint (includes obsidianmd plugin rules)
+echo "  → ESLint..."
+npx eslint src/ --max-warnings 0
+if [ $? -ne 0 ]; then
+  echo "❌ ESLint failed. Fix errors before committing."
+  exit 1
+fi
+
+# 2. TypeScript type checking
+echo "  → TypeScript..."
+npx tsc -noEmit -skipLibCheck
+if [ $? -ne 0 ]; then
+  echo "❌ TypeScript type check failed. Fix errors before committing."
+  exit 1
+fi
+
+# 3. Production build + bundle size check
+echo "  → Building production bundle..."
+node esbuild.config.mjs production
+if [ $? -ne 0 ]; then
+  echo "❌ Production build failed."
+  exit 1
+fi
+
+# Run post-build if it exists
+if [ -f "post-build.mjs" ]; then
+  node post-build.mjs
+fi
+
+# Check bundle size (5MB = 5242880 bytes)
+MAX_SIZE=5242880
+ACTUAL_SIZE=$(wc -c < main.js | tr -d ' ')
+if [ "$ACTUAL_SIZE" -gt "$MAX_SIZE" ]; then
+  SIZE_MB=$(echo "scale=2; $ACTUAL_SIZE / 1048576" | bc)
+  echo "❌ main.js is ${SIZE_MB}MB (limit: 5MB). Reduce bundle size."
+  exit 1
+fi
+
+# 4. Validate manifest.json structure
+echo "  → Validating manifest.json..."
+node -e "
+  const m = require('./manifest.json');
+  const required = ['id', 'name', 'version', 'minAppVersion', 'description', 'author', 'isDesktopOnly'];
+  const missing = required.filter(k => !(k in m));
+  if (missing.length) { console.error('Missing manifest keys:', missing.join(', ')); process.exit(1); }
+  const v = require('./versions.json');
+  if (!(m.version in v)) { console.error('versions.json missing entry for', m.version); process.exit(1); }
+  if (v[m.version] !== m.minAppVersion) { console.error('versions.json minAppVersion mismatch:', v[m.version], 'vs', m.minAppVersion); process.exit(1); }
+  console.log('  ✓ manifest.json valid');
+"
+if [ $? -ne 0 ]; then
+  echo "❌ Manifest validation failed."
+  exit 1
+fi
+
+echo "✅ All pre-commit checks passed!"

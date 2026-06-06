@@ -34,7 +34,7 @@ let cachedMessagesRequests: MessagesRequests[] = [];
 const cachedUserCouples: UserCouple[] = [];
 
 // clean every 10 minutes message request and couples if needed
-const cachedMessagesIntervalId = setInterval(
+const cachedMessagesIntervalId = window.setInterval(
 	() => {
 		const now = new Date().getTime();
 
@@ -59,12 +59,14 @@ const cachedMessagesIntervalId = setInterval(
 ); // Check every 10 mins
 
 export function clearCachedMessagesInterval() {
-	clearInterval(cachedMessagesIntervalId);
+	window.clearInterval(cachedMessagesIntervalId);
 }
 
 /** Minimal shape of a GramJS message media object that exposes document/photo IDs */
 interface MediaWithId {
+	/* eslint-disable obsidianmd/prefer-active-doc -- 'document' is a GramJS media property name, not the DOM global */
 	document?: { id?: bigint };
+	/* eslint-enable obsidianmd/prefer-active-doc */
 	photo?: { id?: bigint };
 }
 

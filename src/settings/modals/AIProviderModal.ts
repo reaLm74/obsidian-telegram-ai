@@ -36,7 +36,7 @@ export class AIProviderModal extends Modal {
 			.setDesc("Choose which service to use")
 			.addDropdown((dropdown) => {
 				dropdown
-					.addOption("openai", "Openai (chatgpt)")
+					.addOption("openai", "OpenAI")
 					.setValue(this.plugin.settings.aiProvider || "openai")
 					.onChange((value) => {
 						void (async () => {
@@ -81,7 +81,7 @@ export class AIProviderModal extends Modal {
 
 	private addOpenAISettings(container: HTMLElement) {
 		new Setting(container)
-			.setName("Openai key")
+			.setName("OpenAI key")
 			.setDesc("Your key for the service")
 			.addText((text) => {
 				text.setPlaceholder("Sk-...")
@@ -119,7 +119,7 @@ export class AIProviderModal extends Modal {
 							}
 
 							// Reset button after 3 seconds
-							setTimeout(() => {
+							window.setTimeout(() => {
 								button.setButtonText("Test key");
 								button.setTooltip("Test API key validity");
 								button.setDisabled(false);

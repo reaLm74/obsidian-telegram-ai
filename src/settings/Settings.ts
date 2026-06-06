@@ -193,7 +193,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 export class TelegramSyncSettingTab extends PluginSettingTab {
 	plugin: TelegramSyncPlugin;
 	refreshValues: RefreshValues;
-	refreshIntervalId: NodeJS.Timer;
+	refreshIntervalId: number;
 
 	constructor(app: App, plugin: TelegramSyncPlugin) {
 		super(app, plugin);
@@ -228,8 +228,8 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 	}
 
 	setRefreshInterval() {
-		clearInterval(this.refreshIntervalId);
-		this.refreshIntervalId = setInterval(() => {
+		window.clearInterval(this.refreshIntervalId);
+		this.refreshIntervalId = window.setInterval(() => {
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.refresh);
 		}, _1sec);
@@ -260,7 +260,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 	hide() {
 		super.hide();
-		clearInterval(this.refreshIntervalId);
+		window.clearInterval(this.refreshIntervalId);
 	}
 
 	addSettingsHeader() {
@@ -308,7 +308,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				});
 			});
 		// add link to botFather
-		const botFatherLink = document.createElement("div");
+		const botFatherLink = activeDocument.createElement("div");
 		botFatherLink.textContent = "To create a new bot click on -> ";
 		botFatherLink.createEl("a", {
 			href: "https://t.me/botfather",
@@ -606,7 +606,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			// Update the progress bar during the delay
 			let stage = 0;
 			for (let i = 1; i <= 10; i++) {
-				await new Promise((resolve) => setTimeout(resolve, 50)); // 50 ms delay between updates
+				await new Promise((resolve) => window.setTimeout(resolve, 50)); // 50 ms delay between updates
 				stage = await updateProgressBar(bot, msg, progressBarMessage, 10, i, stage);
 			}
 			await bot.deleteMessage(msg.chat.id, msg.message_id);

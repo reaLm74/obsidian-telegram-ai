@@ -56,11 +56,11 @@ interface TelegramFileObject {
 
 const mediaGroups: MediaGroup[] = [];
 
-let handleMediaGroupIntervalId: NodeJS.Timer | undefined;
+let handleMediaGroupIntervalId: number | undefined;
 
 export function clearHandleMediaGroupInterval() {
 	if (handleMediaGroupIntervalId) {
-		clearInterval(handleMediaGroupIntervalId);
+		window.clearInterval(handleMediaGroupIntervalId);
 		handleMediaGroupIntervalId = undefined;
 
 		// Clean up incomplete media groups on stop
@@ -889,7 +889,7 @@ export async function handleFiles(
 	if (msg.media_group_id) {
 		// Start interval for media group processing if not already started
 		if (!handleMediaGroupIntervalId) {
-			handleMediaGroupIntervalId = setInterval(
+			handleMediaGroupIntervalId = window.setInterval(
 				() => {
 					void enqueue(handleMediaGroup, plugin, distributionRule);
 				},

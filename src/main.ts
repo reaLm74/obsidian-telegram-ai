@@ -55,13 +55,13 @@ export default class TelegramSyncPlugin extends Plugin {
 	createdFilePaths: string[] = [];
 	currentDeviceId = machineIdSync(true);
 	lastPollingErrors: string[] = [];
-	restartingIntervalId?: NodeJS.Timer;
+	restartingIntervalId?: number;
 	restartingIntervalTime = _15sec;
 	messagesLeftCnt = 0;
 	connectionStatusIndicator? = new ConnectionStatusIndicator(this);
 	status: PluginStatus = "loading";
 	time4processOldMessages = false;
-	processOldMessagesIntervalId?: NodeJS.Timer;
+	processOldMessagesIntervalId?: number;
 	pinCode?: string = undefined;
 
 	async initTelegram(initType?: Client.SessionType) {
@@ -97,8 +97,8 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	setRestartTelegramInterval(newRestartingIntervalTime: number, sessionType?: Client.SessionType) {
 		this.restartingIntervalTime = newRestartingIntervalTime;
-		clearInterval(this.restartingIntervalId);
-		this.restartingIntervalId = setInterval(() => {
+		window.clearInterval(this.restartingIntervalId);
+		this.restartingIntervalId = window.setInterval(() => {
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.restartTelegram, sessionType);
 		}, this.restartingIntervalTime);
@@ -106,7 +106,7 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	setProcessOldMessagesInterval() {
 		this.clearProcessOldMessagesInterval();
-		this.processOldMessagesIntervalId = setInterval(() => {
+		this.processOldMessagesIntervalId = window.setInterval(() => {
 			this.time4processOldMessages = true;
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.processOldMessages);
@@ -114,7 +114,7 @@ export default class TelegramSyncPlugin extends Plugin {
 	}
 
 	clearProcessOldMessagesInterval() {
-		clearInterval(this.processOldMessagesIntervalId);
+		window.clearInterval(this.processOldMessagesIntervalId);
 		this.processOldMessagesIntervalId = undefined;
 		this.time4processOldMessages = false;
 	}
@@ -174,7 +174,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		this.checkingUserConnection = false;
 		this.clearProcessOldMessagesInterval();
 		if (this.restartingIntervalId) {
-			clearInterval(this.restartingIntervalId);
+			window.clearInterval(this.restartingIntervalId);
 			this.restartingIntervalId = undefined;
 		}
 		await Bot.disconnect(this);

@@ -11,7 +11,8 @@
 		"test": "node esbuild.config.mjs test && npm run post-build && node install-plugin.mjs",
 		"release-notes-check": "node release-notes.mjs check",
 		"build": "tsc -noEmit -skipLibCheck && npm run lint && node esbuild.config.mjs production && npm run post-build",
-		"post-build": "node post-build.mjs"
+		"post-build": "node post-build.mjs",
+		"prepare": "husky"
 	},
 	"keywords": [
 		"Telegram",
@@ -37,9 +38,10 @@
 		"esbuild": "0.17.3",
 		"eslint": "^9.39.4",
 		"eslint-config-prettier": "latest",
-		"eslint-plugin-obsidianmd": "^0.1.9",
+		"eslint-plugin-obsidianmd": "^0.3.0",
 		"eslint-plugin-prettier": "latest",
 		"globals": "^17.4.0",
+		"husky": "^9.1.7",
 		"obsidian": "latest",
 		"prettier": "latest",
 		"release-please": "^16.14.0",

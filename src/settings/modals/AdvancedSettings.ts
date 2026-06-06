@@ -101,7 +101,7 @@ export class AdvancedSettingsModal extends Modal {
 		if (this.plugin.settings.processedMessageAction === "EMOJI") {
 			new Setting(this.advancedSettingsDiv)
 				.setName("Emoji for processed messages")
-				.setDesc("Emoji to react with when message is processed")
+				.setDesc("Choose the emoji reaction for processed messages")
 				.addDropdown((dropdown) => {
 					dropdown
 						.addOption("✅", "Check mark")
