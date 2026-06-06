@@ -373,7 +373,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		}
 
 		// add link to authorized user features
-		userSettings.descEl.createEl("span", {
+		userSettings.descEl.createSpan({
 			text: "Additional features available with user authorization",
 		});
 	}

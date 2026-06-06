@@ -42,7 +42,7 @@ export class MessageDistributionRulesModal extends Modal {
 		this.contentEl.empty();
 		this.messageDistributionRulesDiv = this.contentEl.createDiv();
 		this.titleEl.setText(`${this.editing ? "Editing" : "Adding"} message distribution rule`);
-		new Setting(this.messageDistributionRulesDiv).descEl.createEl("span", {
+		new Setting(this.messageDistributionRulesDiv).descEl.createSpan({
 			text: "Template variables documentation is available in the plugin docs",
 		});
 	}
