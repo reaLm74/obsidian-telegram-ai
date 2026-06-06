@@ -1,6 +1,6 @@
 {
 	"name": "telegram-ai",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"description": "AI-powered Telegram sync with smart categorization, media grouping, and local document processing.",
 	"main": "main.js",
 	"scripts": {
@@ -41,7 +41,7 @@
 		"eslint-plugin-prettier": "latest",
 		"globals": "^17.4.0",
 		"husky": "^9.1.7",
-		"obsidian": "latest",
+		"obsidian": "^1.13.0",
 		"prettier": "latest",
 		"release-please": "^16.14.0",
 		"tslib": "2.4.0",
@@ -54,12 +54,23 @@
 		"big-integer": "^1.6.52",
 		"compare-versions": "^6.1.0",
 		"linkify-it": "^4.0.1",
-		"mammoth": "^1.11.0",
+		"mammoth": "^1.12.0",
 		"mime-types": "^2.1.35",
 		"node-machine-id": "^1.1.12",
-		"node-telegram-bot-api": "^0.66.0",
+		"node-telegram-bot-api": "^0.67.0",
 		"pdf-parse": "^2.4.5",
 		"qrcode": "^1.5.3",
-		"telegram": "^2.25.11"
+		"telegram": "^2.26.22"
+	},
+	"overrides": {
+		"qs": "^6.13.0",
+		"uuid": "^11.1.1",
+		"lodash": "^4.17.21",
+		"@xmldom/xmldom": "^0.9.5",
+		"tough-cookie": "^5.1.2",
+		"form-data": "^4.0.1",
+		"ip": "^2.0.1",
+		"es5-ext": "^0.10.64",
+		"underscore": "^1.13.7"
 	}
 }
