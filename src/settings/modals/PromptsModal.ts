@@ -161,6 +161,33 @@ export class PromptsModal extends Modal {
 			},
 		);
 
+		// --- Web Links ---
+		new Setting(contentEl)
+			.setName("Web links")
+			.setDesc("Processing for web links sent in messages (via r.jina.ai)")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.aiProcessLinks).onChange((value) => {
+					void (async () => {
+						this.plugin.settings.aiProcessLinks = value;
+						await this.plugin.saveSettings();
+						this.onUpdate();
+					})();
+				});
+			});
+
+		this.createFullWidthTextArea(
+			contentEl,
+			this.plugin.settings.aiPromptLink,
+			"Read the article and provide a brief summary...",
+			(value) => {
+				void (async () => {
+					this.plugin.settings.aiPromptLink = value;
+					await this.plugin.saveSettings();
+					this.onUpdate();
+				})();
+			},
+		);
+
 		// OK Button
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 

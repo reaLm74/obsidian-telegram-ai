@@ -371,6 +371,8 @@ export function getPromptForContentType(plugin: TelegramSyncPlugin, contentType:
 			return plugin.settings.aiPromptPhoto || "";
 		case "document":
 			return plugin.settings.aiPromptDocument || "";
+		case "url":
+			return plugin.settings.aiPromptLink || "";
 		default:
 			return "";
 	}

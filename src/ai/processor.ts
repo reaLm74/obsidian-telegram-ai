@@ -86,6 +86,8 @@ function isContentTypeProcessingEnabled(plugin: TelegramSyncPlugin, contentType:
 			return plugin.settings.aiProcessAudio;
 		case "document":
 			return plugin.settings.aiProcessDocument;
+		case "url":
+			return plugin.settings.aiProcessLinks;
 		default:
 			return false;
 	}
@@ -144,6 +146,7 @@ function getDefaultPromptForContentType(contentType: string): string {
 		video: "Describe the content of this video and its key moments.",
 		audio: "Transcribe and structure the content of this audio recording.",
 		document: "Analyze and structure the content of this document.",
+		url: "Read the website content and provide a brief, structured summary of the main points.",
 	};
 
 	return defaultPrompts[contentType] || "Process and structure this content in a clear format.";
