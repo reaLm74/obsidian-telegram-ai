@@ -56,11 +56,11 @@ interface TelegramFileObject {
 
 const mediaGroups: MediaGroup[] = [];
 
-let handleMediaGroupIntervalId: NodeJS.Timer | undefined;
+let handleMediaGroupIntervalId: number | undefined;
 
 export function clearHandleMediaGroupInterval() {
 	if (handleMediaGroupIntervalId) {
-		clearInterval(handleMediaGroupIntervalId);
+		window.clearInterval(handleMediaGroupIntervalId);
 		handleMediaGroupIntervalId = undefined;
 
 		// Clean up incomplete media groups on stop
@@ -214,11 +214,11 @@ export async function handleMessageText(
 	msg: TelegramBot.Message,
 	distributionRule: MessageDistributionRule,
 ) {
-	// Check if message contains only URL(s) - skip AI processing in this case
+	// Check if message contains only URL(s)
 	const isOnlyUrl = isTextOnlyUrl(msg);
 
-	// Links category: one note per domain, append links to Notes.md
-	if (isOnlyUrl && plugin.settings.linksCategoryEnabled) {
+	// Links category: one note per domain, append links to Notes.md (only if ai web browsing is off)
+	if (isOnlyUrl && !plugin.settings.aiProcessLinks) {
 		const urls = getUrls(msg);
 		const validLinks = urls
 			.map((url) => ({ url, domain: getDomainFromUrl(url) }))
@@ -252,26 +252,70 @@ export async function handleMessageText(
 		isOnlyUrl,
 	);
 
-	// AI processing for text messages (skip if message contains only URLs)
-	if (plugin.settings.aiEnabled && !isOnlyUrl) {
-		const contentType = getMessageContentType(msg);
+	// Fetch web content if URL processing is enabled and message contains URLs
+	let webContext = "";
+	const urls = getUrls(msg);
+	if (plugin.settings.aiEnabled && plugin.settings.aiProcessLinks && urls.length > 0) {
+		const { fetchWebpageAsMarkdown } = await import("src/utils/webScraper");
+		displayAndLog(plugin, `Downloading content from ${urls.length} URLs for AI processing...`, 0);
+		for (const url of urls) {
+			try {
+				const mdContent = await fetchWebpageAsMarkdown(url);
+				// Truncate to avoid exploding context windows
+				const limit = 40000;
+				const sliced = mdContent.length > limit ? mdContent.substring(0, limit) + "...(truncated)" : mdContent;
+				webContext += `\n\n--- Web content from ${url} ---\n${sliced}\n--- End of content ---\n`;
+			} catch (e) {
+				const msgError = e instanceof Error ? e.message : String(e);
+				displayAndLog(plugin, `Failed to load ${url}: ${msgError}`, 0);
+				webContext += `\n\n--- Failed to load content from ${url} ---\n`;
+			}
+		}
+	}
+
+	// AI processing for text messages or URLs
+	if (plugin.settings.aiEnabled && (!isOnlyUrl || plugin.settings.aiProcessLinks)) {
+		let contentType = getMessageContentType(msg);
+		if (urls.length > 0 && plugin.settings.aiProcessLinks) {
+			contentType = "url";
+		}
 
 		displayAndLog(plugin, `Processing message with AI (type: ${contentType})...`, 0);
 
-		const aiProcessedContent = await processWithAI(plugin, formattedContent, contentType, msg);
+		// Combine template text with fetched web content
+		const contentToProcess = webContext ? `${formattedContent}\n${webContext}` : formattedContent;
+		const aiProcessedContent = await processWithAI(plugin, contentToProcess, contentType, msg);
 
 		if (aiProcessedContent) {
 			formattedContent = aiProcessedContent;
+			// Guarantee original links are included in the new markup
+			if (webContext) {
+				formattedContent += "\n\n**Source URL(s):**\n" + urls.map((u) => `- [Link](${u})`).join("\n");
+			}
 			displayAndLog(plugin, "Message successfully processed by AI", 0);
 		}
-	} else if (isOnlyUrl) {
+	} else if (isOnlyUrl && !plugin.settings.aiProcessLinks) {
 		displayAndLog(plugin, "Message contains only URL(s), skipping AI processing", 0);
 	}
 
-	let notePath = await applyNotePathTemplate(plugin, distributionRule.notePathTemplate, msg, isOnlyUrl);
+	const skipAIVariables = isOnlyUrl && !plugin.settings.aiProcessLinks;
+	let notePath = await applyNotePathTemplate(
+		plugin,
+		distributionRule.notePathTemplate,
+		msg,
+		skipAIVariables,
+		webContext,
+	);
 
 	// Apply categorization
-	const categorization = await applyCategorization(plugin, formattedContent, msg, notePath, distributionRule);
+	const categorization = await applyCategorization(
+		plugin,
+		formattedContent,
+		msg,
+		notePath,
+		distributionRule,
+		webContext,
+	);
 
 	notePath = categorization.finalNotePath;
 	formattedContent = categorization.finalContent;
@@ -549,9 +593,13 @@ async function applyCategorization(
 
 		// If no forced category, determine automatically
 		if (!category) {
-			// For messages containing only URL(s), use default category directly
+			// For messages containing only URL(s), use default category directly if AI processing is off
 			const isOnlyUrl = isTextOnlyUrl(msg);
-			if (isOnlyUrl && plugin.settings.defaultCategoryId) {
+			if (
+				isOnlyUrl &&
+				(!plugin.settings.aiEnabled || !plugin.settings.aiProcessLinks) &&
+				plugin.settings.defaultCategoryId
+			) {
 				category = plugin.categoryManager.getCategory(plugin.settings.defaultCategoryId) || null;
 				displayAndLog(plugin, "Using default category for URL-only message", 0);
 			} else {
@@ -576,12 +624,13 @@ async function applyCategorization(
 			!distributionRule?.overrideCategoryFolders
 		) {
 			const isOnlyUrl = isTextOnlyUrl(msg);
+			const skipAIVariables = isOnlyUrl && !plugin.settings.aiProcessLinks;
 			finalNotePath = await applyCategoryNotePathTemplate(
 				plugin,
 				category.notePathTemplate,
 				category,
 				msg,
-				isOnlyUrl,
+				skipAIVariables,
 				extractedFileContent,
 			);
 
@@ -811,7 +860,7 @@ export async function handleFiles(
 			unixTime2Date(msg.date, msg.message_id),
 			fileExtension,
 		);
-		await plugin.app.vault.createBinary(filePath, fileByteArray.buffer.slice(0) as ArrayBuffer);
+		await plugin.app.vault.createBinary(filePath, new Uint8Array(fileByteArray).buffer);
 	} catch (e: unknown) {
 		const prevError = error as Error | undefined;
 		if (prevError) prevError.message = prevError.message + " | " + String(e);
@@ -840,7 +889,7 @@ export async function handleFiles(
 	if (msg.media_group_id) {
 		// Start interval for media group processing if not already started
 		if (!handleMediaGroupIntervalId) {
-			handleMediaGroupIntervalId = setInterval(
+			handleMediaGroupIntervalId = window.setInterval(
 				() => {
 					void enqueue(handleMediaGroup, plugin, distributionRule);
 				},

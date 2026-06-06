@@ -92,6 +92,7 @@ export interface TelegramSyncSettings {
 	aiPromptDocument: string;
 	aiPromptAudioVideo: string;
 	aiPromptGeneral: string; // General prompt for note formatting
+	aiPromptLink: string;
 	// Settings for enabling/disabling file type processing
 	aiProcessText: boolean;
 	aiProcessVoice: boolean;
@@ -99,13 +100,13 @@ export interface TelegramSyncSettings {
 	aiProcessVideo: boolean;
 	aiProcessAudio: boolean;
 	aiProcessDocument: boolean;
+	aiProcessLinks: boolean;
 	// Local text extraction from documents
 	enableLocalDocumentExtraction: boolean;
 	categoriesEnabled: boolean;
 	noteCategories: NoteCategory[];
 	categorizationRules: CategorizationRule[];
 	defaultCategoryId?: string;
-	linksCategoryEnabled: boolean;
 	linksCategoryFolder: string;
 	aiCategorizationEnabled: boolean;
 	categoryTagsEnabled: boolean;
@@ -164,6 +165,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	aiPromptAudioVideo: "",
 	aiPromptGeneral:
 		"Format the information as a beautiful note in Markdown format. Use headings, lists, and highlights for better readability.",
+	aiPromptLink: "Read the article/website and provide a brief, structured summary of the main points.",
 	// By default, processing of all content types is enabled
 	aiProcessText: true,
 	aiProcessVoice: true,
@@ -171,12 +173,12 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	aiProcessVideo: true,
 	aiProcessAudio: true,
 	aiProcessDocument: true,
+	aiProcessLinks: false,
 	enableLocalDocumentExtraction: true,
 	categoriesEnabled: false,
 	noteCategories: [],
 	categorizationRules: [],
 	defaultCategoryId: undefined,
-	linksCategoryEnabled: false,
 	linksCategoryFolder: "Links",
 	aiCategorizationEnabled: false,
 	categoryTagsEnabled: true,
@@ -191,7 +193,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 export class TelegramSyncSettingTab extends PluginSettingTab {
 	plugin: TelegramSyncPlugin;
 	refreshValues: RefreshValues;
-	refreshIntervalId: NodeJS.Timer;
+	refreshIntervalId: number;
 
 	constructor(app: App, plugin: TelegramSyncPlugin) {
 		super(app, plugin);
@@ -226,8 +228,8 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 	}
 
 	setRefreshInterval() {
-		clearInterval(this.refreshIntervalId);
-		this.refreshIntervalId = setInterval(() => {
+		window.clearInterval(this.refreshIntervalId);
+		this.refreshIntervalId = window.setInterval(() => {
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
 			void enqueue(this, this.refresh);
 		}, _1sec);
@@ -258,7 +260,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 	hide() {
 		super.hide();
-		clearInterval(this.refreshIntervalId);
+		window.clearInterval(this.refreshIntervalId);
 	}
 
 	addSettingsHeader() {
@@ -306,7 +308,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				});
 			});
 		// add link to botFather
-		const botFatherLink = document.createElement("div");
+		const botFatherLink = activeDocument.createElement("div");
 		botFatherLink.textContent = "To create a new bot click on -> ";
 		botFatherLink.createEl("a", {
 			href: "https://t.me/botfather",
@@ -604,7 +606,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			// Update the progress bar during the delay
 			let stage = 0;
 			for (let i = 1; i <= 10; i++) {
-				await new Promise((resolve) => setTimeout(resolve, 50)); // 50 ms delay between updates
+				await new Promise((resolve) => window.setTimeout(resolve, 50)); // 50 ms delay between updates
 				stage = await updateProgressBar(bot, msg, progressBarMessage, 10, i, stage);
 			}
 			await bot.deleteMessage(msg.chat.id, msg.message_id);
@@ -629,39 +631,23 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				}),
 			);
 
-		// Links category (URL-only messages, works independently)
+		// Links folder (URL-only messages)
 		new Setting(this.containerEl)
-			.setName("Links category")
+			.setName("Links folder")
 			.setDesc(
-				"Store URL-only messages in domain files (e.g. Links/github.md). " +
-					"Replaces default category for links.",
+				"Base folder for URL-only messages when AI web links processing is disabled (path: folder/domain.md)",
 			)
-			.addToggle((toggle) =>
-				toggle.setValue(this.plugin.settings.linksCategoryEnabled).onChange((value) => {
-					void (async () => {
-						this.plugin.settings.linksCategoryEnabled = value;
-						await this.plugin.saveSettings();
-						this.display();
-					})();
-				}),
+			.addText((text) =>
+				text
+					.setPlaceholder("Links")
+					.setValue(this.plugin.settings.linksCategoryFolder)
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.linksCategoryFolder = value.trim() || "Links";
+							await this.plugin.saveSettings();
+						})();
+					}),
 			);
-
-		if (this.plugin.settings.linksCategoryEnabled) {
-			new Setting(this.containerEl)
-				.setName("Links folder")
-				.setDesc("Base folder for links (path: folder/domain.md)")
-				.addText((text) =>
-					text
-						.setPlaceholder("Links")
-						.setValue(this.plugin.settings.linksCategoryFolder)
-						.onChange((value) => {
-							void (async () => {
-								this.plugin.settings.linksCategoryFolder = value.trim() || "Links";
-								await this.plugin.saveSettings();
-							})();
-						}),
-				);
-		}
 
 		if (!this.plugin.settings.categoriesEnabled) {
 			return;

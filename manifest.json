@@ -2,7 +2,7 @@
 	"id": "telegram-ai",
 	"name": "Telegram AI",
 	"version": "0.1.5",
-	"minAppVersion": "1.0.0",
+	"minAppVersion": "1.8.7",
 	"description": "AI-powered Telegram sync with smart categorization, media grouping, and local document processing.",
 	"author": "Evgeniy Berezovskiy",
 	"authorUrl": "https://github.com/reaLm74",

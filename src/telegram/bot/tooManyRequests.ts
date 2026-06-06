@@ -2,12 +2,12 @@ import { _5sec } from "src/utils/logUtils";
 
 export let isTooManyRequests = false;
 // reset isTooManyRequests
-const tooManyRequestsIntervalId = setInterval(() => {
+const tooManyRequestsIntervalId = window.setInterval(() => {
 	isTooManyRequests = false;
 }, _5sec);
 
 export function clearTooManyRequestsInterval() {
-	clearInterval(tooManyRequestsIntervalId);
+	window.clearInterval(tooManyRequestsIntervalId);
 }
 
 // error is typed as unknown because it comes from a generic catch block

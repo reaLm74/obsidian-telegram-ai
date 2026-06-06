@@ -34,7 +34,7 @@ let cachedMessagesRequests: MessagesRequests[] = [];
 const cachedUserCouples: UserCouple[] = [];
 
 // clean every 10 minutes message request and couples if needed
-const cachedMessagesIntervalId = setInterval(
+const cachedMessagesIntervalId = window.setInterval(
 	() => {
 		const now = new Date().getTime();
 
@@ -59,20 +59,19 @@ const cachedMessagesIntervalId = setInterval(
 ); // Check every 10 mins
 
 export function clearCachedMessagesInterval() {
-	clearInterval(cachedMessagesIntervalId);
+	window.clearInterval(cachedMessagesIntervalId);
 }
 
 /** Minimal shape of a GramJS message media object that exposes document/photo IDs */
-interface MediaWithId {
-	document?: { id?: bigint };
-	photo?: { id?: bigint };
-}
+type MediaIdHolder = { id?: bigint };
 
 function getMediaId(media: unknown): bigint | undefined {
 	if (!media) return undefined;
-	const m = media as MediaWithId;
-	if (m.document && m.document.id) return m.document.id;
-	if (m.photo && m.photo.id) return m.photo.id;
+	const m = media as Record<string, MediaIdHolder | undefined>;
+	const doc = m["document"];
+	if (doc?.id) return doc.id;
+	const photo = m["photo"];
+	if (photo?.id) return photo.id;
 	return undefined;
 }
 

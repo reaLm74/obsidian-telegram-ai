@@ -197,14 +197,14 @@ function setSettingStyles(setting: Setting) {
 	setting.controlEl.addClass("w-45pc");
 	const el = setting.controlEl.firstElementChild;
 	if (!el) return;
-	if (el instanceof HTMLTextAreaElement) {
+	if (el.instanceOf(HTMLTextAreaElement)) {
 		el.addClass("h-4_5em", "w-full");
 	}
-	if (el instanceof HTMLInputElement) {
+	if (el.instanceOf(HTMLInputElement)) {
 		el.addClass("w-full");
 	}
 
-	if (el instanceof HTMLDivElement && el.className == "search-input-container") {
+	if (el.instanceOf(HTMLDivElement) && el.className == "search-input-container") {
 		el.addClass("w-full");
 	}
 }

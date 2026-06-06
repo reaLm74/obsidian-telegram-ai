@@ -143,7 +143,7 @@ export async function replaceMainJs(vault: Vault, mainJs: Buffer | "main-prod.js
 	const mainProdJsPath = normalizePath(vault.configDir + "/plugins/telegram-sync/main-prod.js");
 	if (mainJs instanceof Buffer) {
 		await vault.adapter.writeBinary(mainProdJsPath, await vault.adapter.readBinary(mainJsPath));
-		const arrayBuf = mainJs.buffer.slice(mainJs.byteOffset, mainJs.byteOffset + mainJs.byteLength) as ArrayBuffer;
+		const arrayBuf = new Uint8Array(mainJs.subarray(0)).buffer;
 		await vault.adapter.writeBinary(mainJsPath, arrayBuf);
 	} else {
 		if (!(await vault.adapter.exists(mainProdJsPath))) return;

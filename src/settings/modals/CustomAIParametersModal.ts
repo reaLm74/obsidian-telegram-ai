@@ -80,7 +80,7 @@ export class CustomAIParametersModal extends Modal {
 			textarea.addClass("ai-textarea");
 
 			// Set initial height after small delay
-			setTimeout(() => {
+			window.setTimeout(() => {
 				textarea.setCssProps({ height: "auto" });
 				const newHeight = Math.max(100, textarea.scrollHeight + 10);
 				textarea.setCssProps({ height: `${newHeight}px` });
