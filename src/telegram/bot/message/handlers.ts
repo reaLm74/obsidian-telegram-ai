@@ -229,9 +229,8 @@ export async function handleMessageText(
 			for (const { url, domain } of validLinks) {
 				const notePath = `${baseFolder}/${sanitizeFilePath(domain)}.md`;
 				const noteFile = plugin.app.vault.getAbstractFileByPath(notePath);
-				const linkItem = `- [${domain}](${url})`;
-				const linkContent = noteFile instanceof TFile ? linkItem : linkItem;
-				const linkDelimiter = noteFile instanceof TFile ? delimiter : "";
+				const linkContent = `- [${domain}](${url})`;
+				const linkDelimiter = noteFile ? delimiter : "";
 
 				void createFolderIfNotExist(plugin.app.vault, path.dirname(notePath));
 

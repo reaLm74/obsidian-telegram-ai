@@ -32,7 +32,7 @@ export class BotSettingsModal extends Modal {
 		const limBlocks = activeDocument.createElement("div");
 		limBlocks.addClass("ml-10");
 		limBlocks.setText("Use a proxy to bypass blocks in some countries and limited corporate networks ");
-		limBlocks.createEl("span", {
+		limBlocks.createSpan({
 			text: "([proxy configuration examples],",
 		});
 		limBlocks.createEl("a", {
@@ -155,7 +155,7 @@ export class BotSettingsModal extends Modal {
 					})();
 				});
 			});
-		botTokenSetting.descEl.createEl("span", {
+		botTokenSetting.descEl.createSpan({
 			text: "Bot token encryption provides additional security",
 		});
 	}

@@ -23,7 +23,7 @@ export class CustomAIParametersModal extends Modal {
 
 		// Show hint about title parameter
 		const hintEl = contentEl.createDiv({ cls: "custom-parameters-hint setting-item-description" });
-		hintEl.createEl("span", { text: "💡 " });
+		hintEl.createSpan({ text: "💡 " });
 		hintEl.createEl("strong", { text: "Tip:" });
 		hintEl.appendText(" The ");
 		hintEl.createEl("code", { text: "Title" });
@@ -64,7 +64,7 @@ export class CustomAIParametersModal extends Modal {
 			const paramContainer = parametersContainer.createDiv({ cls: "setting-item" });
 
 			const paramHeader = paramContainer.createDiv({ cls: "setting-item-info" });
-			paramHeader.createEl("div", { text: `{{ai:${paramName}}}`, cls: "setting-item-name" });
+			paramHeader.createDiv({ text: `{{ai:${paramName}}}`, cls: "setting-item-name" });
 
 			const paramContent = paramContainer.createDiv({ cls: "setting-item-control" });
 
