@@ -70,8 +70,8 @@
 	margin-left: 10px;
 }
 
-.error-border {
-	border: 2px solid var(--text-error) !important;
+.error-border.error-border {
+	border: 2px solid var(--text-error);
 }
 
 .custom-parameters-hint {
@@ -194,8 +194,8 @@
 	border: 2px solid var(--text-error);
 }
 
-.ai-modal-on-top {
-	z-index: 1000 !important;
+.modal.ai-modal-on-top {
+	z-index: 1000;
 }
 
 .ai-w-full {

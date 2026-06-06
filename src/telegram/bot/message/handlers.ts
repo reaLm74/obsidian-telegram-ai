@@ -860,7 +860,7 @@ export async function handleFiles(
 			unixTime2Date(msg.date, msg.message_id),
 			fileExtension,
 		);
-		await plugin.app.vault.createBinary(filePath, fileByteArray.buffer.slice(0) as ArrayBuffer);
+		await plugin.app.vault.createBinary(filePath, new Uint8Array(fileByteArray).buffer);
 	} catch (e: unknown) {
 		const prevError = error as Error | undefined;
 		if (prevError) prevError.message = prevError.message + " | " + String(e);

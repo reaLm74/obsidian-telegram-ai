@@ -63,18 +63,15 @@ export function clearCachedMessagesInterval() {
 }
 
 /** Minimal shape of a GramJS message media object that exposes document/photo IDs */
-interface MediaWithId {
-	/* eslint-disable obsidianmd/prefer-active-doc -- 'document' is a GramJS media property name, not the DOM global */
-	document?: { id?: bigint };
-	/* eslint-enable obsidianmd/prefer-active-doc */
-	photo?: { id?: bigint };
-}
+type MediaIdHolder = { id?: bigint };
 
 function getMediaId(media: unknown): bigint | undefined {
 	if (!media) return undefined;
-	const m = media as MediaWithId;
-	if (m.document && m.document.id) return m.document.id;
-	if (m.photo && m.photo.id) return m.photo.id;
+	const m = media as Record<string, MediaIdHolder | undefined>;
+	const doc = m["document"];
+	if (doc?.id) return doc.id;
+	const photo = m["photo"];
+	if (photo?.id) return photo.id;
 	return undefined;
 }
 
