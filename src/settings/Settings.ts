@@ -1,5 +1,5 @@
 import TelegramSyncPlugin from "src/main";
-import { App, ButtonComponent, PluginSettingTab, Setting, TextComponent } from "obsidian";
+import { App, ButtonComponent, PluginSettingTab, Setting, SettingDefinitionItem, TextComponent } from "obsidian";
 import TelegramBot from "node-telegram-bot-api";
 import { createProgressBar, updateProgressBar, deleteProgressBar, ProgressBarType } from "src/telegram/bot/progressBar";
 import * as Client from "src/telegram/user/client";
@@ -216,7 +216,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		) {
 			try {
 				if (!this.refreshValues) this.refreshValues = {};
-				else this.display();
+				else this.update();
 			} finally {
 				this.refreshValues.botConnected = botConnected;
 				this.refreshValues.userConnected = userConnected;
@@ -235,6 +235,87 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		}, _1sec);
 	}
 
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		this.setRefreshInterval();
+		return [
+			{
+				name: "Telegram artificial intelligence",
+				render: (setting) => {
+					this.addSettingsHeader();
+					setting.settingEl.remove();
+				},
+			},
+			{
+				name: "Bot (required)",
+				render: (setting) => {
+					setting.settingEl.remove();
+					this.addBot();
+				},
+			},
+			{
+				name: "User (optional)",
+				render: (setting) => {
+					setting.settingEl.remove();
+					this.addUser();
+				},
+			},
+			{
+				name: "Process old messages",
+				render: (setting) => {
+					setting.settingEl.remove();
+					this.addProcessOldMessages();
+				},
+			},
+			{
+				name: "Advanced settings",
+				render: (setting) => {
+					setting.settingEl.remove();
+					this.addAdvancedSettings();
+				},
+			},
+			{
+				type: "group",
+				heading: "Message distribution & base categorization",
+				items: [
+					{
+						name: "Message distribution rules",
+						render: (setting) => {
+							setting.settingEl.remove();
+							this.addMessageDistributionRules();
+						},
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Artificial intelligence processing",
+				items: [
+					{
+						name: "AI settings",
+						render: (setting) => {
+							setting.settingEl.remove();
+							this.addAISettings();
+						},
+					},
+				],
+			},
+			{
+				type: "group",
+				heading: "Advanced categorization",
+				items: [
+					{
+						name: "Categories settings",
+						render: (setting) => {
+							setting.settingEl.remove();
+							this.addCategoriesSettings();
+						},
+					},
+				],
+			},
+		];
+	}
+
+	/** @deprecated Since 1.13.0 — fallback for Obsidian < 1.13.0 */
 	display(): void {
 		this.containerEl.empty();
 		this.addSettingsHeader();
@@ -252,8 +333,6 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 		new Setting(this.containerEl).setName("Advanced categorization").setHeading();
 		this.addCategoriesSettings();
-
-		// Legacy rules section is now empty - moved above
 
 		this.setRefreshInterval();
 	}
@@ -432,7 +511,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 						void (async () => {
 							arrayMove(this.plugin.settings.messageDistributionRules, index, index - 1);
 							await this.plugin.saveSettings();
-							this.display();
+							this.update();
 						})();
 					});
 			});
@@ -443,7 +522,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 						void (async () => {
 							arrayMove(this.plugin.settings.messageDistributionRules, index, index + 1);
 							await this.plugin.saveSettings();
-							this.display();
+							this.update();
 						})();
 					});
 			});
@@ -456,7 +535,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 							this.plugin.settings.messageDistributionRules[index],
 						);
 						messageDistributionRulesModal.onClose = () => {
-							if (messageDistributionRulesModal.saved) this.display();
+							if (messageDistributionRulesModal.saved) this.update();
 						};
 						messageDistributionRulesModal.open();
 					});
@@ -480,7 +559,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 								);
 							}
 							await this.plugin.saveSettings();
-							this.display();
+							this.update();
 						})();
 					});
 			});
@@ -492,7 +571,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			btn.onClick(() => {
 				const messageDistributionRulesModal = new MessageDistributionRulesModal(this.plugin);
 				messageDistributionRulesModal.onClose = () => {
-					if (messageDistributionRulesModal.saved) this.display();
+					if (messageDistributionRulesModal.saved) this.update();
 				};
 				messageDistributionRulesModal.open();
 			});
@@ -514,7 +593,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 						}
 
 						await this.plugin.saveSettings();
-						this.display();
+						this.update();
 					})();
 				});
 			});
@@ -544,7 +623,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					.setCta()
 					.onClick(() => {
 						const modal = new AIProviderModal(this.app, this.plugin, () => {
-							this.display(); // Refresh settings after changes
+							this.update(); // Refresh settings after changes
 						});
 						modal.open();
 					});
@@ -560,7 +639,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					.setCta()
 					.onClick(() => {
 						const modal = new PromptsModal(this.app, this.plugin, () => {
-							this.display(); // Refresh settings after changes
+							this.update(); // Refresh settings after changes
 						});
 						modal.open();
 					});
@@ -626,7 +705,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					void (async () => {
 						this.plugin.settings.categoriesEnabled = value;
 						await this.plugin.saveSettings();
-						this.display(); // Redraw settings
+						this.update(); // Redraw settings
 					})();
 				}),
 			);
@@ -663,7 +742,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 						void (async () => {
 							this.plugin.settings.aiCategorizationEnabled = value;
 							await this.plugin.saveSettings();
-							this.display();
+							this.update();
 						})();
 					}),
 				);
@@ -721,7 +800,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 					.setCta()
 					.onClick(() => {
 						const categoryManagerModal = new CategoryManagerModal(this.app, this.plugin, () => {
-							this.display(); // Update main settings
+							this.update(); // Update main settings
 						});
 						categoryManagerModal.open();
 					});
