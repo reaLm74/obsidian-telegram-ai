@@ -81,5 +81,10 @@ jobs:
                   npm run release-notes-check
                   npm run version
                   TAG_NAME=$(node -p "require('./package.json').version")
-                  git commit -m "chore: update version of plugin to $TAG_NAME"
-                  git push origin develop
+                  git add -A
+                  if git diff --cached --quiet; then
+                    echo "No changes to commit"
+                  else
+                    git commit -m "chore: update version of plugin to $TAG_NAME"
+                    git push origin develop
+                  fi
