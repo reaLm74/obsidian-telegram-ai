@@ -1,15 +1,15 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.1.6";
+export const releaseVersion = "0.1.7";
 export const showNewFeatures = true;
-export let showBreakingChanges = true;
+export let showBreakingChanges = false;
 
-const newFeatures = `🎉 Version 0.1.6: Stability & compatibility improvements:
-- 🌐 Fixed web link content processing
-- 🎯 Better multi-window support
-- 🛠️ General stability and performance improvements`;
+const newFeatures = `🎉 Version 0.1.7: Performance & security improvements:
+- ⚡ Reduced plugin size by removing unnecessary polyfills
+- 🔒 Improved security: eliminated dynamic script injection
+- 🛠️ General stability and compatibility fixes`;
 
-export const breakingChanges = `⚠️ Minimum Obsidian version raised to 1.13.0 (was 1.8.7).`;
+export const breakingChanges = ``;
 
 export const telegramChannelLink = "https://t.me/realm74"; // Your personal Telegram
 export const insiderFeaturesLink = "https://github.com/reaLm74/obsidian-telegram-ai";
