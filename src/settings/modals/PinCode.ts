@@ -1,8 +1,9 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
+import { t } from "src/locale/i18n";
 
 export class PinCodeModal extends Modal {
-	pinCodeDiv: HTMLDivElement;
+	pinCodeDiv!: HTMLDivElement;
 	saved = false;
 	constructor(
 		public plugin: TelegramSyncPlugin,
@@ -25,13 +26,17 @@ export class PinCodeModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.pinCodeDiv = this.contentEl.createDiv();
-		this.titleEl.setText("Telegram sync: " + (this.decrypt ? "Decrypting" : "Encrypting") + " bot token");
+		this.titleEl.setText(
+			t("modal.pinCode.title", {
+				action: this.decrypt ? t("modal.pinCode.decrypt") : t("modal.pinCode.encrypt"),
+			}),
+		);
 	}
 
 	addPinCode() {
 		new Setting(this.pinCodeDiv)
-			.setName("Pin code")
-			.setDesc("Enter your pin code. Numbers and letters only.")
+			.setName(t("settings.pinCode"))
+			.setDesc(t("settings.pinCode.desc"))
 			.addText((text) => {
 				text.setPlaceholder("Example: 1234").onChange((value: string) => {
 					if (!value) {

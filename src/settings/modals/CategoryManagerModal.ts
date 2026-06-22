@@ -2,6 +2,7 @@ import { App, Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { CategoryModal } from "./CategoryModal";
 import { CustomAIParametersModal } from "./CustomAIParametersModal";
+import { t } from "src/locale/i18n";
 
 export class CategoryManagerModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -17,15 +18,15 @@ export class CategoryManagerModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: "Category manager" });
+		contentEl.createEl("h2", { text: t("modal.categoryManager") });
 
 		// Add category button
 		new Setting(contentEl)
-			.setName("Add new category")
-			.setDesc("Create a new category for organizing notes")
+			.setName(t("settings.categories.addNew"))
+			.setDesc(t("settings.categories.add.desc"))
 			.addButton((button) => {
 				button
-					.setButtonText("Add category")
+					.setButtonText(t("settings.categories.add"))
 					.setCta()
 					.onClick(() => {
 						const categoryModal = new CategoryModal(this.app, this.plugin, undefined, () => {
@@ -39,13 +40,11 @@ export class CategoryManagerModal extends Modal {
 
 		// Custom AI Parameters for category path templates
 		new Setting(contentEl)
-			.setName("Custom AI parameters")
-			.setDesc(
-				"Create custom AI parameters for use in category note path templates ({{ai:parameter_name}}). Only works when AI categorization is enabled.",
-			)
+			.setName(t("settings.categories.customParams"))
+			.setDesc(t("settings.categories.customParams.desc"))
 			.addButton((button) => {
 				button
-					.setButtonText("Manage parameters")
+					.setButtonText(t("settings.categories.customParams.manage"))
 					.setIcon("settings")
 					.onClick(() => {
 						const modal = new CustomAIParametersModal(this.app, this.plugin);
@@ -55,7 +54,7 @@ export class CategoryManagerModal extends Modal {
 				// Show button only if AI categorization is enabled
 				if (!this.plugin.settings.aiCategorizationEnabled) {
 					button.setDisabled(true);
-					button.setTooltip("Enable AI categorization first");
+					button.setTooltip(t("settings.categories.customParams.enableFirst"));
 				}
 			});
 
@@ -72,7 +71,7 @@ export class CategoryManagerModal extends Modal {
 
 		if (this.plugin.settings.noteCategories.length === 0) {
 			categoriesContainer.createEl("p", {
-				text: "No categories yet. Create your first category!",
+				text: t("settings.categories.noCategories"),
 				cls: "setting-item-description",
 			});
 			return;
@@ -104,7 +103,7 @@ export class CategoryManagerModal extends Modal {
 
 			// Edit button
 			const editButton = controls.createEl("button", {
-				text: "Edit",
+				text: t("settings.distribution.edit"),
 				cls: "mod-muted",
 			});
 			editButton.addEventListener("click", () => {
@@ -118,19 +117,24 @@ export class CategoryManagerModal extends Modal {
 
 			// Delete button
 			const deleteButton = controls.createEl("button", {
-				text: "Delete",
+				text: t("common.delete"),
 				cls: "mod-warning",
 			});
 			deleteButton.addEventListener("click", () => {
 				const confirmModal = new Modal(this.app);
 				confirmModal.onOpen = () => {
-					confirmModal.contentEl.createEl("h3", { text: `Delete category "${category.name}"?` });
+					confirmModal.contentEl.createEl("h3", {
+						text: t("settings.categories.deleteConfirm", { name: category.name }),
+					});
 					const btnContainer = confirmModal.contentEl.createDiv({ cls: "modal-button-container" });
 
-					const cancelBtn = btnContainer.createEl("button", { text: "Cancel" });
+					const cancelBtn = btnContainer.createEl("button", { text: t("common.cancel") });
 					cancelBtn.onclick = () => confirmModal.close();
 
-					const confirmBtn = btnContainer.createEl("button", { text: "Delete", cls: "mod-warning" });
+					const confirmBtn = btnContainer.createEl("button", {
+						text: t("common.delete"),
+						cls: "mod-warning",
+					});
 					confirmBtn.onclick = () => {
 						void (async () => {
 							this.plugin.settings.noteCategories = this.plugin.settings.noteCategories.filter(
@@ -160,18 +164,18 @@ export class CategoryManagerModal extends Modal {
 			const details = categoryEl.createDiv({ cls: "category-details" });
 
 			const pathDiv = details.createDiv();
-			pathDiv.createEl("strong", { text: "Note path:" });
+			pathDiv.createEl("strong", { text: t("settings.categories.notePathLabel") });
 			pathDiv.appendText(` ${category.notePathTemplate}`);
 
 			if (category.keywords.length > 0) {
 				const keywordsDiv = details.createDiv();
-				keywordsDiv.createEl("strong", { text: "Keywords:" });
+				keywordsDiv.createEl("strong", { text: t("settings.categories.keywordsLabel") });
 				keywordsDiv.appendText(` ${category.keywords.join(", ")}`);
 			}
 
 			if (category.templatePath) {
 				const templateDiv = details.createDiv();
-				templateDiv.createEl("strong", { text: "Template:" });
+				templateDiv.createEl("strong", { text: t("settings.categories.templateLabel") });
 				templateDiv.appendText(` ${category.templatePath}`);
 			}
 		}

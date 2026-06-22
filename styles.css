@@ -42,7 +42,7 @@
 .category-item {
 	border: 1px solid var(--background-modifier-border);
 	border-radius: 4px;
-	padding: 12px;
+	padding: 16px;
 	margin-bottom: 8px;
 	background: var(--background-secondary);
 }
@@ -242,7 +242,7 @@
 
 .category-item {
 	border-bottom: 1px solid var(--background-modifier-border);
-	padding: 10px 0;
+	padding: 10px 16px;
 	margin-bottom: 10px;
 }
 
@@ -264,3 +264,202 @@
 	opacity: 0.8;
 	margin-top: 5px;
 }
+
+/* ─── Setup Wizard ───────────────────────────────────────────────────── */
+
+.setup-wizard-modal {
+	width: 520px;
+	max-width: 90vw;
+}
+
+.wizard-header h2 {
+	margin: 0 0 12px;
+}
+
+/* Step progress bar */
+.wizard-progress {
+	display: flex;
+	gap: 4px;
+	margin-bottom: 20px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.wizard-step-indicator {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: 16px;
+	font-size: 13px;
+	color: var(--text-muted);
+	background: var(--background-secondary);
+	transition: all 0.15s ease;
+}
+
+.wizard-step-indicator.active {
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	font-weight: 600;
+}
+
+.wizard-step-indicator.completed {
+	color: var(--text-success);
+	background: var(--background-modifier-success);
+}
+
+.step-number {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	font-size: 11px;
+	font-weight: 700;
+	background: var(--background-modifier-border);
+	color: var(--text-muted);
+	flex-shrink: 0;
+}
+
+.wizard-step-indicator.active .step-number {
+	background: rgba(255, 255, 255, 0.25);
+	color: var(--text-on-accent);
+}
+
+.wizard-step-indicator.completed .step-number {
+	background: var(--text-success);
+	color: var(--background-primary);
+}
+
+.step-label {
+	white-space: nowrap;
+}
+
+/* Wizard body */
+.wizard-body {
+	min-height: 180px;
+	margin-bottom: 16px;
+}
+
+.wizard-body p {
+	color: var(--text-muted);
+	margin-bottom: 12px;
+}
+
+/* Token validation */
+.wizard-validation-status {
+	margin: 8px 0 12px;
+	min-height: 20px;
+}
+
+.wizard-status-error {
+	color: var(--text-error);
+	font-size: 13px;
+}
+
+.wizard-status-pending {
+	color: var(--text-accent);
+	font-size: 13px;
+}
+
+.wizard-status-success {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-success);
+	font-size: 13px;
+}
+
+.wizard-validate-btn {
+	margin-bottom: 8px;
+}
+
+/* Folder info */
+.wizard-info {
+	background: var(--background-secondary);
+	border-radius: 6px;
+	padding: 10px 14px;
+	margin-top: 12px;
+}
+
+.wizard-info p {
+	margin: 4px 0;
+	font-size: 13px;
+	font-family: var(--font-monospace);
+	color: var(--text-muted);
+}
+
+/* AI key container */
+.wizard-ai-key-container {
+	margin-top: 8px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.wizard-external-link {
+	display: inline-block;
+	margin-top: 6px;
+	font-size: 13px;
+}
+
+/* Preset cards */
+.wizard-presets-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 10px;
+	margin-top: 12px;
+}
+
+.wizard-preset-card {
+	border: 2px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 12px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+	background: var(--background-secondary);
+}
+
+.wizard-preset-card:hover {
+	border-color: var(--interactive-accent);
+	background: var(--background-secondary-alt);
+}
+
+.wizard-preset-card.selected {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-active-hover);
+	box-shadow: 0 0 0 1px var(--interactive-accent);
+}
+
+.preset-card-header {
+	margin-bottom: 6px;
+}
+
+.preset-card-title {
+	font-weight: 600;
+	font-size: 14px;
+}
+
+.preset-card-desc {
+	font-size: 12px;
+	color: var(--text-muted);
+	margin: 0 0 8px;
+}
+
+.preset-card-features {
+	font-size: 12px;
+}
+
+.preset-feature {
+	color: var(--text-success);
+	margin: 2px 0;
+}
+
+/* Navigation */
+.wizard-navigation {
+	display: flex;
+	justify-content: space-between;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+

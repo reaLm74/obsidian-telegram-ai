@@ -2,302 +2,214 @@
 
 ## Overview
 
-Telegram AI supports a comprehensive set of template variables for dynamic file naming, content organization, and message filtering. This reference covers all available variables and their usage patterns.
-
-## Message Filter Variables
-
-### Basic Filters
-```
-{{all}} - All messages (default filter)
-{{user=VALUE}} - Messages from specific user (username, name, or ID)
-{{chat=VALUE}} - Messages from specific chat (name or ID)
-{{topic=VALUE}} - Messages from specific topic (name)
-{{forwardFrom=VALUE}} - Messages forwarded from specific source
-{{content~VALUE}} - Messages containing specific text
-{{voiceTranscript~VALUE}} - Voice messages with transcript containing text
-```
-
-### Filter Examples
-```javascript
-// Messages from group "Work Chat" in topic "Projects"
-{{chat=Work Chat}}{{topic=Projects}}
-
-// Messages containing both #urgent and #task hashtags
-{{content~#urgent}}{{content~#task}}
-
-// Messages from user "john_doe" containing "meeting"
-{{user=john_doe}}{{content~meeting}}
-
-// Forwarded messages from "Tech News" channel
-{{forwardFrom=Tech News}}
-```
-
-### Filter Logic
-- **AND Operator**: Default between conditions in same rule
-- **OR Operator**: Default between different rules
-- **Fallback**: If no filter specified, defaults to `{{all}}`
-- **Topic Updates**: Use `/topicName NAME` command if topic detection fails
+Telegram AI supports template variables for dynamic file naming, content formatting, and message routing. Variables are used in Note Path Template, File Path Template, and Note Content Template.
 
 ## Date and Time Variables
 
-### Basic Date Formats
+### Current Date/Time
 ```
-{{date:YYYY}} - Year (2026)
-{{date:MM}} - Month (01-12)
-{{date:DD}} - Day (01-31)
-{{date:HH}} - Hour (00-23)
-{{date:mm}} - Minute (00-59)
-{{date:ss}} - Second (00-59)
-```
-
-### Combined Date Formats
-```
-{{date:YYYY-MM-DD}} - Full date (2026-01-25)
-{{date:YYYY-MM}} - Year and month (2026-01)
-{{date:DD-MM-YYYY}} - European format (25-01-2026)
-{{date:MM/DD/YYYY}} - US format (01/25/2026)
-{{date:YYYY-MM-DD-HH-mm}} - Date with time (2026-01-25-14-30)
-{{date:HH-mm}} - Time only (14-30)
+{{date:YYYY}}          → 2026
+{{date:MM}}            → 06
+{{date:DD}}            → 22
+{{date:HH}}            → 14
+{{date:mm}}            → 30
+{{date:YYYY-MM-DD}}    → 2026-06-22
+{{date:YYYY-MM}}       → 2026-06
+{{date:DD-HH-mm}}      → 22-14-30
 ```
 
-### Relative Date Variables
+### Message Date/Time (when the message was sent)
 ```
-{{date:weekday}} - Day of week (Monday, Tuesday, etc.)
-{{date:month_name}} - Month name (January, February, etc.)
-{{date:quarter}} - Quarter (Q1, Q2, Q3, Q4)
-{{date:week}} - Week number (01-53)
+{{messageDate:YYYY-MM-DD}}  → 2026-06-22
+{{messageTime:HH-mm}}       → 14-30
 ```
+
+### Creation Date/Time (original date for forwarded messages)
+```
+{{creationDate:YYYY-MM-DD}} → 2026-06-20
+{{creationTime:HH-mm}}      → 09-15
+```
+
+> **Note:** All date/time variables accept [Moment.js format strings](https://momentjs.com/docs/#/displaying/format/).
 
 ## Content Variables
 
-### Text Content Extraction
+### Text Content
 ```
-{{content:10}} - First 10 characters
-{{content:50}} - First 50 characters
-{{content:100}} - First 100 characters
-{{content:first_line}} - First line only
-{{content:first_sentence}} - First complete sentence
-{{content:last_paragraph}} - Final paragraph
-```
-
-### Content Processing
-```
-{{content:clean}} - Content with special characters removed
-{{content:slug}} - URL-friendly version of content
-{{content:title_case}} - Title Case Formatting
-{{content:lower}} - lowercase content
-{{content:upper}} - UPPERCASE CONTENT
+{{content}}           → Full message text (in templates)
+{{content:30}}        → First 30 characters of content
+{{content:50}}        → First 50 characters
+{{content:[2-5]}}     → Lines 2 through 5
+{{content:[3]}}       → Single line 3
+{{content:[-2]}}      → 2nd line from end
+{{content:[3-]}}      → From line 3 to end
 ```
 
-### Content Analysis
+### Voice Transcript
 ```
-{{content:word_count}} - Number of words
-{{content:char_count}} - Number of characters
-{{content:language}} - Detected language (if available)
-{{content:hashtags}} - Extracted hashtags
-{{content:mentions}} - Extracted @mentions
-{{content:urls}} - Extracted URLs
+{{voiceTranscript}}      → Telegram Premium voice transcript
+{{voiceTranscript:50}}   → First 50 characters of transcript
 ```
 
-## Message Metadata Variables
+## User and Chat Variables
 
-### Sender Information
+### User (sender)
 ```
-{{sender:name}} - Sender's display name
-{{sender:username}} - Sender's username (without @)
-{{sender:id}} - Sender's Telegram ID
-{{sender:first_name}} - First name only
-{{sender:last_name}} - Last name only
-```
-
-### Chat Information
-```
-{{chat:title}} - Chat or channel title
-{{chat:type}} - Chat type (private, group, supergroup, channel)
-{{chat:id}} - Chat ID
-{{chat:username}} - Chat username (for public chats)
+{{user}}              → Link to the user who sent the message
+{{user:name}}         → Username (e.g. "john_doe")
+{{user:fullName}}     → Full name ("John Doe")
+{{userId}}            → Sender's numeric ID
 ```
 
-### Message Properties
+### Chat
 ```
-{{message:id}} - Unique message ID
-{{message:date}} - Message timestamp
-{{message:type}} - Message type (text, photo, document, etc.)
-{{message:size}} - File size (for media messages)
-{{message:duration}} - Duration (for audio/video)
+{{chat}}              → Link to the chat
+{{chat:name}}         → Chat name (bot name / group / channel)
+{{chatId}}            → Chat numeric ID
 ```
 
-### Forward Information
+### Topic (forum topics)
 ```
-{{forward:from_name}} - Original sender name
-{{forward:from_chat}} - Original chat name
-{{forward:date}} - Original message date
-{{forward:signature}} - Channel signature (if available)
+{{topic}}             → Link to the topic
+{{topic:name}}        → Topic name
+{{topicId}}           → Topic head message ID
 ```
 
-## AI-Generated Variables
-
-### Built-in AI Parameters
+### Forward
 ```
-{{ai:title}} - AI-generated title
-{{ai:summary}} - AI-generated summary
-{{ai:category}} - AI-determined category
-{{ai:priority}} - AI-assessed priority
-{{ai:sentiment}} - AI-detected sentiment
-{{ai:language}} - AI-detected language
+{{forwardFrom}}       → Link to the original message/channel
+{{forwardFrom:name}}  → Name of the forwarded message creator
+```
+
+## Message Variables
+
+```
+{{messageId}}         → Unique message ID
+{{replyMessageId}}    → ID of the message being replied to
+```
+
+## URL Variables
+
+```
+{{domain}}            → Domain from first URL in message (e.g. "youtube.com")
+{{url1}}              → First URL from the message
+{{url1:preview}}      → iFrame preview of first URL (height 250px)
+{{url1:preview400}}   → iFrame preview with custom height (400px)
+```
+
+## File Variables (File Path Template only)
+
+```
+{{file:name}}         → Original filename
+{{file:type}}         → File type (photo, video, document, etc.)
+{{file:extension}}    → File extension (pdf, jpg, mp4, etc.)
+```
+
+## AI Variables
+
+### Built-in
+```
+{{ai:title}}          → AI-generated title for the note
 ```
 
 ### Custom AI Parameters
-Create your own AI parameters in plugin settings:
+Define in Settings → Categories → Custom AI Parameters:
 ```
-{{ai:project}} - Custom project identification
-{{ai:topic}} - Custom topic classification
-{{ai:tags}} - Custom tag generation
-{{ai:action_items}} - Custom action item extraction
-{{ai:key_points}} - Custom key point extraction
+{{ai:your_param}}     → Value generated by AI based on your custom prompt
 ```
 
-### AI Parameter Configuration
+#### Example Custom Parameters
 ```
-Parameter Name: topic
-Prompt: "Identify the main topic of this content in 1-3 words"
-Usage: {{ai:topic}} in templates
-Result: "machine-learning" or "meeting-notes"
+Parameter: summary    → "Summarize this in one sentence"
+Usage: {{ai:summary}}
 
-Parameter Name: urgency
-Prompt: "Rate urgency as: low, medium, high, critical"
-Usage: {{ai:urgency}}-{{ai:title}}.md
-Result: "high-quarterly-review-meeting.md"
+Parameter: tags       → "Generate 3-5 relevant tags, comma-separated"
+Usage: {{ai:tags}}
 ```
 
-## File and Media Variables
+## Special Variables (Note Content Template only)
 
-### File Properties
 ```
-{{file:name}} - Original filename
-{{file:extension}} - File extension
-{{file:size}} - File size in bytes
-{{file:size_mb}} - File size in MB
-{{file:mime_type}} - MIME type
+{{files}}             → All attached files as embedded links (![...])
+{{files:links}}       → All attached files as regular links ([...])
+{{hashtag:[1]}}       → 1st hashtag from the message
+{{hashtag:[2]}}       → 2nd hashtag
 ```
 
-### Media Properties
+### Replace Variable
 ```
-{{media:width}} - Image/video width
-{{media:height}} - Image/video height
-{{media:duration}} - Audio/video duration
-{{media:format}} - Media format
-{{media:quality}} - Media quality (if available)
+{{replace:oldText=>newText}}  → Replace all occurrences in final output
+{{replace:textToRemove}}      → Remove all occurrences
 ```
 
-### Document Variables
+## Message Filter Variables (Distribution Rules)
+
 ```
-{{document:pages}} - Number of pages (PDF)
-{{document:words}} - Word count (extracted text)
-{{document:language}} - Document language
-{{document:title}} - Document title (if available)
-{{document:author}} - Document author (if available)
+{{all}}                       → Match all messages
+{{user=VALUE}}                → Messages from specific user
+{{chat=VALUE}}                → Messages from specific chat
+{{topic=VALUE}}               → Messages from specific topic
+{{forwardFrom=VALUE}}         → Forwarded from specific source
+{{content~VALUE}}             → Messages containing text
+{{voiceTranscript~VALUE}}     → Voice transcripts containing text
 ```
 
-## Special Variables
-
-### Category Variables
+### Filter Examples
 ```
-{{category}} - Assigned category name
-{{category:color}} - Category color code
-{{category:description}} - Category description
-{{category:path}} - Category base path
-```
-
-### Processing Variables
-```
-{{processing:method}} - How content was processed (ai, local, manual)
-{{processing:provider}} - AI provider used (openai, claude, gemini)
-{{processing:model}} - AI model used
-{{processing:cost}} - Estimated processing cost
-{{processing:time}} - Processing duration
-```
-
-### System Variables
-```
-{{system:version}} - Plugin version
-{{system:timestamp}} - Current timestamp
-{{system:random}} - Random string (for uniqueness)
-{{system:counter}} - Auto-incrementing counter
+{{chat=Work Chat}}{{topic=Projects}}     → AND: both conditions
+{{user=john_doe}}{{content~meeting}}     → Messages from john about meetings
+{{forwardFrom=Tech News}}                → Forwarded from channel
 ```
 
 ## Template Usage Examples
 
-### File Naming Templates
+### Note Path Templates
 ```
-# Basic date-based naming
-{{date:YYYY}}/{{date:MM}}/{{date:DD-HH-mm}}.md
+# Date-based
+Telegram/{{date:YYYY}}/{{date:MM}}/{{date:DD-HH-mm}}.md
 
-# AI-enhanced naming
-{{category}}/{{date:YYYY}}/{{ai:title}}.md
+# AI-powered naming
+Telegram/{{date:YYYY-MM}}/{{ai:title}}.md
 
-# Content-based naming
-{{date:YYYY-MM}}/{{content:50}}.md
+# Content snippet
+Telegram/{{date:YYYY-MM}}/{{content:30}}.md
 
-# Sender-based organization
-{{sender:name}}/{{date:YYYY}}/{{ai:title}}.md
-```
+# Per-chat organization
+{{chat:name}}/{{date:YYYY}}/{{date:MM-DD}}.md
 
-### Advanced Templates
-```
-# Project-based organization
-{{ai:project}}/{{date:YYYY}}/{{date:MM}}/{{ai:title}}.md
-
-# Priority-based filing
-{{ai:priority}}/{{date:YYYY-MM-DD}}/{{ai:title}}.md
-
-# Multi-dimensional organization
-{{category}}/{{ai:topic}}/{{date:YYYY}}/{{sender:name}}-{{ai:title}}.md
-
-# Time-sensitive organization
-{{date:YYYY}}/{{date:quarter}}/{{date:month_name}}/{{ai:title}}.md
+# Forwarded messages
+Forwards/{{forwardFrom:name}}/{{date:YYYY-MM-DD}}.md
 ```
 
-### Conditional Templates
+### File Path Templates
 ```
-# Different paths based on content type
-Text: {{category}}/{{date:YYYY-MM}}/{{ai:title}}.md
-Media: {{category}}/Media/{{date:YYYY}}/{{file:name}}
-Documents: {{category}}/Documents/{{date:YYYY}}/{{ai:title}}.md
+# By type
+Telegram/{{file:type}}/{{date:YYYY-MM}}/{{file:name}}
+
+# By chat
+{{chat:name}}/Files/{{date:YYYY}}/{{file:name}}
+```
+
+### Note Content Template (Obsidian template file)
+```markdown
+---
+source: telegram
+date: {{messageDate:YYYY-MM-DD}}
+from: {{user:fullName}}
+chat: {{chat:name}}
+---
+
+# {{ai:title}}
+
+{{content}}
+
+{{files}}
 ```
 
 ## Best Practices
 
-### Template Design
-1. **Keep It Simple**: Start with basic variables and add complexity gradually
-2. **Consistent Structure**: Use similar patterns across different categories
-3. **Future-Proof**: Consider how templates will scale with more content
-4. **Readable Names**: Ensure generated filenames are human-readable
-
-### Variable Selection
-1. **Meaningful Variables**: Choose variables that add real organizational value
-2. **Avoid Redundancy**: Don't duplicate information in different variables
-3. **Consider Length**: Balance descriptiveness with filename length limits
-4. **Test Thoroughly**: Verify templates work with various message types
-
-### Performance Considerations
-1. **AI Variable Limits**: Each AI variable requires an API call
-2. **Processing Order**: Variables are processed in order of appearance
-3. **Caching**: Some variables are cached to improve performance
-4. **Error Handling**: Templates gracefully handle missing variables
-
-## Troubleshooting
-
-### Common Issues
-- **Empty Variables**: Check if content exists for the variable
-- **Invalid Characters**: Some variables may produce invalid filename characters
-- **Long Names**: Generated names may exceed filesystem limits
-- **Missing AI Variables**: Verify AI processing is enabled and configured
-
-### Debugging Tips
-- **Test Templates**: Use simple test messages to verify template behavior
-- **Check Logs**: Review plugin logs for variable processing errors
-- **Incremental Building**: Add variables one at a time to identify issues
-- **Fallback Values**: Consider providing fallback values for critical variables
-
-This comprehensive reference covers all available template variables in Telegram AI. Use these variables to create sophisticated, automated organization systems for your Telegram content.
+1. **Keep paths short** — deep nesting (>4 levels) is hard to navigate
+2. **Use AI variables sparingly** — each `{{ai:...}}` costs an API call
+3. **Test with simple messages** — verify template output before complex setups
+4. **Use `{{content:30}}` in paths** — limit filename length for safety
+5. **Combine date + AI** — `{{date:YYYY-MM}}/{{ai:title}}.md` gives good organization

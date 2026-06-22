@@ -9,6 +9,9 @@
 		"lint-fix": "eslint --fix src/",
 		"version": "node version-bump.mjs && git add manifest.json versions.json",
 		"test": "node esbuild.config.mjs test && npm run post-build && node install-plugin.mjs",
+		"test:unit": "vitest run",
+		"test:watch": "vitest",
+		"test:coverage": "vitest run --coverage",
 		"release-notes-check": "node release-notes.mjs check",
 		"build": "tsc -noEmit -skipLibCheck && npm run lint && node esbuild.config.mjs production && npm run post-build",
 		"post-build": "node post-build.mjs",
@@ -34,6 +37,7 @@
 		"@types/node": "^16.11.6",
 		"@typescript-eslint/eslint-plugin": "^8.57.0",
 		"@typescript-eslint/parser": "^8.57.0",
+		"@vitest/coverage-v8": "^4.1.9",
 		"esbuild": "0.17.3",
 		"eslint": "^9.39.4",
 		"eslint-config-prettier": "latest",
@@ -46,7 +50,8 @@
 		"release-please": "^16.14.0",
 		"tslib": "2.4.0",
 		"typescript": "^5.9.3",
-		"typescript-eslint": "^8.57.0"
+		"typescript-eslint": "^8.57.0",
+		"vitest": "^4.1.9"
 	},
 	"dependencies": {
 		"@popperjs/core": "^2.11.7",
@@ -60,7 +65,7 @@
 		"node-telegram-bot-api": "^0.66.0",
 		"pdf-parse": "^2.4.5",
 		"qrcode": "^1.5.3",
-		"telegram": "^2.25.11"
+		"telegram": "2.25.11"
 	},
 	"overrides": {
 		"qs": "^6.13.0",
