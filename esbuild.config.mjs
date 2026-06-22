@@ -47,25 +47,6 @@ module.exports = setImmediate;
 module.exports.clearImmediate = clearImmediate;\n`,
 );
 writeFileSync(
-	join(shimDir, "bluebird.js"),
-	`module.exports = Promise;
-module.exports.Promise = Promise;
-module.exports.resolve = Promise.resolve.bind(Promise);
-module.exports.reject = Promise.reject.bind(Promise);
-module.exports.all = Promise.all.bind(Promise);
-module.exports.race = Promise.race.bind(Promise);
-module.exports.method = function(fn) { return function() { try { return Promise.resolve(fn.apply(this, arguments)); } catch(e) { return Promise.reject(e); } }; };
-module.exports.try = function(fn) { return Promise.resolve().then(fn); };
-module.exports.map = function(arr, fn) { return Promise.all(arr.map(fn)); };
-module.exports.each = function(arr, fn) { return arr.reduce(function(p, v, i) { return p.then(function() { return fn(v, i, arr.length); }); }, Promise.resolve()); };
-module.exports.props = function(obj) { var keys = Object.keys(obj); return Promise.all(keys.map(function(k) { return obj[k]; })).then(function(vals) { var r = {}; keys.forEach(function(k, i) { r[k] = vals[i]; }); return r; }); };
-module.exports.coroutine = function(fn) { return function() { return Promise.resolve(fn.apply(this, arguments)); }; };
-module.exports.promisify = function(fn) { return function() { var args = Array.prototype.slice.call(arguments); return new Promise(function(resolve, reject) { args.push(function(err, result) { if (err) reject(err); else resolve(result); }); fn.apply(null, args); }); }; };
-module.exports.promisifyAll = function(obj) { var result = {}; Object.keys(obj).forEach(function(key) { if (typeof obj[key] === 'function') { result[key + 'Async'] = module.exports.promisify(obj[key]); } result[key] = obj[key]; }); return result; };
-module.exports.delay = function(ms) { return new Promise(function(resolve) { setTimeout(resolve, ms); }); };
-\n`,
-);
-writeFileSync(
 	join(shimDir, "lie.js"),
 	`module.exports = Promise;\n`,
 );
@@ -98,15 +79,6 @@ const context = await esbuild.context({
 		lie: join(shimDir, "lie.js"),
 	},
 	plugins: [
-		{
-			name: "bluebird-shim",
-			setup(build) {
-				// Redirect all bluebird imports (including sub-paths like bluebird/js/release/promise)
-				build.onResolve({ filter: /^bluebird/ }, () => ({
-					path: join(shimDir, "bluebird.js"),
-				}));
-			},
-		},
 		{
 			name: "strip-script-injection",
 			setup(build) {
