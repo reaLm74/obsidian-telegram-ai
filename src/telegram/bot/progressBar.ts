@@ -41,8 +41,8 @@ export async function updateProgressBar(
 			},
 			{ chat_id: msg.chat.id, message_id: progressBarMessage.message_id },
 		);
-	} catch (e) {
-		if (!checkIfTooManyRequests(e)) console.debug(`Telegram Sync => ${e}`);
+	} catch (e: unknown) {
+		if (!checkIfTooManyRequests(e)) console.debug(`Telegram Sync => ${String(e)}`);
 	}
 	return stage;
 }

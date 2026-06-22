@@ -38,22 +38,28 @@ Welcome to the comprehensive documentation for Telegram AI! This collection of g
 ## 🎯 Feature Highlights
 
 ### 🤖 AI-Powered Processing
-- **AI-Powered Processing**: Supports OpenAI (GPT-4) for intelligent content analysis
-- **Smart Analysis**: Automatic content structuring and enhancement
+- **AI Pipelines**: Configurable chains — Whisper → GPT → Formatter
+- **Post-Processors**: WikiLinker, AutoTagger, Summarization
 - **Custom Parameters**: Dynamic variables like `{{ai:title}}`
-- **Cost Optimization**: Up to 50% reduction in API calls
+- **Web Link Parsing**: Scrape and summarize URLs via Jina Reader API
+- **Cost Optimization**: Local document extraction, URL-only skip
 
 ### 📱 Advanced Telegram Integration
-- **Media Groups**: Proper handling of photo/video albums
-- **All Content Types**: Text, images, voice, video, documents
+- **Media Groups**: Proper handling of photo/video albums in single note
+- **All Content Types**: Text, images, voice, video, documents, links
 - **User Authentication**: Enhanced features with user client
 - **Forward Chains**: Maintains message context and threading
 
 ### 🗂️ Smart Organization
-- **AI Categorization**: Automatic sorting into predefined categories
-- **Dynamic Templates**: Flexible file naming with variables
-- **Local Processing**: Extract text from documents without AI calls
-- **Batch Processing**: Efficient handling of multiple messages
+- **AI Categorization**: Automatic sorting with keyword + AI classification
+- **Dynamic Templates**: Flexible naming with 30+ template variables
+- **4 Built-in Presets**: Personal Diary, Work Tasks, Media Archive, Knowledge Collector
+- **Setup Wizard**: Zero-friction onboarding for new users
+
+### 📊 Monitoring
+- **Live Status Bar**: Processing progress indicator
+- **Processing History**: Last 50 messages with status
+- **Multi-language UI**: English and Russian (auto-detected)
 
 ## 📖 Documentation Structure
 
@@ -71,7 +77,7 @@ Each guide is designed to be:
 - **Issues**: [Bug Reports & Feature Requests](https://github.com/reaLm74/obsidian-telegram-ai/issues)
 
 ### Community & Support
-- **Telegram Contact**: [@realm74](https://t.me/realm74)
+- **Telegram Channel**: [Obsidian Telegram AI](https://t.me/Obsidian_Telegram_AI)
 - **GitHub Discussions**: [Community Forum](https://github.com/reaLm74/obsidian-telegram-ai/discussions)
 
 ### Related Resources
@@ -89,7 +95,7 @@ Each guide is designed to be:
 
 ### How to Get Support
 1. **GitHub Issues**: For bugs, feature requests, and technical problems
-2. **Telegram Contact**: For quick questions and general support
+2. **Telegram Channel**: [Obsidian Telegram AI](https://t.me/Obsidian_Telegram_AI) for updates and support
 3. **Community**: Share experiences and get help from other users
 
 ### Providing Information

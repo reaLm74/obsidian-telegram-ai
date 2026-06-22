@@ -3,8 +3,8 @@ import TelegramSyncPlugin from "src/main";
 import * as User from "src/telegram/user/user";
 
 export class UserLogInModal extends Modal {
-	userLoginDiv: HTMLDivElement;
-	qrCodeContainer: HTMLDivElement;
+	userLoginDiv!: HTMLDivElement;
+	qrCodeContainer!: HTMLDivElement;
 	password = "";
 	constructor(public plugin: TelegramSyncPlugin) {
 		super(plugin.app);

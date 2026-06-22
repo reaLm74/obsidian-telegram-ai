@@ -1,9 +1,10 @@
 import { ButtonComponent, Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { getChatsForSearch } from "src/telegram/user/sync";
+import { t } from "src/locale/i18n";
 
 export class ProcessOldMessagesSettingsModal extends Modal {
-	processOldMessagesSettingsDiv: HTMLDivElement;
+	processOldMessagesSettingsDiv!: HTMLDivElement;
 	saved = false;
 	constructor(public plugin: TelegramSyncPlugin) {
 		super(plugin.app);
@@ -17,17 +18,17 @@ export class ProcessOldMessagesSettingsModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.processOldMessagesSettingsDiv = this.contentEl.createDiv();
-		this.titleEl.setText("Processing old messages settings");
+		this.titleEl.setText(t("modal.processOld"));
 	}
 
 	addChatsForSearch() {
-		new Setting(this.processOldMessagesSettingsDiv).setName("Chats for message search").setHeading();
+		new Setting(this.processOldMessagesSettingsDiv).setName(t("settings.advanced.chats")).setHeading();
 		this.plugin.settings.processOldMessagesSettings.chatsForSearch.forEach((chat) => {
 			const setting = new Setting(this.processOldMessagesSettingsDiv);
 			setting.setName(`"${chat.name}"`);
 			setting.addExtraButton((btn) => {
 				btn.setIcon("trash-2")
-					.setTooltip("Delete")
+					.setTooltip(t("settings.advanced.chats.delete"))
 					.onClick(() => {
 						void (async () => {
 							this.plugin.settings.processOldMessagesSettings.chatsForSearch.remove(chat);
@@ -38,11 +39,9 @@ export class ProcessOldMessagesSettingsModal extends Modal {
 			});
 		});
 		new Setting(this.processOldMessagesSettingsDiv)
-			.setDesc(
-				"Choose chats with your connected bot in which to search for old messages. Only chats with activity in the last 30 days will be available. If no chat is chosen, old message processing will not occur",
-			)
+			.setDesc(t("settings.advanced.chats.desc"))
 			.addButton((btn: ButtonComponent) => {
-				btn.setButtonText("Add chats");
+				btn.setButtonText(t("settings.advanced.chats.add"));
 				btn.setClass("mod-cta");
 				btn.onClick(() => {
 					void (async () => {

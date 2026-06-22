@@ -82,13 +82,13 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 				throw new Error("Stored session conflict. Try to log in again.");
 			if (!authorized) clientUser = undefined;
 			else if (!clientUser && authorized) clientUser = await client.getMe();
-		} catch (e) {
+		} catch (e: unknown) {
 			if (
 				sessionType == "user" &&
 				!(e instanceof Error && e.message.includes("Could not find a matching Constructor ID"))
 			) {
 				await init(_sessionId, "bot", deviceId);
-				throw new Error(`Login as user failed. Error: ${e}`);
+				throw new Error(`Login as user failed. Error: ${String(e)}`);
 			} else throw e;
 		}
 	}
@@ -165,9 +165,9 @@ export async function signInAsUserWithQrCode(container: HTMLDivElement, password
 			},
 		);
 		clientUser = user as Api.User;
-	} catch (e) {
+	} catch (e: unknown) {
 		clientUser = undefined;
-		console.error(`Telegram Sync => ${e}`);
+		console.error(`Telegram Sync => ${String(e)}`);
 	}
 }
 

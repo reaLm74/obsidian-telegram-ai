@@ -2,218 +2,214 @@
 
 ## Overview
 
-Telegram AI supports automatic processing of messages through OpenAI (GPT-4) before saving them to Obsidian, allowing you to transform raw Telegram messages into structured, intelligent notes.
+Telegram AI processes messages through configurable AI pipelines before saving them to Obsidian. The system supports OpenAI (GPT-4, Whisper) with content-type specific prompts, post-processors, and live progress tracking.
 
 ## Key Features
 
-- **AI Provider**: OpenAI (GPT-4)
-- **Smart Content Analysis**: Automatic processing of text, images, videos, audio, and documents
-- **URL-Only Skip**: Messages containing only links (Instagram, YouTube, etc.) skip AI processing
-- **Vision API Support**: Advanced image analysis capabilities
-- **Hierarchical Prompts**: Content-specific prompts + general formatting prompts
-- **Custom AI Parameters**: Create dynamic variables like `{{ai:title}}` for intelligent file naming
-- **Local Document Processing**: Extract text locally from supported formats to reduce API costs
-- **Retry Mechanism**: Automatic retries for temporary errors
-- **Conditional Processing**: Enable/disable AI processing for each content type
+- **AI Provider**: OpenAI (GPT-4 + Whisper)
+- **AI Pipelines**: Configurable processing chains (Whisper → GPT → Formatter)
+- **Content-Type Prompts**: Separate prompts for text, photo, voice, document, links
+- **Post-Processors**: WikiLinker, AutoTagger, Summarization
+- **Custom AI Parameters**: Dynamic variables like `{{ai:title}}`
+- **Local Document Processing**: Extract text from PDF, DOCX without AI calls
+- **Web Link Processing**: Parse web pages via Jina Reader API
+- **URL-Only Skip**: Link-only messages bypass AI to save tokens
+- **Live Status**: Processing progress in status bar + history log
 
 ## Supported Content Types
 
 ### 1. Text Messages
 - **Processing**: Analyzes and structures text content
-- **URL-Only Exception**: Messages containing only links (e.g. Instagram, YouTube) skip AI processing
-- **Use Cases**: Meeting notes, ideas, thoughts, plans
-- **Example Prompt**: "Structure this text into clear sections with bullet points and key takeaways"
+- **URL-Only Exception**: Messages containing only links skip AI (unless web parsing is enabled)
+- **Use Cases**: Meeting notes, ideas, thoughts
 
-### 2. Images (Photos)
+### 2. Photos (Images)
 - **With Vision API**: Full image analysis and description
-- **Without Vision API**: Processes only the caption text
-- **Use Cases**: Screenshots, diagrams, photos with context
-- **Example Prompt**: "Describe this image in detail, focusing on text content and key visual elements"
+- **Without Vision API**: Processes only the caption
+- **Use Cases**: Screenshots, diagrams, documents
 
-### 3. Voice Messages
-- **Processing**: Transcription and content structuring
-- **Use Cases**: Voice memos, meeting recordings, quick thoughts
-- **Example Prompt**: "Transcribe and organize this voice message into clear, actionable points"
+### 3. Voice Messages & Audio Files
+- **Pipeline**: Whisper transcription → GPT formatting
+- **Unified prompt**: Voice, audio, and video share one prompt
+- **Use Cases**: Voice memos, recordings, podcasts
 
-### 4. Videos
-- **Processing**: Video analysis and content extraction
-- **Use Cases**: Tutorial videos, presentations, demonstrations
-- **Example Prompt**: "Analyze this video and extract the main points and key information"
+### 4. Video
+- **Pipeline**: Audio track extraction → Whisper → GPT
+- **Use Cases**: Tutorial recordings, presentations
 
-### 5. Audio Files
-- **Processing**: Audio transcription and analysis
-- **Use Cases**: Podcasts, interviews, music notes
-- **Example Prompt**: "Transcribe this audio and create a structured summary with timestamps"
+### 5. Documents
+- **Local Processing** (no AI cost): TXT, JSON, CSV, XML, HTML, Markdown, YAML, code files
+- **AI Processing**: PDF, DOCX (text extracted locally, then sent to GPT)
+- **Use Cases**: Reports, articles, code files
 
-### 6. Documents
-- **Local Processing**: TXT, JSON, CSV, XML, HTML, Markdown, YAML, code files
-- **AI Processing**: PDF, DOCX, and other complex formats
-- **Use Cases**: Reports, articles, code files, data files
-- **Example Prompt**: "Analyze this document and create a comprehensive summary with key insights"
+### 6. Web Links
+- **Processing**: URL → Jina Reader API → clean Markdown → GPT analysis
+- **Enable**: Settings → Prompts → "Process links with AI"
+- **Token protection**: Long pages are trimmed before sending to AI
+- **Use Cases**: Article bookmarks, research links
 
-## AI Provider Configuration
+## AI Pipelines
 
-### OpenAI (GPT-4)
+### How Pipelines Work
+
 ```
-API Key: Your OpenAI API key
-Model: gpt-4o-mini (recommended for cost efficiency)
-Temperature: 0.3 (for consistent results)
-Max Tokens: 4000
-Vision: Enabled (for image analysis)
+Message → Content Type Detection
+    ↓
+Type-Specific Processing:
+  Voice/Audio/Video → Whisper Transcription → Text
+  Photo → Vision API → Description
+  Document → Local Extraction → Text
+  Link → Web Scraper → Markdown
+    ↓
+AI Processing (GPT):
+  Content-specific prompt + General formatting prompt
+    ↓
+Post-Processors:
+  WikiLinker → AutoTagger → Summarization
+    ↓
+Template Application → Save to Vault
 ```
+
+### Post-Processors
+
+After AI processing, content passes through configurable post-processors:
+
+| Post-Processor | What it does |
+|----------------|-------------|
+| **WikiLinker** | Converts note references to `[[wikilinks]]` |
+| **AutoTagger** | Extracts and adds relevant #tags |
+| **Summarization** | Long text → summary + full text under `<details>` |
+
+### Media Group Processing
+When multiple photos/videos are sent as an album:
+- All files are combined into a single note
+- AI receives the entire album context in one prompt
+- Captions from all messages are merged
 
 ## Prompt Configuration
 
 ### Content-Specific Prompts
 
+Configure in Settings → AI → Prompts (full-width modal editor):
+
 #### Text Prompt
 ```
-Analyze and structure this text message. Create clear sections, extract key points, and format for easy reading. Focus on actionable items and important information.
+Analyze and structure this text message. Create clear sections,
+extract key points, and format for easy reading.
 ```
 
 #### Photo Prompt
 ```
-Analyze this image thoroughly. Describe visual elements, extract any text content, identify key objects or concepts, and provide context for the image's purpose or meaning.
+Analyze this image thoroughly. Describe visual elements,
+extract any text content, and identify key objects.
 ```
 
-#### Voice Prompt
+#### Voice/Audio/Video Prompt (unified)
 ```
-Transcribe this voice message accurately and organize the content into structured sections. Highlight main topics, action items, and key decisions or insights.
+Transcribe this message accurately and organize into structured
+sections. Highlight main topics and action items.
 ```
 
 #### Document Prompt
 ```
-Analyze this document and create a comprehensive summary. Extract key information, main arguments, data points, and conclusions. Structure the output for easy reference.
+Analyze this document and create a comprehensive summary.
+Extract key information, arguments, and conclusions.
 ```
 
-### General Formatting Prompt
+#### Link Prompt
 ```
-Format the final output as a well-structured note with:
-- Clear headings and subheadings
-- Bullet points for lists
-- Bold text for emphasis
-- Proper spacing and organization
-- Tags for categorization where appropriate
+Analyze this web page and create a structured summary.
+Extract the main topic, key points, and useful information.
 ```
+
+#### General Formatting Prompt
+Applied to ALL AI output as a final formatting step:
+```
+Format with proper Markdown: headings, bullet points,
+bold emphasis, and clean spacing.
+```
+
+### Processing Toggles
+Each content type can be individually enabled/disabled:
+- Text processing: ON/OFF
+- Photo processing: ON/OFF  
+- Voice/Audio/Video processing: ON/OFF
+- Document processing: ON/OFF
+- Link processing: ON/OFF
 
 ## Custom AI Parameters
 
-Create dynamic variables for intelligent file naming and organization:
+Create dynamic variables for intelligent file naming:
 
-### Built-in Parameter: title
+### Built-in: title
 ```
 Parameter: title
-Prompt: "Generate a concise and clear title for this note (maximum 50 characters, no punctuation at the end)"
+Prompt: "Generate a concise title (max 50 characters, no punctuation)"
 Usage: {{ai:title}} in path templates
 ```
 
-### Custom Parameters Examples
+### Creating Custom Parameters
+Settings → Categories → Custom AI Parameters → "Manage parameters"
+
 ```
 Parameter: category
-Prompt: "Determine the main category for this content (work, personal, learning, ideas)"
+Prompt: "Determine the main category (work, personal, learning, ideas)"
 Usage: {{ai:category}}/{{date:YYYY-MM}}/{{ai:title}}.md
 
-Parameter: priority
-Prompt: "Assess the priority level of this content (high, medium, low)"
-Usage: {{ai:priority}}-{{ai:title}}.md
-
 Parameter: tags
-Prompt: "Generate 3-5 relevant tags for this content, separated by commas"
-Usage: Add to note metadata
+Prompt: "Generate 3-5 relevant tags, comma-separated"
+Usage: Added to note frontmatter
 ```
 
-## Optimization Features
+## Provider Configuration
 
-### Local Document Processing
-The plugin automatically processes supported document formats locally to reduce AI API costs:
-
-- **Supported Formats**: TXT, JSON, CSV, XML, HTML, Markdown, YAML
-- **Code Files**: JavaScript, TypeScript, Python, Java, C++, C#, PHP, Ruby, Go, Rust, Swift, SQL
-- **Benefits**: Faster processing, reduced API costs, improved privacy
-
-### AI Call Optimization
-- **URL-Only Skip**: Link-only messages (Instagram, YouTube, etc.) use default category without AI
-- **Hierarchical Prompts**: Combines content-specific and general prompts in single requests
-- **Intelligent Batching**: Groups related content for efficient processing
-- **Conditional Processing**: Only processes content types that are enabled
-- **Cost Reduction**: Up to 50% fewer API calls compared to naive implementations
-
-## Processing Flow
-
+### OpenAI (GPT-4)
 ```
-1. Message Received → Content Type Detection
-2. Check if AI processing is enabled for this type
-3. URL-Only Check (text messages)
-   ├─ If message contains only link(s) → Skip AI, use default category
-   └─ Otherwise → Continue to step 4
-4. Local Processing (if supported format)
-   ├─ Extract text locally (documents)
-   └─ Skip AI for extraction step
-5. AI Analysis
-   ├─ Apply content-specific prompt
-   ├─ Combine with general formatting prompt
-   └─ Send single optimized request
-6. Generate AI Parameters (if used in templates)
-7. Apply Templates and Create Note
-8. Save to Obsidian Vault
+API Key:      Your OpenAI API key
+Model:        gpt-4o-mini (recommended) or gpt-4o
+Temperature:  0.3 (consistent) to 0.7 (creative)
+Max Tokens:   4000
+Vision:       Enabled (for image analysis)
+Whisper:      Automatic (for voice/audio/video)
 ```
 
-## Best Practices
+## Cost Optimization
 
-### Prompt Design
-- **Be Specific**: Clear instructions produce better results
-- **Set Expectations**: Define desired output format and structure
-- **Use Examples**: Include examples in prompts for consistency
-- **Limit Scope**: Focus on specific aspects rather than general analysis
+| Strategy | Savings |
+|----------|---------|
+| Local document extraction (PDF, DOCX) | No AI cost for extraction |
+| URL-only skip | Link messages bypass AI |
+| `gpt-4o-mini` instead of `gpt-4o` | ~10x cheaper |
+| Disable unused content types | No API calls for disabled types |
+| Hierarchical prompts | Single request instead of multiple |
 
-### Cost Management
-- **Enable Local Processing**: For supported document formats
-- **Use Efficient Models**: Choose cost-effective models for your needs
-- **Selective Processing**: Only enable AI for content types you need
-- **Monitor Usage**: Track API usage and costs regularly
+## Processing Status
 
-### Quality Control
-- **Test Prompts**: Experiment with different prompt variations
-- **Review Results**: Regularly check AI-generated content quality
-- **Adjust Settings**: Fine-tune temperature and token limits
-- **Provide Feedback**: Use results to improve future prompts
+### Status Bar
+The bottom status bar shows:
+- 🔄 Current processing state (idle / processing)
+- 📊 Queue count (messages waiting)
+
+### Processing History
+Access from Settings → "Processing History":
+- Last 50 processed messages
+- Status (success / error) for each
+- Processing time
 
 ## Troubleshooting
 
-### Common Issues
+| Problem | Solution |
+|---------|----------|
+| Invalid API Key | Check key format at platform.openai.com |
+| Rate limiting (429) | Plugin retries automatically; reduce request frequency |
+| Poor AI results | Make prompts more specific; adjust temperature |
+| Slow processing | Check network; switch to `gpt-4o-mini` |
+| High costs | Enable local processing; disable unneeded types |
+| Vision not working | Ensure Vision API is enabled in settings |
 
-#### API Errors
-- **Invalid API Key**: Check key format and permissions
-- **Rate Limiting**: Reduce request frequency or upgrade plan
-- **Model Unavailable**: Verify model name and availability
+## Getting Help
 
-#### Poor Results
-- **Unclear Prompts**: Make instructions more specific
-- **Wrong Temperature**: Adjust for creativity vs consistency
-- **Insufficient Context**: Provide more detailed prompts
-
-#### Performance Issues
-- **Slow Processing**: Check network connection and API response times
-- **High Costs**: Enable local processing and optimize prompts
-- **Memory Usage**: Monitor large file processing
-
-### Getting Help
-- **GitHub Issues**: Report bugs and feature requests
-- **Documentation**: Check README and other guides
-- **Community**: Contact @realm74 on Telegram for support
-
-## Advanced Configuration
-
-### Custom Workflows
-Create sophisticated processing workflows by combining:
-- Multiple AI parameters
-- Conditional processing rules
-- Dynamic template variables
-- Category-based routing
-
-### Integration Tips
-- **Obsidian Plugins**: Works well with templater, dataview, and tag plugins
-- **External Tools**: Can integrate with automation tools via file system
-- **Backup Strategy**: Regular backups recommended for AI-processed content
-
-This guide provides a comprehensive overview of AI processing capabilities in Telegram AI. Experiment with different configurations to find the setup that works best for your workflow.
+- **[Template Variables Reference](Template%20Variables%20Reference.md)** — all available template variables
+- **[Smart Categories Guide](Smart%20Categories%20Guide.md)** — categorization setup
+- **[GitHub Issues](https://github.com/reaLm74/obsidian-telegram-ai/issues)** — report bugs
+- **[Telegram Channel](https://t.me/Obsidian_Telegram_AI)** — updates and support

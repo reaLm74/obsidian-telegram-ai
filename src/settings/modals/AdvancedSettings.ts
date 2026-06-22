@@ -1,14 +1,11 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
+import { t } from "src/locale/i18n";
 
-import {
-	ConnectionStatusIndicatorType,
-	KeysOfConnectionStatusIndicatorType,
-	connectionStatusIndicatorSettingName,
-} from "src/ConnectionStatusIndicator";
+import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
 
 export class AdvancedSettingsModal extends Modal {
-	advancedSettingsDiv: HTMLDivElement;
+	advancedSettingsDiv!: HTMLDivElement;
 	saved = false;
 	constructor(public plugin: TelegramSyncPlugin) {
 		super(plugin.app);
@@ -26,13 +23,13 @@ export class AdvancedSettingsModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.advancedSettingsDiv = this.contentEl.createDiv();
-		this.titleEl.setText("Advanced settings");
+		this.titleEl.setText(t("settings.advanced.title"));
 	}
 
 	addMessageDelimiterSetting() {
 		new Setting(this.advancedSettingsDiv)
-			.setName(`Default delimiter "***" between messages`)
-			.setDesc("Turn off for using a custom delimiter, which you can set in the template file")
+			.setName(t("settings.advanced.delimiter"))
+			.setDesc(t("settings.advanced.delimiter.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.defaultMessageDelimiter);
 				toggle.onChange((value) => {
@@ -46,8 +43,8 @@ export class AdvancedSettingsModal extends Modal {
 
 	addParallelMessageProcessing() {
 		new Setting(this.advancedSettingsDiv)
-			.setName(`Parallel message processing`)
-			.setDesc("Turn on for faster message and file processing. Caution: may disrupt message order")
+			.setName(t("settings.advanced.parallel"))
+			.setDesc(t("settings.advanced.parallel.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.parallelMessageProcessing);
 				toggle.onChange((value) => {
@@ -61,10 +58,12 @@ export class AdvancedSettingsModal extends Modal {
 
 	addConnectionStatusIndicator() {
 		new Setting(this.advancedSettingsDiv)
-			.setName(connectionStatusIndicatorSettingName)
-			.setDesc("Choose when you want to see the connection status indicator")
+			.setName(t("settings.advanced.indicator"))
+			.setDesc(t("settings.advanced.indicator.desc"))
 			.addDropdown((dropDown) => {
-				dropDown.addOptions(ConnectionStatusIndicatorType);
+				dropDown.addOption("HIDDEN", t("settings.advanced.indicator.hidden"));
+				dropDown.addOption("CONSTANT", t("settings.advanced.indicator.constant"));
+				dropDown.addOption("ONLY_WHEN_ERRORS", t("settings.advanced.indicator.onlyErrors"));
 				dropDown.setValue(this.plugin.settings.connectionStatusIndicatorType);
 				dropDown.onChange((value) => {
 					void (async () => {
@@ -79,14 +78,12 @@ export class AdvancedSettingsModal extends Modal {
 
 	addProcessedMessageAction() {
 		new Setting(this.advancedSettingsDiv)
-			.setName("Processed message action")
-			.setDesc(
-				"Set the action to mark a message as processed. Delete will remove messages from Telegram after processing.",
-			)
+			.setName(t("settings.advanced.processedAction"))
+			.setDesc(t("settings.advanced.processedAction.desc"))
 			.addDropdown((dropdown) => {
 				dropdown
-					.addOption("EMOJI", "React with emoji")
-					.addOption("DELETE", "Delete message")
+					.addOption("EMOJI", t("settings.advanced.processedAction.emoji"))
+					.addOption("DELETE", t("settings.advanced.processedAction.delete"))
 					.setValue(this.plugin.settings.processedMessageAction)
 					.onChange((value) => {
 						void (async () => {
@@ -100,23 +97,23 @@ export class AdvancedSettingsModal extends Modal {
 		// Show emoji setting only if EMOJI is selected
 		if (this.plugin.settings.processedMessageAction === "EMOJI") {
 			new Setting(this.advancedSettingsDiv)
-				.setName("Emoji for processed messages")
-				.setDesc("Choose the emoji reaction for processed messages")
+				.setName(t("settings.advanced.emoji"))
+				.setDesc(t("settings.advanced.emoji.desc"))
 				.addDropdown((dropdown) => {
 					dropdown
-						.addOption("✅", "Check mark")
-						.addOption("❤️", "Red heart")
-						.addOption("👍", "Thumbs up")
-						.addOption("🎉", "Party popper")
-						.addOption("🔥", "Fire")
-						.addOption("😍", "Smiling face with heart-eyes")
-						.addOption("😮", "Face with open mouth")
-						.addOption("😢", "Crying face")
-						.addOption("😡", "Pouting face")
-						.addOption("👎", "Thumbs down")
-						.addOption("💩", "Pile of poo")
-						.addOption("🤡", "Clown face")
-						.addOption("🥳", "Partying face")
+						.addOption("🔥", t("settings.advanced.emoji.fire"))
+						.addOption("👍", t("settings.advanced.emoji.thumbsUp"))
+						.addOption("❤️", t("settings.advanced.emoji.heart"))
+						.addOption("🎉", t("settings.advanced.emoji.party"))
+						.addOption("✅", t("settings.advanced.emoji.check"))
+						.addOption("😍", t("settings.advanced.emoji.heartEyes"))
+						.addOption("😮", t("settings.advanced.emoji.openMouth"))
+						.addOption("😢", t("settings.advanced.emoji.crying"))
+						.addOption("😡", t("settings.advanced.emoji.pouting"))
+						.addOption("👎", t("settings.advanced.emoji.thumbsDown"))
+						.addOption("💩", t("settings.advanced.emoji.poo"))
+						.addOption("🤡", t("settings.advanced.emoji.clown"))
+						.addOption("🥳", t("settings.advanced.emoji.partying"))
 						.setValue(this.plugin.settings.emojiForProcessedMessages)
 						.onChange((value) => {
 							void (async () => {

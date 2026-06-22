@@ -4,6 +4,10 @@
   <img src="https://img.shields.io/github/v/release/reaLm74/obsidian-telegram-ai?label=plugin&display_name=tag&logo=obsidian&color=purple&logoColor=violet">
 </a>
 &nbsp;
+<a href="https://t.me/Obsidian_Telegram_AI">
+  <img src="https://img.shields.io/badge/Telegram-Channel-blue?logo=telegram&logoColor=white">
+</a>
+&nbsp;
 <a href="https://www.gnu.org/licenses/agpl-3.0">
   <img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg">
 </a>
@@ -65,6 +69,10 @@ Using the built-in wide-modal prompt editor, you can define specific behavior an
 - **Distribution Rules**: Advanced message routing.
 - **Local Processing**: Enable direct document text extraction for PDF and DOCX files.
 
+## 📢 Community
+
+Join our [Telegram channel](https://t.me/Obsidian_Telegram_AI) for updates, tips, and support.
+
 ## 🤝 Acknowledgments
 
 Special thanks to the open-source community.
@@ -75,6 +83,7 @@ Special thanks to the open-source community.
 ---
 <div align="center">
   <strong>Made for the Obsidian Community</strong><br>
+  <a href="https://t.me/Obsidian_Telegram_AI">Telegram Channel</a> ·
   <a href="https://github.com/reaLm74/obsidian-telegram-ai/issues">Report Bug</a> · 
   <a href="https://github.com/reaLm74/obsidian-telegram-ai/discussions">Request Feature</a>
 </div>

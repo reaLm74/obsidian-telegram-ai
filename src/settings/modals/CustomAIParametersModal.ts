@@ -1,5 +1,6 @@
 import { App, Modal, Setting, Notice } from "obsidian";
 import TelegramSyncPlugin from "src/main";
+import { t } from "src/locale/i18n";
 
 export class CustomAIParametersModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -13,23 +14,17 @@ export class CustomAIParametersModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: "Custom AI parameters" });
+		contentEl.createEl("h2", { text: t("settings.categories.customParams") });
 
 		contentEl.createEl("p", {
-			text:
-				"Create custom AI parameters for use in path templates. " +
-				"Parameters can be used as {{ai:parameter_name}} in Note Path Template and File Path Override.",
+			text: t("settings.categories.customParams.intro"),
 		});
 
 		// Show hint about title parameter
 		const hintEl = contentEl.createDiv({ cls: "custom-parameters-hint setting-item-description" });
 		hintEl.createSpan({ text: "💡 " });
-		hintEl.createEl("strong", { text: "Tip:" });
-		hintEl.appendText(" The ");
-		hintEl.createEl("code", { text: "Title" });
-		hintEl.appendText(" parameter is already configured by default. Use ");
-		hintEl.createEl("code", { text: "{{ai:title}}" });
-		hintEl.appendText(" in path templates for automatic note title generation.");
+		hintEl.createEl("strong", { text: t("settings.categories.customParams.tipLabel") });
+		hintEl.appendText(" " + t("settings.categories.customParams.tipText"));
 
 		// Show existing parameters
 		this.displayExistingParameters();
@@ -40,7 +35,7 @@ export class CustomAIParametersModal extends Modal {
 		// Buttons
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container justify-end flex gap-10" });
 
-		const closeButton = buttonContainer.createEl("button", { text: "Close" });
+		const closeButton = buttonContainer.createEl("button", { text: t("common.ok") });
 		closeButton.onclick = () => this.close();
 	}
 
@@ -48,13 +43,13 @@ export class CustomAIParametersModal extends Modal {
 		const { contentEl } = this;
 
 		const parametersContainer = contentEl.createDiv();
-		parametersContainer.createEl("h3", { text: "Existing parameters" });
+		parametersContainer.createEl("h3", { text: t("settings.categories.customParams.existing") });
 
 		const parameters = this.plugin.settings.aiCustomParameters;
 
 		if (Object.keys(parameters).length === 0) {
 			parametersContainer.createEl("p", {
-				text: "No custom parameters defined yet.",
+				text: t("settings.categories.customParams.none"),
 				cls: "setting-item-description",
 			});
 			return;
@@ -89,16 +84,16 @@ export class CustomAIParametersModal extends Modal {
 			// Control buttons
 			const buttonGroup = paramContent.createDiv({ cls: "flex gap-10" });
 
-			const saveButton = buttonGroup.createEl("button", { text: "Save", cls: "mod-cta" });
+			const saveButton = buttonGroup.createEl("button", { text: t("common.save"), cls: "mod-cta" });
 			saveButton.onclick = () => {
 				void (async () => {
 					this.plugin.settings.aiCustomParameters[paramName] = textarea.value.trim();
 					await this.plugin.saveSettings();
-					new Notice(`Parameter "${paramName}" updated`);
+					new Notice(t("settings.categories.customParams.updated", { name: paramName }));
 				})();
 			};
 
-			const deleteButton = buttonGroup.createEl("button", { text: "Delete", cls: "mod-warning" });
+			const deleteButton = buttonGroup.createEl("button", { text: t("common.delete"), cls: "mod-warning" });
 			deleteButton.onclick = () => {
 				void (async () => {
 					delete this.plugin.settings.aiCustomParameters[paramName];
@@ -113,14 +108,14 @@ export class CustomAIParametersModal extends Modal {
 		const { contentEl } = this;
 
 		const formContainer = contentEl.createDiv();
-		formContainer.createEl("h3", { text: "Add new parameter" });
+		formContainer.createEl("h3", { text: t("settings.categories.customParams.addNew") });
 
 		let paramName = "";
 		let paramPrompt = "";
 
 		new Setting(formContainer)
-			.setName("Parameter name")
-			.setDesc("Name of the parameter (will be used as {{ai:name}})")
+			.setName(t("settings.ai.customParams.name"))
+			.setDesc(t("settings.ai.customParams.name.desc"))
 			.addText((text) => {
 				text.setPlaceholder("E.g., project_name")
 					.setValue(paramName)
@@ -130,8 +125,8 @@ export class CustomAIParametersModal extends Modal {
 			});
 
 		new Setting(formContainer)
-			.setName("AI prompt")
-			.setDesc("Prompt that describes what AI should generate for this parameter")
+			.setName(t("settings.ai.customParams.prompt"))
+			.setDesc(t("settings.ai.customParams.prompt.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder("E.g., determine project name from text (maximum 20 characters)")
 					.setValue(paramPrompt)
@@ -143,27 +138,25 @@ export class CustomAIParametersModal extends Modal {
 			});
 
 		new Setting(formContainer).addButton((btn) => {
-			btn.setButtonText("Add parameter")
+			btn.setButtonText(t("settings.ai.customParams.add"))
 				.setClass("mod-cta")
 				.onClick(() => {
 					void (async () => {
 						if (!paramName.trim() || !paramPrompt.trim()) {
-							new Notice("Please fill both parameter name and prompt");
+							new Notice(t("settings.categories.customParams.fillBoth"));
 							return;
 						}
 
 						// Check that parameter name is valid
 						if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(paramName.trim())) {
-							new Notice(
-								"Parameter name must contain only letters, numbers and underscores, and start with a letter or underscore",
-							);
+							new Notice(t("settings.categories.customParams.invalidName"));
 							return;
 						}
 
 						this.plugin.settings.aiCustomParameters[paramName.trim()] = paramPrompt.trim();
 						await this.plugin.saveSettings();
 
-						new Notice(`Parameter "${paramName}" added successfully`);
+						new Notice(t("settings.categories.customParams.added", { name: paramName }));
 						this.onOpen(); // Refresh the modal
 					})();
 				});

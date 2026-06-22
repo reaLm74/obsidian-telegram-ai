@@ -1,21 +1,38 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.1.7";
+export const releaseVersion = "0.2.0";
 export const showNewFeatures = true;
 export let showBreakingChanges = false;
 
-const newFeatures = `🎉 Version 0.1.7: Performance & security improvements:
-- ⚡ Reduced plugin size by removing unnecessary polyfills
-- 🔒 Improved security: eliminated dynamic script injection
-- 🛠️ General stability and compatibility fixes`;
+const newFeatures = `🎉 Version 0.2.0:
+
+🌐 Multi-language support
+- Full Russian and English interface
+- Language auto-detected from Obsidian settings
+
+🤖 AI Processing
+- Configurable AI chains: Whisper → GPT → Formatter
+- Content-type specific prompts (text, photo, voice, document, links)
+- Auto-tagging and WikiLinks from AI processing
+- Smart categorization with keywords + AI classification
+
+📊 Processing Status
+- Live progress indicator in status bar
+- Processing history log (last 50 messages)
+
+🎛️ UX Improvements
+- Setup Wizard for first-time users
+- 4 built-in presets: Personal Diary, Work Tasks, Media Archive, Knowledge Collector
+- Category Manager with custom AI parameters
+- Settings migration — your config is safely preserved on updates`;
 
 export const breakingChanges = ``;
 
-export const telegramChannelLink = "https://t.me/realm74"; // Your personal Telegram
+export const telegramChannelLink = "https://t.me/Obsidian_Telegram_AI";
 export const insiderFeaturesLink = "https://github.com/reaLm74/obsidian-telegram-ai";
 
-const telegramContactAHref = `<a href='${telegramChannelLink}'>@realm74</a>`;
-const telegramContactIntroduction = `For support and questions, contact ${telegramContactAHref} on Telegram.`;
+const telegramChannelAHref = `<a href='${telegramChannelLink}'>Obsidian Telegram AI</a>`;
+const telegramChannelIntro = `Join our Telegram channel ${telegramChannelAHref} for updates, tips, and support.`;
 
 const githubLink = "<a href='https://github.com/reaLm74/obsidian-telegram-ai'>GitHub repository</a>";
 const githubIntroduction = `Visit the ${githubLink} for documentation, issues, and updates.`;
@@ -31,7 +48,7 @@ export const notes = `
 
 🆕 ${newFeatures}
 
-📞 ${telegramContactIntroduction}
+📢 ${telegramChannelIntro}
 
 📚 ${githubIntroduction}
 

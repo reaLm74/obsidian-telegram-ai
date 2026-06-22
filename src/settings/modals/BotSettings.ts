@@ -2,11 +2,12 @@ import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { _5sec, displayAndLog } from "src/utils/logUtils";
 import { PinCodeModal } from "./PinCode";
+import { t } from "src/locale/i18n";
 
 export const mainDeviceIdSettingName = "Main device id";
 
 export class BotSettingsModal extends Modal {
-	botSettingsDiv: HTMLDivElement;
+	botSettingsDiv!: HTMLDivElement;
 	saved = false;
 	constructor(public plugin: TelegramSyncPlugin) {
 		super(plugin.app);
@@ -24,14 +25,14 @@ export class BotSettingsModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.botSettingsDiv = this.contentEl.createDiv();
-		this.titleEl.setText("Bot settings");
-		const limitations = new Setting(this.botSettingsDiv).setDesc("Limitations of the bot:");
+		this.titleEl.setText(t("settings.bot.title"));
+		const limitations = new Setting(this.botSettingsDiv).setDesc(t("settings.bot.limitations"));
 		const lim24Hours = activeDocument.createElement("div");
-		lim24Hours.setText("- it can get only messages sent within the last 24 hours");
+		lim24Hours.setText(t("settings.bot.limitations.24h"));
 		lim24Hours.addClass("ml-10");
 		const limBlocks = activeDocument.createElement("div");
 		limBlocks.addClass("ml-10");
-		limBlocks.setText("Use a proxy to bypass blocks in some countries and limited corporate networks ");
+		limBlocks.setText(t("settings.bot.limitations.proxy"));
 		limBlocks.createSpan({
 			text: "([proxy configuration examples],",
 		});
@@ -45,8 +46,8 @@ export class BotSettingsModal extends Modal {
 
 	addBotToken() {
 		new Setting(this.botSettingsDiv)
-			.setName("Bot token (required)")
-			.setDesc("Enter your Telegram bot token.")
+			.setName(t("settings.bot.token"))
+			.setDesc(t("settings.bot.token.desc"))
 			.addText(async (text) => {
 				text.setPlaceholder("Example: 123456789")
 					.setValue(await this.plugin.getBotToken())
@@ -64,10 +65,8 @@ export class BotSettingsModal extends Modal {
 
 	addAllowedChatsSetting() {
 		const allowedChatsSetting = new Setting(this.botSettingsDiv)
-			.setName("Allowed chats (required)")
-			.setDesc(
-				"Enter list of usernames or chat ids that should be processed. At least your username must be entered.",
-			)
+			.setName(t("settings.bot.allowedChats"))
+			.setDesc(t("settings.bot.allowedChats.desc"))
 			.addTextArea((text) => {
 				const textArea = text
 					.setPlaceholder("Example: username,1227636")
@@ -84,7 +83,7 @@ export class BotSettingsModal extends Modal {
 			});
 		// add link to Telegram FAQ about getting username
 		const howDoIGetUsername = activeDocument.createElement("div");
-		howDoIGetUsername.textContent = "To get help click on -> ";
+		howDoIGetUsername.textContent = t("settings.bot.allowedChats.help");
 		howDoIGetUsername.createEl("a", {
 			href: "https://telegram.org/faq?setln=en#q-what-are-usernames-how-do-i-get-one",
 			text: "Telegram FAQ",
@@ -94,10 +93,8 @@ export class BotSettingsModal extends Modal {
 
 	addDeviceId() {
 		const deviceIdSetting = new Setting(this.botSettingsDiv)
-			.setName(mainDeviceIdSettingName)
-			.setDesc(
-				"Specify the device to be used for sync when running Obsidian simultaneously on multiple desktops. If not specified, the priority will shift unpredictably.",
-			)
+			.setName(t("settings.bot.mainDeviceId"))
+			.setDesc(t("settings.bot.mainDeviceId.desc"))
 			.addText((text) =>
 				text
 					.setPlaceholder("Example: 98912984-c4e9-5ceb-8000-03882a0485e4")
@@ -107,7 +104,7 @@ export class BotSettingsModal extends Modal {
 
 		// current device id copy to settings
 		const deviceIdLink = deviceIdSetting.descEl.createDiv();
-		deviceIdLink.textContent = "To make the current device as main, click on -> ";
+		deviceIdLink.textContent = t("settings.bot.mainDeviceId.link");
 		deviceIdLink
 			.createEl("a", {
 				href: this.plugin.currentDeviceId,
@@ -119,8 +116,8 @@ export class BotSettingsModal extends Modal {
 				try {
 					inputDeviceId = deviceIdSetting.controlEl.firstElementChild as HTMLInputElement;
 					inputDeviceId.value = this.plugin.currentDeviceId;
-				} catch (error) {
-					displayAndLog(this.plugin, `Try to copy and paste device id manually. Error: ${error}`, _5sec);
+				} catch (error: unknown) {
+					displayAndLog(this.plugin, t("settings.bot.mainDeviceId.error", { error: String(error) }), _5sec);
 				}
 				if (inputDeviceId && inputDeviceId.value)
 					this.plugin.settings.mainDeviceId = this.plugin.currentDeviceId;
@@ -129,10 +126,8 @@ export class BotSettingsModal extends Modal {
 
 	addEncryptionByPinCode() {
 		const botTokenSetting = new Setting(this.botSettingsDiv)
-			.setName("Bot token encryption using a pin code")
-			.setDesc(
-				"Encrypt the bot token for enhanced security. When enabled, a pin code is required at each Obsidian launch. ",
-			)
+			.setName(t("settings.bot.token.encryption"))
+			.setDesc(t("settings.bot.encryption.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.encryptionByPinCode);
 				toggle.onChange((value) => {
@@ -156,7 +151,7 @@ export class BotSettingsModal extends Modal {
 				});
 			});
 		botTokenSetting.descEl.createSpan({
-			text: "Bot token encryption provides additional security",
+			text: t("settings.bot.encryption.extra"),
 		});
 	}
 

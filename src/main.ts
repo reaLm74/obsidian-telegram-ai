@@ -35,13 +35,16 @@ import { decrypt, encrypt } from "./utils/crypto256";
 import { PinCodeModal } from "./settings/modals/PinCode";
 import { CategoryManager } from "./categories/CategoryManager";
 
+import { initProcessingStatusBar, destroyProcessingStatusBar } from "./processing/ProcessingTracker";
+import { initLocale, t } from "./locale/i18n";
+
 // TODO LOW: add "connecting"
 export type ConnectionStatus = "connected" | "disconnected";
 export type PluginStatus = "unloading" | "unloaded" | "loading" | "loaded";
 
 // Main class for the Telegram AI plugin
 export default class TelegramSyncPlugin extends Plugin {
-	settings: TelegramSyncSettings;
+	settings!: TelegramSyncSettings;
 	settingsTab?: TelegramSyncSettingTab;
 	categoryManager?: CategoryManager;
 	private botStatus: ConnectionStatus = "disconnected";
@@ -185,6 +188,9 @@ export default class TelegramSyncPlugin extends Plugin {
 	async onload() {
 		this.status = "loading";
 
+		// Initialize locale system (auto-detects Obsidian language)
+		initLocale();
+
 		await this.loadSettings();
 		await this.upgradeSettings();
 
@@ -197,9 +203,42 @@ export default class TelegramSyncPlugin extends Plugin {
 		await this.categoryManager.init();
 
 		hideMTProtoAlerts(this);
+		// Initialize processing status bar
+		initProcessingStatusBar(this);
+
+		// Register commands
+		this.addCommand({
+			id: "show-processing-history",
+			name: t("commands.showHistory"),
+			callback: async () => {
+				const { ProcessingHistoryModal } = await import("./processing/ProcessingHistoryModal");
+				const { getProcessingHistory, getProcessingStats } = await import("./processing/ProcessingTracker");
+				new ProcessingHistoryModal(this.app, getProcessingHistory(), getProcessingStats()).open();
+			},
+		});
+
+		this.addCommand({
+			id: "run-setup-wizard",
+			name: t("commands.runWizard"),
+			callback: async () => {
+				const { SetupWizardModal } = await import("./settings/SetupWizard");
+				new SetupWizardModal(this.app, this).open();
+			},
+		});
+
 		// Initialize the Telegram bot when Obsidian layout is fully loaded
-		// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
-		this.app.workspace.onLayoutReady(() => void enqueue(this, this.initTelegram));
+
+		this.app.workspace.onLayoutReady(() => {
+			// Show setup wizard for first-time users
+			if (!this.settings.setupCompleted) {
+				void (async () => {
+					const { SetupWizardModal } = await import("./settings/SetupWizard");
+					new SetupWizardModal(this.app, this).open();
+				})();
+			}
+			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue binds `this` via fn.call(context)
+			void enqueue(this, this.initTelegram);
+		});
 
 		this.status = "loaded";
 		displayAndLog(this, this.status, 0);
@@ -211,6 +250,7 @@ export default class TelegramSyncPlugin extends Plugin {
 			clearTooManyRequestsInterval();
 			clearCachedMessagesInterval();
 			clearHandleMediaGroupInterval();
+			destroyProcessingStatusBar();
 			this.connectionStatusIndicator?.destroy();
 			this.connectionStatusIndicator = undefined;
 			this.settingsTab = undefined;

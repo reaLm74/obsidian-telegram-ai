@@ -1,7 +1,7 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
+import { t } from "src/locale/i18n";
 
-/** Predefined OpenAI models for dropdown selection */
 const OPENAI_MODELS: Record<string, string> = {
 	o1: "o1 (Reasoning model)",
 	"o1-mini": "o1-mini (Fast reasoning)",
@@ -27,13 +27,11 @@ export class AIProviderModal extends Modal {
 	onOpen() {
 		const { contentEl } = this;
 		contentEl.empty();
+		contentEl.createEl("h2", { text: t("modal.aiProvider") });
 
-		contentEl.createEl("h2", { text: "AI provider settings" });
-
-		// AI Provider Selection
 		new Setting(contentEl)
-			.setName("Artificial intelligence provider")
-			.setDesc("Choose which service to use")
+			.setName(t("settings.ai.provider"))
+			.setDesc(t("settings.ai.provider.desc"))
 			.addDropdown((dropdown) => {
 				dropdown
 					.addOption("openai", "OpenAI")
@@ -51,38 +49,26 @@ export class AIProviderModal extends Modal {
 		const providerContainer = contentEl.createDiv({ cls: "ai-provider-container" });
 		this.renderProviderSettings(providerContainer);
 
-		// Advanced Settings Section
-		contentEl.createEl("h3", { text: "Advanced settings" });
+		contentEl.createEl("h3", { text: t("settings.advanced.title") });
 		this.addAdvancedSettings(contentEl);
 
-		// OK Button
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
-
-		const okButton = buttonContainer.createEl("button", { text: "OK", cls: "mod-cta" });
-		okButton.addEventListener("click", () => {
-			this.close();
-		});
+		const okButton = buttonContainer.createEl("button", { text: t("common.ok"), cls: "mod-cta" });
+		okButton.addEventListener("click", () => this.close());
 	}
 
 	private renderProviderSettings(container?: HTMLElement) {
-		const providerContainer = container || (this.contentEl.querySelector(".ai-provider-container") as HTMLElement);
-		if (!providerContainer) return;
-
-		providerContainer.empty();
-
+		const c = container || (this.contentEl.querySelector(".ai-provider-container") as HTMLElement);
+		if (!c) return;
+		c.empty();
 		const provider = this.plugin.settings.aiProvider || "openai";
-
-		switch (provider) {
-			case "openai":
-				this.addOpenAISettings(providerContainer);
-				break;
-		}
+		if (provider === "openai") this.addOpenAISettings(c);
 	}
 
 	private addOpenAISettings(container: HTMLElement) {
 		new Setting(container)
 			.setName("OpenAI key")
-			.setDesc("Your key for the service")
+			.setDesc(t("settings.ai.key"))
 			.addText((text) => {
 				text.setPlaceholder("Sk-...")
 					.setValue(this.plugin.settings.openAIApiKey)
@@ -104,21 +90,12 @@ export class AIProviderModal extends Modal {
 						void (async () => {
 							button.setDisabled(true);
 							button.setButtonText("Testing...");
-
 							const { testOpenAIApiKey } = await import("src/ai/openai");
 							const result = await testOpenAIApiKey(this.plugin.settings.openAIApiKey);
-
 							button.setButtonText(result.success ? "✓" : "✗");
 							button.setTooltip(result.message);
-
-							// Show notification
-							if (result.success) {
-								new Notice(result.message);
-							} else {
-								new Notice(result.message, 5000);
-							}
-
-							// Reset button after 3 seconds
+							if (result.success) new Notice(result.message);
+							else new Notice(result.message, 5000);
 							window.setTimeout(() => {
 								button.setButtonText("Test key");
 								button.setTooltip("Test API key validity");
@@ -130,7 +107,7 @@ export class AIProviderModal extends Modal {
 
 		this.addModelDropdown(
 			container,
-			"Model",
+			t("settings.ai.model"),
 			"OpenAI model to use",
 			OPENAI_MODELS,
 			this.plugin.settings.openAIModel,
@@ -143,8 +120,8 @@ export class AIProviderModal extends Modal {
 		);
 
 		new Setting(container)
-			.setName("Enable vision")
-			.setDesc("Use vision for image analysis (requires compatible model)")
+			.setName(t("settings.ai.vision"))
+			.setDesc(t("settings.ai.vision.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiVisionEnabled).onChange((value) => {
 					void (async () => {
@@ -156,8 +133,8 @@ export class AIProviderModal extends Modal {
 			});
 
 		new Setting(container)
-			.setName("Temperature")
-			.setDesc("Controls randomness (0-2). Lower = more focused, higher = more creative")
+			.setName(t("settings.ai.temperature"))
+			.setDesc(t("settings.ai.temperature.desc"))
 			.addSlider((slider) => {
 				slider
 					.setLimits(0, 2, 0.1)
@@ -173,8 +150,8 @@ export class AIProviderModal extends Modal {
 			});
 
 		new Setting(container)
-			.setName("Max tokens")
-			.setDesc("Maximum length of the response")
+			.setName(t("settings.ai.maxTokens"))
+			.setDesc(t("settings.ai.maxTokens.desc"))
 			.addText((text) => {
 				text.setPlaceholder("2000")
 					.setValue(this.plugin.settings.openAIMaxTokens.toString())
@@ -200,32 +177,24 @@ export class AIProviderModal extends Modal {
 	) {
 		const isPredefined = currentValue && Object.keys(predefinedModels).includes(currentValue);
 		const dropdownValue = isPredefined ? currentValue : currentValue === "" ? "" : CUSTOM_MODEL_VALUE;
-
 		const modelSetting = new Setting(container).setName(name).setDesc(desc);
-
 		modelSetting.addDropdown((dropdown) => {
 			dropdown.addOption("", "Select a model...");
-			for (const [id, label] of Object.entries(predefinedModels)) {
-				dropdown.addOption(id, label);
-			}
+			for (const [id, label] of Object.entries(predefinedModels)) dropdown.addOption(id, label);
 			dropdown.addOption(CUSTOM_MODEL_VALUE, "Other custom model");
 			dropdown.setValue(dropdownValue);
 			dropdown.onChange((value) => {
 				if (value === CUSTOM_MODEL_VALUE) {
-					if (isPredefined || !currentValue) {
-						void onChange("enter-model-id");
-					}
+					if (isPredefined || !currentValue) void onChange("enter-model-id");
 					this.renderProviderSettings();
 					return;
 				}
-
 				void (async () => {
 					await onChange(dropdown.getValue());
 					this.renderProviderSettings();
 				})();
 			});
 		});
-
 		if (!isPredefined) {
 			modelSetting.addText((text) => {
 				text.setPlaceholder("Enter model ID")
@@ -248,8 +217,8 @@ export class AIProviderModal extends Modal {
 
 	private addAdvancedSettings(container: HTMLElement) {
 		new Setting(container)
-			.setName("Retry attempts")
-			.setDesc("Number of retry attempts for failed requests")
+			.setName(t("settings.ai.retryAttempts"))
+			.setDesc(t("settings.ai.retryAttempts.desc"))
 			.addText((text) => {
 				text.setPlaceholder("3")
 					.setValue(this.plugin.settings.aiRetryAttempts.toString())
@@ -266,8 +235,8 @@ export class AIProviderModal extends Modal {
 			});
 
 		new Setting(container)
-			.setName("Retry delay (ms)")
-			.setDesc("Base delay between retries (will increase exponentially)")
+			.setName(t("settings.ai.retryDelay"))
+			.setDesc(t("settings.ai.retryDelay.desc"))
 			.addText((text) => {
 				text.setPlaceholder("1000")
 					.setValue(this.plugin.settings.aiRetryDelay.toString())
@@ -284,8 +253,8 @@ export class AIProviderModal extends Modal {
 			});
 
 		new Setting(container)
-			.setName("Request timeout (ms)")
-			.setDesc("Maximum time to wait for API response")
+			.setName(t("settings.ai.timeout"))
+			.setDesc(t("settings.ai.timeout.desc"))
 			.addText((text) => {
 				text.setPlaceholder("30000")
 					.setValue(this.plugin.settings.aiTimeout.toString())

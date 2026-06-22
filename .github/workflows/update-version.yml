@@ -70,6 +70,8 @@ jobs:
 
             - name: Update manifest.json and versions.json
               if: ${{steps.release.outputs.pr}}
+              env:
+                  HUSKY: "0"
               run: |
                   git config core.autocrlf false
                   git config core.eol lf
@@ -78,13 +80,11 @@ jobs:
                   git fetch origin
                   git checkout develop
                   npm ci
-                  npm run release-notes-check
                   npm run version
+                  npm run release-notes-check
                   TAG_NAME=$(node -p "require('./package.json').version")
-                  git add -A
-                  if git diff --cached --quiet; then
-                    echo "No changes to commit"
-                  else
-                    git commit -m "chore: update version of plugin to $TAG_NAME"
+                  git add manifest.json versions.json
+                  git diff --cached --quiet && echo "No changes to commit" || {
+                    git commit --no-verify -m "chore: update version of plugin to $TAG_NAME"
                     git push origin develop
-                  fi
+                  }
