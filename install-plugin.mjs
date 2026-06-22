@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import manifest from "./manifest.json" assert { type: "json" };
+import manifest from "./manifest.json" with { type: "json" };
 import https from "https";
 
 const destinationFolder = process.argv[2];

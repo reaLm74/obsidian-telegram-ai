@@ -1,5 +1,6 @@
 import { App, Modal, Setting, TextAreaComponent } from "obsidian";
 import TelegramSyncPlugin from "src/main";
+import { t } from "src/locale/i18n";
 
 export class PromptsModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -18,22 +19,18 @@ export class PromptsModal extends Modal {
 		// Make modal wider for better editing experience
 		this.modalEl.addClass("prompt-modal");
 
-		contentEl.createEl("h2", { text: "AI prompts configuration" });
+		contentEl.createEl("h2", { text: t("settings.ai.prompts.title") });
 
 		contentEl.createEl("p", {
-			text: "Configure prompts for different content types. Each content type can have its own specific prompt for AI processing.",
+			text: t("settings.ai.prompts.intro"),
 		});
 		contentEl.createEl("p", {
-			text: "Use the toggle to enable/disable processing for that type. Write your custom prompt in the text area below.",
+			text: t("settings.ai.prompts.hint"),
 			cls: "setting-item-description",
 		});
 
 		// --- General Formatting ---
-		new Setting(contentEl)
-			.setName("General formatting prompt")
-			.setDesc(
-				"Applied to all processed content for final formatting. Used when no specific prompt is set or as a final formatting step.",
-			);
+		new Setting(contentEl).setName(t("settings.ai.generalPrompt")).setDesc(t("settings.ai.generalPrompt.desc"));
 
 		this.createFullWidthTextArea(
 			contentEl,
@@ -48,12 +45,12 @@ export class PromptsModal extends Modal {
 			},
 		);
 
-		contentEl.createEl("h3", { text: "Content type specific prompts" });
+		contentEl.createEl("h3", { text: t("settings.ai.prompts.contentTypes") });
 
 		// --- Text Messages ---
 		new Setting(contentEl)
-			.setName("Text messages")
-			.setDesc("Processing for plain text messages")
+			.setName(t("settings.ai.process.text"))
+			.setDesc(t("settings.ai.process.text.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessText).onChange((value) => {
 					void (async () => {
@@ -79,8 +76,8 @@ export class PromptsModal extends Modal {
 
 		// --- Photos ---
 		new Setting(contentEl)
-			.setName("Photos")
-			.setDesc("Processing for images (requires vision API)")
+			.setName(t("settings.ai.process.photo"))
+			.setDesc(t("settings.ai.process.photo.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessPhoto).onChange((value) => {
 					void (async () => {
@@ -106,8 +103,8 @@ export class PromptsModal extends Modal {
 
 		// --- Audio & Video ---
 		new Setting(contentEl)
-			.setName("Audio and video files")
-			.setDesc("Processing for voice messages, audio files, and videos")
+			.setName(t("settings.ai.process.voice"))
+			.setDesc(t("settings.ai.process.voice.desc"))
 			.addToggle((toggle) => {
 				// Use voice setting as the master toggle for UI
 				toggle.setValue(this.plugin.settings.aiProcessVoice).onChange((value) => {
@@ -136,8 +133,8 @@ export class PromptsModal extends Modal {
 
 		// --- Documents ---
 		new Setting(contentEl)
-			.setName("Document processing")
-			.setDesc("Processing for document files")
+			.setName(t("settings.ai.process.document"))
+			.setDesc(t("settings.ai.process.document.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessDocument).onChange((value) => {
 					void (async () => {
@@ -163,8 +160,8 @@ export class PromptsModal extends Modal {
 
 		// --- Web Links ---
 		new Setting(contentEl)
-			.setName("Web links")
-			.setDesc("Processing for web links sent in messages (via r.jina.ai)")
+			.setName(t("settings.ai.process.links"))
+			.setDesc(t("settings.ai.process.links.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.plugin.settings.aiProcessLinks).onChange((value) => {
 					void (async () => {
@@ -191,7 +188,10 @@ export class PromptsModal extends Modal {
 		// OK Button
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 
-		const okButton = buttonContainer.createEl("button", { text: "Save & close", cls: "mod-cta" });
+		const okButton = buttonContainer.createEl("button", {
+			text: t("settings.ai.prompts.saveClose"),
+			cls: "mod-cta",
+		});
 		okButton.addEventListener("click", () => {
 			this.close();
 		});

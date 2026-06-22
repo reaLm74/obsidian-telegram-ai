@@ -9,10 +9,11 @@ import {
 } from "../messageDistribution";
 import { FileSuggest } from "../suggesters/FileSuggester";
 import { _15sec, displayAndLog } from "../../utils/logUtils";
+import { t } from "../../locale/i18n";
 
 export class MessageDistributionRulesModal extends Modal {
 	messageDistributionRule: MessageDistributionRule;
-	messageDistributionRulesDiv: HTMLDivElement;
+	messageDistributionRulesDiv!: HTMLDivElement;
 	plugin: TelegramSyncPlugin;
 	saved = false;
 	editing = false;
@@ -41,18 +42,18 @@ export class MessageDistributionRulesModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.messageDistributionRulesDiv = this.contentEl.createDiv();
-		this.titleEl.setText(`${this.editing ? "Editing" : "Adding"} message distribution rule`);
+		this.titleEl.setText(
+			this.editing ? t("settings.distribution.ruleTitle.editing") : t("settings.distribution.ruleTitle.adding"),
+		);
 		new Setting(this.messageDistributionRulesDiv).descEl.createSpan({
-			text: "Template variables documentation is available in the plugin docs",
+			text: t("settings.distribution.docsHint"),
 		});
 	}
 
 	addMessageFilter() {
 		const setting = new Setting(this.messageDistributionRulesDiv)
-			.setName("Message filter")
-			.setDesc(
-				"Conditions by which you would like to filter messages. Leave the field blank if you want to apply this rule to all messages",
-			)
+			.setName(t("settings.distribution.filter"))
+			.setDesc(t("settings.distribution.filter.desc"))
 			.addTextArea((text) => {
 				text.setValue(this.messageDistributionRule.messageFilterQuery)
 					.onChange((filterQuery: string) => {
@@ -67,8 +68,8 @@ export class MessageDistributionRulesModal extends Modal {
 
 	addTemplateFilePath() {
 		const setting = new Setting(this.messageDistributionRulesDiv)
-			.setName("Template file path")
-			.setDesc("Specify path to template file you want to apply to new notes")
+			.setName(t("settings.distribution.templatePath"))
+			.setDesc(t("settings.distribution.templatePath.desc"))
 			.addSearch((cb) => {
 				new FileSuggest(cb.inputEl, this.plugin);
 				cb.setPlaceholder("Example: folder/zettelkasten.md")
@@ -82,10 +83,8 @@ export class MessageDistributionRulesModal extends Modal {
 
 	addNotePathTemplate() {
 		const setting = new Setting(this.messageDistributionRulesDiv)
-			.setName("Note path template")
-			.setDesc(
-				"Specify path template for storage folders and note names. Leave empty if you don't want to create any notes from filtrated messages",
-			)
+			.setName(t("settings.distribution.notePath"))
+			.setDesc(t("settings.distribution.notePath.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder(`Example: folder/${defaultNoteNameTemplate}`)
 					.setValue(this.messageDistributionRule.notePathTemplate)
@@ -99,10 +98,8 @@ export class MessageDistributionRulesModal extends Modal {
 	addFilePathTemplate() {
 		const setting = new Setting(this.messageDistributionRulesDiv);
 		setting
-			.setName("File path template")
-			.setDesc(
-				"Specify path template for storage folders and file names. Leave empty if you don't want to save any files from filtrated messages",
-			)
+			.setName(t("settings.distribution.filePath"))
+			.setDesc(t("settings.distribution.filePath.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder(`Example: folder/${defaultFileNameTemplate}`)
 					.setValue(this.messageDistributionRule.filePathTemplate)
@@ -116,8 +113,8 @@ export class MessageDistributionRulesModal extends Modal {
 	addHeading() {
 		const setting = new Setting(this.messageDistributionRulesDiv);
 		setting
-			.setName("Heading")
-			.setDesc("Specify the heading under which new messages will be inserted")
+			.setName(t("settings.categories.headingField"))
+			.setDesc(t("settings.categories.headingField.desc"))
 			.addText((text) => {
 				text.setPlaceholder("Example: ### log")
 					.setValue(this.messageDistributionRule.heading)
@@ -131,10 +128,8 @@ export class MessageDistributionRulesModal extends Modal {
 	addMessageSortingMode() {
 		const setting = new Setting(this.messageDistributionRulesDiv);
 		setting
-			.setName("Reversed order")
-			.setDesc(
-				"Turn on to have new messages appear at the beginning of the note, or, if a heading is specified, above it. This may disrupt message order if parallel processing is enabled",
-			)
+			.setName(t("settings.distribution.reversed"))
+			.setDesc(t("settings.distribution.reversed.desc"))
 			.addToggle((toggle) => {
 				toggle.setValue(this.messageDistributionRule.reversedOrder);
 				toggle.onChange((value) => {
@@ -147,25 +142,21 @@ export class MessageDistributionRulesModal extends Modal {
 		this.messageDistributionRulesDiv.createEl("br");
 		const footerButtons = new Setting(this.contentEl.createDiv());
 		footerButtons.addButton((b) => {
-			b.setTooltip("Submit")
+			b.setTooltip(t("common.submit"))
 				.setIcon("checkmark")
 				.onClick(async () => {
 					const template = this.messageDistributionRule.templateFilePath;
 					const notePath = this.messageDistributionRule.notePathTemplate;
 					const filePath = this.messageDistributionRule.filePathTemplate;
 					if (!template && !notePath && !filePath) {
-						displayAndLog(this.plugin, "Please, fill at least one field", _15sec);
+						displayAndLog(this.plugin, t("settings.distribution.fillAtLeastOne"), _15sec);
 						return;
 					}
 					if (
 						(template && (template == notePath || template == filePath)) ||
 						(filePath && filePath == notePath)
 					) {
-						displayAndLog(
-							this.plugin,
-							`"Template file path", "Note path template" and "File path template" must not be equal to one another`,
-							_15sec,
-						);
+						displayAndLog(this.plugin, t("settings.distribution.fieldsNotEqual"), _15sec);
 						return;
 					}
 					if (!this.editing) this.plugin.settings.messageDistributionRules.push(this.messageDistributionRule);
@@ -177,7 +168,7 @@ export class MessageDistributionRulesModal extends Modal {
 		});
 		footerButtons.addExtraButton((b) => {
 			b.setIcon("cross")
-				.setTooltip("Cancel")
+				.setTooltip(t("common.cancel"))
 				.onClick(() => {
 					void (async () => {
 						await this.plugin.loadSettings();

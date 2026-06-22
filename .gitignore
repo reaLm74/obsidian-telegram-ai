@@ -28,3 +28,19 @@ data.json
 
 # Obsidian specific
 .obsidian/
+
+# Test & Coverage
+coverage/
+
+# Linter output
+eslint-output.txt
+eslint-report.json
+eslint_out.txt
+eslint_parsed.txt
+
+# Temp scripts & build artifacts
+analyze_eslint.py
+read_eslint.py
+out-test.js
+out-test-patched.js
+test-esbuild.js

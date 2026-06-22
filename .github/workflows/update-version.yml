@@ -80,8 +80,8 @@ jobs:
                   git fetch origin
                   git checkout develop
                   npm ci
-                  npm run release-notes-check
                   npm run version
+                  npm run release-notes-check
                   TAG_NAME=$(node -p "require('./package.json').version")
                   git add manifest.json versions.json
                   git diff --cached --quiet && echo "No changes to commit" || {

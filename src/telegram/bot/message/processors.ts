@@ -59,15 +59,14 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 		await plugin.bot.deleteMessage(msg.chat.id, msg.message_id);
 	} else if (plugin.settings.processedMessageAction === "EMOJI") {
 		let needReply = true;
-		let errorMessage = "";
 
 		const emoticon = msg.edit_date ? emoticonProcessedEdited : plugin.settings.emojiForProcessedMessages;
 		// reacting by bot
 		try {
 			await enqueue(setReaction, plugin, msg, emoticon);
 			needReply = false;
-		} catch (e) {
-			errorMessage = `\n\nCan't "like" the message by bot, ${e}`;
+		} catch {
+			// Reaction may fail on forwarded messages or restricted chats — fall through to user reaction or reply
 		}
 		// reacting by user
 		try {
@@ -75,20 +74,23 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 				await enqueue(Client.sendReaction, plugin.botUser, msg, emoticon);
 				needReply = false;
 			}
-		} catch (e) {
-			errorMessage = `\n\nCan't "like" the message by user, ${e}`;
+		} catch {
+			// Reaction may fail (REACTION_INVALID) — fall through to reply
 		}
-		const ok_msg = msg.edit_date ? "...🆗..." : "...✅...";
-		if (needReply && originalMsg) {
-			await originalMsg.reply({
-				message: ok_msg + errorMessage,
-				silent: true,
-			});
-		} else if (needReply) {
-			await plugin.bot?.sendMessage(msg.chat.id, ok_msg + errorMessage, {
-				reply_to_message_id: msg.message_id,
-				disable_notification: true,
-			});
+		// Silent reply as last resort when reactions are not supported
+		if (needReply) {
+			const ok_msg = msg.edit_date ? "...🆗..." : "...✅...";
+			if (originalMsg) {
+				await originalMsg.reply({
+					message: ok_msg,
+					silent: true,
+				});
+			} else {
+				await plugin.bot?.sendMessage(msg.chat.id, ok_msg, {
+					reply_to_message_id: msg.message_id,
+					disable_notification: true,
+				});
+			}
 		}
 	}
 }
@@ -109,8 +111,8 @@ export async function applyNoteContentTemplate(
 			if (!(templateAbstract instanceof TFile)) throw new Error(`Not a file: ${templateFilePath}`);
 			templateContent = await plugin.app.vault.read(templateAbstract);
 		}
-	} catch (e) {
-		throw new Error(`Template "${templateFilePath}" not found! ${e}`);
+	} catch (e: unknown) {
+		throw new Error(`Template "${templateFilePath}" not found! ${String(e)}`);
 	}
 
 	const allEmbeddedFilesLinks = filesLinks.length > 0 ? filesLinks.join("\n") : "";

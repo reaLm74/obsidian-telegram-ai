@@ -1,6 +1,7 @@
 import { App, Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { NoteCategory } from "src/categories/types";
+import { t } from "src/locale/i18n";
 
 export class CategoryModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -24,7 +25,9 @@ export class CategoryModal extends Modal {
 			modalEl.addClass("ai-modal-on-top");
 		}
 
-		contentEl.createEl("h2", { text: this.category ? "Edit category" : "Add category" });
+		contentEl.createEl("h2", {
+			text: this.category ? t("settings.categories.edit") : t("settings.categories.addTitle"),
+		});
 
 		let name = this.category?.name || "";
 		let description = this.category?.description || "";
@@ -35,8 +38,8 @@ export class CategoryModal extends Modal {
 		let templatePath = this.category?.templatePath || "";
 
 		new Setting(contentEl)
-			.setName("Name")
-			.setDesc("Category name")
+			.setName(t("settings.categories.name"))
+			.setDesc(t("settings.categories.name.desc"))
 			.addText((text) => {
 				text.setPlaceholder("Category name")
 					.setValue(name)
@@ -47,8 +50,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Description")
-			.setDesc("Category description")
+			.setName(t("settings.categories.description"))
+			.setDesc(t("settings.categories.description.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder("Category description")
 					.setValue(description)
@@ -60,8 +63,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Color")
-			.setDesc("Category color (hex)")
+			.setName(t("settings.categories.color"))
+			.setDesc(t("settings.categories.color.desc"))
 			.addText((text) => {
 				text.setPlaceholder("#349800")
 					.setValue(color)
@@ -71,10 +74,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Note path template")
-			.setDesc(
-				"Template for note path and filename. Use {{category}}, {{date:YYYY-MM}}, {{content:20}}, {{ai:custom_param}} etc. Include .md extension.",
-			)
+			.setName(t("settings.categories.notePath"))
+			.setDesc(t("settings.categories.notePath.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder("{{category}}/{{date:YYYY-MM}}/{{date:DD-HH-mm}}.md")
 					.setValue(notePathTemplate)
@@ -86,10 +87,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("File path override (optional)")
-			.setDesc(
-				"Override file path template from message distribution rules. Leave empty to use default file path template.",
-			)
+			.setName(t("settings.categories.fileOverride"))
+			.setDesc(t("settings.categories.fileOverride.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder("{{category}}/Files/{{file:type}}s/{{file:name}}.{{file:extension}}")
 					.setValue(filePathOverride)
@@ -101,12 +100,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Keywords (advanced categorization)")
-			.setDesc(
-				"Keywords for automatic categorization (comma-separated). " +
-					"Works in addition to message distribution rules, not as replacement. " +
-					"Used for AI classification and additional tagging.",
-			)
+			.setName(t("settings.categories.keywords"))
+			.setDesc(t("settings.categories.keywords.desc"))
 			.addTextArea((text) => {
 				text.setPlaceholder("Keyword1, keyword2, keyword3")
 					.setValue(keywords)
@@ -118,11 +113,8 @@ export class CategoryModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Template path (beta)")
-			.setDesc(
-				"Path to template file for notes in this category (optional). " +
-					"⚠️ Beta feature: Template functionality is experimental and may change.",
-			)
+			.setName(t("settings.categories.templatePath"))
+			.setDesc(t("settings.categories.templatePath.desc"))
 			.addText((text) => {
 				text.setPlaceholder("Templates/CategoryTemplate.md")
 					.setValue(templatePath)
@@ -135,10 +127,10 @@ export class CategoryModal extends Modal {
 		// Buttons
 		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 
-		const cancelButton = buttonContainer.createEl("button", { text: "Cancel" });
+		const cancelButton = buttonContainer.createEl("button", { text: t("common.cancel") });
 		cancelButton.onclick = () => this.close();
 
-		const saveButton = buttonContainer.createEl("button", { text: "Save", cls: "mod-cta" });
+		const saveButton = buttonContainer.createEl("button", { text: t("common.save"), cls: "mod-cta" });
 		saveButton.onclick = () => {
 			void (async () => {
 				if (!name.trim()) {
