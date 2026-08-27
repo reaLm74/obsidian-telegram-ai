@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.2.1](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.2.0...0.2.1) (2026-08-27)
+
+
+### Bug Fixes
+
+* pin-code encryption, message loss on backlog sync, media group and vision handling ([d08a296](https://github.com/reaLm74/obsidian-telegram-ai/commit/d08a296dd2a57e59b84b1ea6ef10c637432040e6))
+
 ## [0.2.0](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.1.7...0.2.0) (2026-06-22)
 
 
