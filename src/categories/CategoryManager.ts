@@ -1,13 +1,13 @@
 import TelegramBot from "node-telegram-bot-api";
 import TelegramSyncPlugin from "src/main";
-import { NoteCategory, CategorizationRule, CategorizationRuleType, DEFAULT_CATEGORIES } from "./types";
+import { NoteCategory, CategoryMatch, DEFAULT_CATEGORIES } from "./types";
 import { AIClassifier } from "./AIClassifier";
 import { displayAndLogError } from "src/utils/logUtils";
+import { clearMessageMetadataCache, resolveMessageMetadata } from "src/ai/messageMetadata";
 
 export class CategoryManager {
 	private plugin: TelegramSyncPlugin;
 	private categories = new Map<string, NoteCategory>();
-	private rules: CategorizationRule[] = [];
 	private aiClassifier: AIClassifier;
 
 	constructor(plugin: TelegramSyncPlugin) {
@@ -17,7 +17,6 @@ export class CategoryManager {
 
 	async init() {
 		await this.loadCategories();
-		this.loadRules();
 	}
 
 	/**
@@ -25,10 +24,22 @@ export class CategoryManager {
 	 */
 	private async loadCategories(): Promise<void> {
 		this.categories.clear();
+		// The category list is part of the metadata prompt, so an answer produced against the
+		// previous list must not be reused — it may name a category that no longer exists.
+		clearMessageMetadataCache();
 
-		// If no categories, create defaults
-		if (this.plugin.settings.noteCategories.length === 0) {
+		// Seed the defaults only on first run. An empty list is not enough of a signal:
+		// after the user deletes their last category, reload() lands here too, and
+		// re-seeding would silently undo the deletion (and make zero categories impossible).
+		if (this.plugin.settings.noteCategories.length === 0 && !this.plugin.settings.defaultCategoriesInitialized) {
 			await this.initializeDefaultCategories();
+		} else if (
+			this.plugin.settings.noteCategories.length > 0 &&
+			!this.plugin.settings.defaultCategoriesInitialized
+		) {
+			// Pre-existing install upgrading to this flag: its categories are already set up.
+			this.plugin.settings.defaultCategoriesInitialized = true;
+			await this.plugin.saveSettings();
 		}
 
 		for (const category of this.plugin.settings.noteCategories) {
@@ -53,16 +64,8 @@ export class CategoryManager {
 			this.plugin.settings.noteCategories.push(category);
 		}
 
+		this.plugin.settings.defaultCategoriesInitialized = true;
 		await this.plugin.saveSettings();
-	}
-
-	/**
-	 * Loads categorization rules
-	 */
-	private loadRules(): void {
-		this.rules = [...this.plugin.settings.categorizationRules];
-		// Sort by priority
-		this.rules.sort((a, b) => b.priority - a.priority);
 	}
 
 	/**
@@ -79,6 +82,7 @@ export class CategoryManager {
 
 		this.categories.set(category.id, category);
 		this.plugin.settings.noteCategories.push(category);
+		clearMessageMetadataCache();
 		await this.plugin.saveSettings();
 
 		return category;
@@ -101,6 +105,7 @@ export class CategoryManager {
 		};
 
 		this.categories.set(id, updatedCategory);
+		clearMessageMetadataCache();
 
 		// Update in settings
 		const index = this.plugin.settings.noteCategories.findIndex((c) => c.id === id);
@@ -117,17 +122,12 @@ export class CategoryManager {
 	 */
 	async deleteCategory(id: string): Promise<void> {
 		this.categories.delete(id);
+		clearMessageMetadataCache();
 
 		// Remove from settings
 		this.plugin.settings.noteCategories = this.plugin.settings.noteCategories.filter((c) => c.id !== id);
 
-		// Remove related rules
-		this.plugin.settings.categorizationRules = this.plugin.settings.categorizationRules.filter(
-			(r) => r.categoryId !== id,
-		);
-
 		await this.plugin.saveSettings();
-		this.loadRules(); // Reload rules
 	}
 
 	/**
@@ -152,62 +152,6 @@ export class CategoryManager {
 	}
 
 	/**
-	 * Creates new categorization rule
-	 */
-	async createRule(ruleData: Omit<CategorizationRule, "id">): Promise<CategorizationRule> {
-		const rule: CategorizationRule = {
-			...ruleData,
-			id: this.generateId(),
-		};
-
-		this.plugin.settings.categorizationRules.push(rule);
-		await this.plugin.saveSettings();
-		this.loadRules(); // Reload with sorting
-
-		return rule;
-	}
-
-	/**
-	 * Updates categorization rule
-	 */
-	async updateRule(id: string, updates: Partial<CategorizationRule>): Promise<CategorizationRule> {
-		const index = this.plugin.settings.categorizationRules.findIndex((r) => r.id === id);
-
-		if (index === -1) {
-			throw new Error(`Rule with id ${id} not found`);
-		}
-
-		const updatedRule: CategorizationRule = {
-			...this.plugin.settings.categorizationRules[index],
-			...updates,
-			id, // ID doesn't change
-		};
-
-		this.plugin.settings.categorizationRules[index] = updatedRule;
-		await this.plugin.saveSettings();
-		this.loadRules(); // Reload with sorting
-
-		return updatedRule;
-	}
-
-	/**
-	 * Deletes categorization rule
-	 */
-	async deleteRule(id: string): Promise<void> {
-		this.plugin.settings.categorizationRules = this.plugin.settings.categorizationRules.filter((r) => r.id !== id);
-
-		await this.plugin.saveSettings();
-		this.loadRules(); // Reload
-	}
-
-	/**
-	 * Gets rules for category
-	 */
-	getRulesForCategory(categoryId: string): CategorizationRule[] {
-		return this.rules.filter((rule) => rule.categoryId === categoryId);
-	}
-
-	/**
 	 * Main content categorization function
 	 */
 	async categorizeContent(content: string, msg?: TelegramBot.Message): Promise<NoteCategory | null> {
@@ -216,21 +160,20 @@ export class CategoryManager {
 		}
 
 		try {
-			// Apply rules by priority
-			for (const rule of this.rules.filter((r) => r.enabled)) {
-				const categoryId = await this.applyRule(rule, content, msg);
-
-				if (categoryId) {
-					const category = this.getCategory(categoryId);
-					if (category && category.enabled) {
-						return category;
-					}
-				}
-			}
-
-			// If rules didn't work, use AI classification
+			// Categorisation is an AI feature: category keywords are a hint inside the
+			// classification prompt, not a matcher run against message content. With AI
+			// classification off there is nothing to decide, so the note keeps the base
+			// distribution path and only the default category (if set) applies.
 			if (this.plugin.settings.aiCategorizationEnabled) {
-				const aiMatch = await this.aiClassifier.classifyContent(content, this.getEnabledCategories());
+				// With a message in hand the answer comes from the per-message metadata
+				// request, which the {{ai:*}} template variables share — the same message
+				// asked its category up to three times before (a filter condition, the file
+				// path override, the final categorisation), each as its own request and each
+				// over different text, which is also how the filter and the note could
+				// disagree about where a message belonged.
+				const aiMatch = msg
+					? await this.classifyFromMetadata(content, msg)
+					: await this.aiClassifier.classifyContent(content, this.getEnabledCategories());
 
 				if (aiMatch) {
 					return this.getCategory(aiMatch.categoryId) || null;
@@ -257,62 +200,20 @@ export class CategoryManager {
 	}
 
 	/**
-	 * Applies specific categorization rule
+	 * Category for a message, taken from the shared per-message AI answer.
+	 *
+	 * Returns null when no model answered, which lands the caller on the default category —
+	 * the same outcome a failed standalone classification produced.
 	 */
-	private async applyRule(
-		rule: CategorizationRule,
-		content: string,
-		_msg?: TelegramBot.Message,
-	): Promise<string | null> {
-		try {
-			switch (rule.type) {
-				case CategorizationRuleType.KEYWORDS:
-					return this.applyKeywordRule(rule, content);
-				case CategorizationRuleType.AI_CLASSIFICATION:
-					return await this.applyAIRule(rule, content);
-				default:
-					return null;
-			}
-		} catch (error) {
-			console.error(`Error applying rule ${rule.id}:`, error);
-			return null;
-		}
+	private async classifyFromMetadata(content: string, msg: TelegramBot.Message): Promise<CategoryMatch | null> {
+		const metadata = await resolveMessageMetadata(this.plugin, msg, content);
+		if (!metadata.fromAI) return null;
+		return this.aiClassifier.matchCategoryName(metadata.categoryName, this.getEnabledCategories());
 	}
 
-	/**
-	 * Applies keyword rule
-	 */
-	private applyKeywordRule(rule: CategorizationRule, content: string): string | null {
-		const keywords = rule.condition
-			.split(",")
-			.map((k) => k.trim().toLowerCase())
-			.filter((k) => k.length > 0);
-
-		const contentLower = content.toLowerCase();
-
-		for (const keyword of keywords) {
-			if (contentLower.includes(keyword)) {
-				return rule.categoryId;
-			}
-		}
-
-		return null;
-	}
-
-	/**
-	 * Applies AI rule
-	 */
-	private async applyAIRule(rule: CategorizationRule, content: string): Promise<string | null> {
-		// For AI rules condition contains special prompt
-		const category = this.getCategory(rule.categoryId);
-		if (!category) return null;
-
-		const aiMatch = await this.aiClassifier.classifyContent(
-			content,
-			[category], // Check only one category
-		);
-
-		return aiMatch ? aiMatch.categoryId : null;
+	/** Renders the category list for the merged metadata prompt. See AIClassifier. */
+	describeCategoriesForPrompt(categories: NoteCategory[]): string {
+		return this.aiClassifier.describeCategories(categories);
 	}
 
 	/**
@@ -327,23 +228,5 @@ export class CategoryManager {
 	 */
 	reload(): void {
 		void this.loadCategories();
-		this.loadRules();
-	}
-
-	/**
-	 * Gets category statistics
-	 */
-	getStats(): {
-		totalCategories: number;
-		enabledCategories: number;
-		totalRules: number;
-		enabledRules: number;
-	} {
-		return {
-			totalCategories: this.categories.size,
-			enabledCategories: this.getEnabledCategories().length,
-			totalRules: this.rules.length,
-			enabledRules: this.rules.filter((r) => r.enabled).length,
-		};
 	}
 }

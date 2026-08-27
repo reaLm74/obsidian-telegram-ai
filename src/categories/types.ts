@@ -12,20 +12,6 @@ export interface NoteCategory {
 	updatedAt: string;
 }
 
-export interface CategorizationRule {
-	id: string;
-	categoryId: string;
-	type: CategorizationRuleType;
-	condition: string;
-	priority: number;
-	enabled: boolean;
-}
-
-export enum CategorizationRuleType {
-	KEYWORDS = "keywords",
-	AI_CLASSIFICATION = "ai",
-}
-
 export interface CategoryMatch {
 	categoryId: string;
 	confidence: number;

@@ -5,7 +5,7 @@
 
 import TelegramSyncPlugin from "../../../main";
 import TelegramBot from "node-telegram-bot-api";
-import { createFolderIfNotExist, sanitizeFilePath } from "src/utils/fsUtils";
+import { createFolderIfNotExist, sanitizeFileName, sanitizeFilePath } from "src/utils/fsUtils";
 import path from "path";
 import { applyNoteContentTemplate, processBasicVariables } from "./processors";
 import { getMessageContentType } from "src/ai/openai";
@@ -14,6 +14,7 @@ import { TelegramMessageExtended } from "../../types";
 import { NoteCategory } from "src/categories/types";
 import { canExtractTextLocally, extractTextFromDocument } from "src/utils/documentExtractor";
 import { displayAndLog, displayAndLogError } from "src/utils/logUtils";
+import { debugLog } from "src/utils/debugLog";
 import { TFile } from "obsidian";
 import { isTextOnlyUrl } from "./getters";
 import { MessageDistributionRule } from "src/settings/messageDistribution";
@@ -86,10 +87,7 @@ export async function createNoteContent(
 ) {
 	const filesLinks: string[] = [];
 
-	displayAndLog(plugin, `📝 NOTE CONTENT: Creating note content with ${filesPaths.length} file paths`, 0);
-	filesPaths.forEach((fp, index) => {
-		displayAndLog(plugin, `📁 NOTE CONTENT: File path ${index + 1}: ${fp}`, 0);
-	});
+	debugLog("Note", `creating content with ${filesPaths.length} file path(s): ${filesPaths.join(", ")}`);
 
 	if (!error) {
 		filesPaths.forEach((fp) => {
@@ -101,7 +99,7 @@ export async function createNoteContent(
 			const embedLink = markdownLink.replace(/^\[\[/, "![[");
 			filesLinks.push(embedLink);
 		});
-		displayAndLog(plugin, `🔗 NOTE CONTENT: Created ${filesLinks.length} file links`, 0);
+		debugLog("Note", `created ${filesLinks.length} file link(s)`);
 	} else {
 		filesLinks.push(`[❌ error while handling file](${error})`);
 	}
@@ -131,11 +129,7 @@ export async function createNoteContent(
 			const hasPhotos = mediaMessages.some((m) => m.photo);
 
 			if (hasPhotos && plugin.settings.aiVisionEnabled) {
-				displayAndLog(
-					plugin,
-					`🖼️ Using multi-image Vision for media group (${mediaMessages.length} images)`,
-					0,
-				);
+				debugLog("AI", `multi-image Vision for media group (${mediaMessages.length} images)`);
 				// We fallback to processWithAI for now
 				aiProcessedContent = await processWithAI(plugin, combinedContent, "photo", msg);
 			} else {
@@ -300,7 +294,7 @@ export async function applyCategorization(
 			// Create folder if it doesn't exist
 			const folderPath = path.dirname(finalNotePath);
 			if (folderPath !== ".") {
-				void createFolderIfNotExist(plugin.app.vault, folderPath);
+				await createFolderIfNotExist(plugin.app.vault, folderPath);
 			}
 		}
 
@@ -352,8 +346,13 @@ export async function applyCategoryNotePathTemplate(
 ): Promise<string> {
 	let notePath = notePathTemplate;
 
-	// Replace category variables
-	notePath = notePath.replace(/\{\{category\}\}/g, category.name);
+	// Replace category variables.
+	// Every substitution goes through sanitizeFileName: these values are attacker-supplied
+	// (a chat title, a Telegram display name) and land in a path. sanitizeFilePath at the
+	// end of this function keeps "/" and "..", so a title like "Notes/../.." would walk out
+	// of the vault folder once path.join collapses it. A replacer function is used rather
+	// than a replacement string so that "$&" in a name is not treated as a backreference.
+	notePath = notePath.replace(/\{\{category\}\}/g, () => sanitizeFileName(category.name));
 
 	// Replace date variables
 	const msgDate = unixTime2Date(msg.date);
@@ -363,26 +362,27 @@ export async function applyCategoryNotePathTemplate(
 		try {
 			return window.moment(offsetDate).format(format);
 		} catch (error) {
-			console.error("Date formatting error:", error);
+			debugLog("Category", "date formatting error", error);
 			return match;
 		}
 	});
 
 	// Replace other variables from message
 	if (msg.chat.title) {
-		notePath = notePath.replace(/\{\{chat\}\}/g, msg.chat.title);
+		const chatTitle = msg.chat.title;
+		notePath = notePath.replace(/\{\{chat\}\}/g, () => sanitizeFileName(chatTitle));
 	}
 
 	if (msg.from?.first_name) {
-		notePath = notePath.replace(/\{\{user\}\}/g, msg.from.first_name);
+		const firstName = msg.from.first_name;
+		notePath = notePath.replace(/\{\{user\}\}/g, () => sanitizeFileName(firstName));
 	}
 
 	// Process basic variables (including content and AI)
 	// Use extracted file content if available for better AI title generation
 	const textContentMd = extractedFileContent || msg.text || msg.caption || "";
-	console.debug("applyCategoryNotePathTemplate processing:", {
+	debugLog("Category", "resolving note path template", {
 		notePath,
-		textContentMd,
 		hasExtractedContent: !!extractedFileContent,
 	});
 	notePath = await processBasicVariables(plugin, msg, notePath, textContentMd, textContentMd, true, skipAIVariables);

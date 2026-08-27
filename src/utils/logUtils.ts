@@ -85,29 +85,45 @@ export function cleanErrorCache() {
 	errorCache = "";
 }
 
+/** Extended alert function type that carries an override marker flag */
+type OverridableAlert = ((message?: unknown) => void) & { __isOverridden?: boolean };
+
+/** The alert we replaced, kept so restoreMTProtoAlerts() can put it back. */
+let originalAlert: OverridableAlert | undefined;
+
 // changing GramJs version can cause cache issues and wrong alerts, so it's cure for it
 export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
-	/** Extended alert function type that carries an override marker flag */
-	type OverridableAlert = ((message?: unknown) => void) & { __isOverridden?: boolean };
-	const originalAlert = window.alert as OverridableAlert;
-	if (!originalAlert.__isOverridden) {
-		window.alert = function (message?: unknown) {
-			if (typeof message === "string" && message.includes("Missing MTProto Entity")) {
-				plugin.app.saveLocalStorage("GramJs:apiCache", null);
-				plugin.settings.cacheCleanupAtStartup = true;
-				void (async () => {
-					await plugin.saveSettings();
-				})();
-				displayAndLog(
-					plugin,
-					"Telegram AI got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
-				);
-				return;
-			}
-			originalAlert(message);
-		};
-		(window.alert as OverridableAlert).__isOverridden = true;
-	}
+	const currentAlert = window.alert as OverridableAlert;
+	if (currentAlert.__isOverridden) return;
+
+	originalAlert = currentAlert;
+	const patched: OverridableAlert = function (message?: unknown) {
+		if (typeof message === "string" && message.includes("Missing MTProto Entity")) {
+			plugin.app.saveLocalStorage("GramJs:apiCache", null);
+			plugin.settings.cacheCleanupAtStartup = true;
+			void (async () => {
+				await plugin.saveSettings();
+			})();
+			displayAndLog(
+				plugin,
+				"Telegram AI got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
+			);
+			return;
+		}
+		originalAlert?.(message);
+	};
+	patched.__isOverridden = true;
+	window.alert = patched;
+}
+
+/**
+ * Puts the original window.alert back. Must run on unload — otherwise Obsidian keeps
+ * running our replacement (and holding the plugin instance alive) after the plugin is gone.
+ */
+export function restoreMTProtoAlerts() {
+	if (!originalAlert) return;
+	if ((window.alert as OverridableAlert).__isOverridden) window.alert = originalAlert;
+	originalAlert = undefined;
 }
 
 export function sleep(ms: number): Promise<void> {

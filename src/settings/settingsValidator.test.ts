@@ -24,6 +24,7 @@ const TEST_DEFAULTS: Record<string, unknown> = {
 	emojiForProcessedMessages: "🔥",
 	aiEnabled: false,
 	openAIApiKey: "",
+	openAIApiKeyEncrypted: false,
 	openAIModel: "gpt-4o-mini",
 	openAITemperature: 0.7,
 	openAIMaxTokens: 2000,
@@ -32,6 +33,8 @@ const TEST_DEFAULTS: Record<string, unknown> = {
 	aiTimeout: 30000,
 	aiVisionEnabled: false,
 	aiProvider: "openai",
+	aiOutputLanguage: "auto",
+	aiOutputLanguageCustom: "",
 	claudeApiKey: "",
 	claudeModel: "claude-3-5-sonnet-20241022",
 	claudeTemperature: 0.7,
@@ -69,6 +72,7 @@ const TEST_DEFAULTS: Record<string, unknown> = {
 	categoryTagsEnabled: true,
 	categoryFoldersEnabled: true,
 	aiCustomParameters: {},
+	debugMode: false,
 	topicNames: [],
 };
 

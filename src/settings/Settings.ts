@@ -6,14 +6,13 @@ import * as Client from "src/telegram/user/client";
 import { _1sec } from "src/utils/logUtils";
 import { t } from "src/locale/i18n";
 import { getTopicId } from "src/telegram/bot/message/getters";
-import { addBot, addUser } from "./sections/connectionSection";
+import { addBot } from "./sections/connectionSection";
 import { addAISettings } from "./sections/aiSection";
-import { addMessageDistributionRules } from "./sections/distributionSection";
 import { addCategoriesSettings } from "./sections/categoriesSection";
 import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
 import { enqueue } from "src/utils/queues";
 import { MessageDistributionRule, createDefaultMessageDistributionRule } from "./messageDistribution";
-import { NoteCategory, CategorizationRule } from "src/categories/types";
+import { NoteCategory } from "src/categories/types";
 import {
 	ProcessOldMessagesSettings,
 	clearCachedUnprocessedMessages,
@@ -44,9 +43,13 @@ export interface TelegramSyncSettings {
 	allowedChats: string[];
 	mainDeviceId: string;
 	pluginVersion: string;
+	/** Schema version owned by settingsMigrator.ts — not the release the user last saw. */
+	settingsVersion: string;
 	telegramSessionType: Client.SessionType;
 	telegramSessionId: number;
-	betaVersion: string;
+	/** MTProto app credentials from my.telegram.org. Empty = bot-only mode. */
+	telegramApiId: string;
+	telegramApiHash: string;
 	connectionStatusIndicatorType: KeysOfConnectionStatusIndicatorType;
 	cacheCleanupAtStartup: boolean;
 	messageDistributionRules: MessageDistributionRule[];
@@ -60,6 +63,8 @@ export interface TelegramSyncSettings {
 	emojiForProcessedMessages: string;
 	aiEnabled: boolean;
 	openAIApiKey: string;
+	/** Whether openAIApiKey holds ciphertext. Mirrors botTokenEncrypted. */
+	openAIApiKeyEncrypted: boolean;
 	openAIModel: string;
 	openAITemperature: number;
 	openAIMaxTokens: number;
@@ -86,6 +91,10 @@ export interface TelegramSyncSettings {
 	aiPromptAudioVideo: string;
 	aiPromptGeneral: string; // General prompt for note formatting
 	aiPromptLink: string;
+	/** Language the AI writes notes in: "auto" (follow the interface), a locale code, or "custom". */
+	aiOutputLanguage: string;
+	/** Free-form language name, used only when aiOutputLanguage is "custom". */
+	aiOutputLanguageCustom: string;
 	// Settings for enabling/disabling file type processing
 	aiProcessText: boolean;
 	aiProcessVoice: boolean;
@@ -98,7 +107,9 @@ export interface TelegramSyncSettings {
 	enableLocalDocumentExtraction: boolean;
 	categoriesEnabled: boolean;
 	noteCategories: NoteCategory[];
-	categorizationRules: CategorizationRule[];
+	/** True once the default categories have been seeded, so deleting every category
+	 *  is respected instead of resurrecting the defaults on the next reload. */
+	defaultCategoriesInitialized: boolean;
 	defaultCategoryId?: string;
 	linksCategoryFolder: string;
 	aiCategorizationEnabled: boolean;
@@ -109,6 +120,8 @@ export interface TelegramSyncSettings {
 	autoTagsEnabled: boolean;
 	aiSummarizationMode: "replace" | "summary_and_original";
 	setupCompleted: boolean;
+	/** Verbose tracing to the developer console. Off by default — see utils/debugLog.ts. */
+	debugMode: boolean;
 	// add new settings above this line
 	topicNames: Topic[];
 }
@@ -117,12 +130,14 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	botToken: "",
 	encryptionByPinCode: false,
 	botTokenEncrypted: false,
-	allowedChats: [""],
+	allowedChats: [],
 	mainDeviceId: "",
 	pluginVersion: "",
+	settingsVersion: "",
 	telegramSessionType: "bot",
 	telegramSessionId: Client.getNewSessionId(),
-	betaVersion: "",
+	telegramApiId: "",
+	telegramApiHash: "",
 	connectionStatusIndicatorType: "CONSTANT",
 	cacheCleanupAtStartup: false,
 	messageDistributionRules: [createDefaultMessageDistributionRule()],
@@ -136,6 +151,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	emojiForProcessedMessages: "🔥",
 	aiEnabled: false,
 	openAIApiKey: "",
+	openAIApiKeyEncrypted: false,
 	openAIModel: "gpt-4o-mini",
 	openAITemperature: 0.7,
 	openAIMaxTokens: 2000,
@@ -163,6 +179,8 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	aiPromptGeneral:
 		"Format the information as a beautiful note in Markdown format. Use headings, lists, and highlights for better readability.",
 	aiPromptLink: "Read the article/website and provide a brief, structured summary of the main points.",
+	aiOutputLanguage: "auto",
+	aiOutputLanguageCustom: "",
 	// By default, processing of all content types is enabled
 	aiProcessText: true,
 	aiProcessVoice: true,
@@ -174,7 +192,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	enableLocalDocumentExtraction: true,
 	categoriesEnabled: false,
 	noteCategories: [],
-	categorizationRules: [],
+	defaultCategoriesInitialized: false,
 	defaultCategoryId: undefined,
 	linksCategoryFolder: "Links",
 	aiCategorizationEnabled: false,
@@ -187,6 +205,7 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	autoTagsEnabled: false,
 	aiSummarizationMode: "replace",
 	setupCompleted: false,
+	debugMode: false,
 	// add new settings above this line
 	topicNames: [],
 };
@@ -213,7 +232,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			userConnected != this.refreshValues.userConnected ||
 			checkingBotConnection != this.refreshValues.checkingBotConnection ||
 			checkingUserConnection != this.refreshValues.checkingUserConnection ||
-			telegramSessionType != this.plugin.settings.telegramSessionType
+			telegramSessionType != this.refreshValues.telegramSessionType
 		) {
 			try {
 				if (!this.refreshValues) this.refreshValues = {};
@@ -223,7 +242,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 				this.refreshValues.userConnected = userConnected;
 				this.refreshValues.checkingBotConnection = checkingBotConnection;
 				this.refreshValues.checkingUserConnection = checkingUserConnection;
-				this.refreshValues.telegramSessionType = this.plugin.settings.telegramSessionType;
+				this.refreshValues.telegramSessionType = telegramSessionType;
 			}
 		}
 	}
@@ -248,12 +267,10 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		const update = () => this.renderSettings();
 
 		addBot(this.containerEl, this.plugin, update);
-		addUser(this.containerEl, this.plugin, update);
+		// Account login lives in the "Process old messages" modal, next to the api_id /
+		// api_hash it depends on — the two are useless apart.
 		this.addProcessOldMessages();
 		this.addAdvancedSettings();
-
-		new Setting(this.containerEl).setName(t("settings.distribution.title")).setHeading();
-		addMessageDistributionRules(this.containerEl, this.plugin, update);
 
 		new Setting(this.containerEl).setName(t("settings.ai.heading")).setHeading();
 		addAISettings(this.containerEl, this.app, this.plugin, update);
@@ -271,7 +288,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 	addSettingsHeader() {
 		const versionContainer = this.containerEl.createDiv();
-		versionContainer.addClass("flex", "justify-between");
+		versionContainer.addClass("tgai-flex", "tgai-justify-between");
 		new Setting(versionContainer).setName(t("settings.header")).setHeading();
 	}
 
@@ -284,8 +301,10 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			)
 			.addButton((btn) => {
 				btn.setIcon("settings");
-				btn.setTooltip(t("settings.bot.settings"));
-				btn.setDisabled(!this.plugin.userConnected);
+				// Always enabled: this is where the Telegram API credentials are entered, and
+				// without them there is no user connection — gating it on userConnected would
+				// make the only way to set them unreachable.
+				btn.setTooltip(t("settings.advanced.processOld.setup"));
 				btn.onClick(() => {
 					const processOldMessagesSettingsModal = new ProcessOldMessagesSettingsModal(this.plugin);
 					processOldMessagesSettingsModal.open();

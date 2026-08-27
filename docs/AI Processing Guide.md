@@ -2,12 +2,13 @@
 
 ## Overview
 
-Telegram AI processes messages through configurable AI pipelines before saving them to Obsidian. The system supports OpenAI (GPT-4, Whisper) with content-type specific prompts, post-processors, and live progress tracking.
+Telegram AI runs each message through a processing flow before saving it to Obsidian. The route through that flow depends on the content type; what you configure is the prompt used at each step, not the steps themselves. The system supports OpenAI (GPT-4, Whisper) with content-type specific prompts, post-processors, and live progress tracking.
 
 ## Key Features
 
 - **AI Provider**: OpenAI (GPT-4 + Whisper)
-- **AI Pipelines**: Configurable processing chains (Whisper → GPT → Formatter)
+- **Content-Aware Flow**: Whisper → GPT → post-processors, with the route chosen per content type
+- **Note Language**: Notes and titles follow your interface language, whatever the prompts are written in
 - **Content-Type Prompts**: Separate prompts for text, photo, voice, document, links
 - **Post-Processors**: WikiLinker, AutoTagger, Summarization
 - **Custom AI Parameters**: Dynamic variables like `{{ai:title}}`
@@ -29,12 +30,12 @@ Telegram AI processes messages through configurable AI pipelines before saving t
 - **Use Cases**: Screenshots, diagrams, documents
 
 ### 3. Voice Messages & Audio Files
-- **Pipeline**: Whisper transcription → GPT formatting
+- **Flow**: Whisper transcription → GPT formatting
 - **Unified prompt**: Voice, audio, and video share one prompt
 - **Use Cases**: Voice memos, recordings, podcasts
 
 ### 4. Video
-- **Pipeline**: Audio track extraction → Whisper → GPT
+- **Flow**: Audio track extraction → Whisper → GPT
 - **Use Cases**: Tutorial recordings, presentations
 
 ### 5. Documents
@@ -48,9 +49,9 @@ Telegram AI processes messages through configurable AI pipelines before saving t
 - **Token protection**: Long pages are trimmed before sending to AI
 - **Use Cases**: Article bookmarks, research links
 
-## AI Pipelines
+## Processing Flow
 
-### How Pipelines Work
+### How a Message Is Processed
 
 ```
 Message → Content Type Detection
@@ -87,6 +88,28 @@ When multiple photos/videos are sent as an album:
 - Captions from all messages are merged
 
 ## Prompt Configuration
+
+### Note Language
+
+Settings → AI → Prompts → **Note language**.
+
+The built-in prompts are written in English, so without this the notes came out in English
+no matter what language the interface was in. The setting appends a language instruction to
+every prompt before it is sent, which means:
+
+- **You do not have to translate your prompts.** A prompt written in English produces a
+  Russian note perfectly well — the instruction decides the output language, not the prompt.
+- **It also covers `{{ai:title}}`**, whose prompt has no editor here. Rewriting the prompts
+  below could never have fixed English file names; this does.
+
+| Option | Effect |
+|--------|--------|
+| **Auto** (default) | Follows the Obsidian interface language |
+| **English** / **Русский** | Always that language, whatever the interface is |
+| **Other…** | Any language name you type, e.g. `Deutsch` — the interface has two translations, your notes are not limited to them |
+
+Detected categories are exempt: their names are matched against your category list, so the
+model is told to copy them unchanged rather than translate them.
 
 ### Content-Specific Prompts
 
@@ -152,14 +175,21 @@ Usage: {{ai:title}} in path templates
 Settings → Categories → Custom AI Parameters → "Manage parameters"
 
 ```
-Parameter: category
-Prompt: "Determine the main category (work, personal, learning, ideas)"
-Usage: {{ai:category}}/{{date:YYYY-MM}}/{{ai:title}}.md
+Parameter: topic
+Prompt: "Determine the main topic (work, personal, learning, ideas)"
+Usage: {{ai:topic}}/{{date:YYYY-MM}}/{{ai:title}}.md
 
 Parameter: tags
 Prompt: "Generate 3-5 relevant tags, comma-separated"
 Usage: Added to note frontmatter
 ```
+
+> Avoid naming a parameter `category` when Smart Categories are enabled — that name is
+> already used for the detected category, and `{{ai:category}}` will return that instead of
+> your own answer. Use `{{category}}` for the detected one.
+
+All `{{ai:...}}` values for a message are answered by one request, together with category
+detection — adding parameters costs tokens, not extra requests.
 
 ## Provider Configuration
 
@@ -182,6 +212,7 @@ Whisper:      Automatic (for voice/audio/video)
 | `gpt-4o-mini` instead of `gpt-4o` | ~10x cheaper |
 | Disable unused content types | No API calls for disabled types |
 | Hierarchical prompts | Single request instead of multiple |
+| Shared message metadata | Title, custom parameters and category in one request |
 
 ## Processing Status
 

@@ -3,6 +3,7 @@ import { MessageDistributionRule, MessageFilterCondition, ConditionType } from "
 import { getForwardFromName, getTopic } from "./getters";
 import TelegramSyncPlugin from "src/main";
 import * as Client from "src/telegram/user/client";
+import { debugLog } from "src/utils/debugLog";
 
 function isUserFiltered(msg: TelegramBot.Message, userNameOrId: string): boolean {
 	if (!msg?.from || !userNameOrId) return false;
@@ -70,7 +71,7 @@ export async function isCategoryFiltered(
 		// Check match by category name
 		return category.name.toLowerCase() === categoryName.toLowerCase();
 	} catch (error) {
-		console.error("Category filtering error:", error);
+		debugLog("Filter", "category filtering error", error);
 		return false;
 	}
 }

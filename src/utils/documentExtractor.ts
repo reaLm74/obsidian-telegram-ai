@@ -3,6 +3,8 @@
  * Supports local extraction without external dependencies
  */
 
+import { debugLog } from "./debugLog";
+
 export interface DocumentExtractionResult {
 	text: string;
 	success: boolean;
@@ -101,23 +103,28 @@ export async function extractTextFromDocument(
 	try {
 		// Handle PDF
 		if (extension === "pdf") {
+			// pdf-parse v2 dropped the callable default export of v1 in favour of a class.
+			// `(await import("pdf-parse")).default` is undefined here, so calling it threw
+			// TypeError on every PDF and the catch below reported "Failed to parse PDF".
+			const { PDFParse } = await import("pdf-parse");
+			const parser = new PDFParse({ data: fileBuffer });
 			try {
-				const pdfModule = await import("pdf-parse");
-				const pdf = pdfModule.default || pdfModule;
-				// @ts-expect-error -- pdf-parse expects a Node.js Buffer; Obsidian's renderer provides a compatible Buffer via the polyfill
-				const data = (await pdf(Buffer.from(fileBuffer))) as { text: string; numpages: number };
+				const result = await parser.getText();
 				return {
-					text: data.text,
+					text: result.text,
 					success: true,
 					metadata: {
-						pages: data.numpages,
-						wordCount: data.text.split(/\s+/).length,
+						pages: result.total,
+						wordCount: countWords(result.text),
 						format: "pdf",
 					},
 				};
 			} catch (e) {
-				console.error("PDF extraction error:", e);
-				return { text: "", success: false, error: "Failed to parse PDF" };
+				debugLog("Document", "PDF extraction error:", e);
+				const reason = e instanceof Error ? e.message : String(e);
+				return { text: "", success: false, error: `Failed to parse PDF: ${reason}` };
+			} finally {
+				await parser.destroy();
 			}
 		}
 
@@ -130,12 +137,12 @@ export async function extractTextFromDocument(
 					text: result.value,
 					success: true,
 					metadata: {
-						wordCount: result.value.split(/\s+/).length,
+						wordCount: countWords(result.value),
 						format: "docx",
 					},
 				};
 			} catch (e) {
-				console.error("DOCX extraction error:", e);
+				debugLog("Document", "DOCX extraction error:", e);
 				return { text: "", success: false, error: "Failed to parse DOCX" };
 			}
 		}
@@ -204,6 +211,11 @@ export async function extractTextFromDocument(
 	}
 }
 
+/** Words in a blob of text. Empty/whitespace-only text counts as 0, not 1. */
+function countWords(text: string): number {
+	return text.split(/\s+/).filter(Boolean).length;
+}
+
 /**
  * Extracts file extension
  */
@@ -221,7 +233,7 @@ function extractPlainText(content: string): DocumentExtractionResult {
 		text: cleanText,
 		success: true,
 		metadata: {
-			wordCount: cleanText.split(/\s+/).length,
+			wordCount: countWords(cleanText),
 			format: "plain text",
 		},
 	};
@@ -239,7 +251,7 @@ function extractJsonText(content: string): DocumentExtractionResult {
 			text: `JSON Document:\n\n${readableText}`,
 			success: true,
 			metadata: {
-				wordCount: readableText.split(/\s+/).length,
+				wordCount: countWords(readableText),
 				format: "JSON",
 			},
 		};
@@ -272,7 +284,7 @@ function extractCsvText(content: string, delimiter: string): DocumentExtractionR
 		text: `${delimiter === "\t" ? "TSV" : "CSV"} Document:\n\n${result}`,
 		success: true,
 		metadata: {
-			wordCount: result.split(/\s+/).length,
+			wordCount: countWords(result),
 			format: delimiter === "\t" ? "TSV" : "CSV",
 		},
 	};
@@ -294,7 +306,7 @@ function extractXmlHtmlText(content: string): DocumentExtractionResult {
 		text: `HTML/XML Document Content:\n\n${textContent}`,
 		success: true,
 		metadata: {
-			wordCount: textContent.split(/\s+/).length,
+			wordCount: countWords(textContent),
 			format: "HTML/XML",
 		},
 	};
@@ -316,7 +328,7 @@ function extractMarkdownText(content: string): DocumentExtractionResult {
 		text: `Markdown Document:\n\n${cleanContent}`,
 		success: true,
 		metadata: {
-			wordCount: cleanContent.split(/\s+/).length,
+			wordCount: countWords(cleanContent),
 			format: "Markdown",
 		},
 	};
@@ -330,7 +342,7 @@ function extractYamlText(content: string): DocumentExtractionResult {
 		text: `YAML Configuration:\n\n${content.trim()}`,
 		success: true,
 		metadata: {
-			wordCount: content.trim().split(/\s+/).length,
+			wordCount: countWords(content.trim()),
 			format: "YAML",
 		},
 	};
@@ -365,7 +377,7 @@ function extractCodeText(content: string, language: string): DocumentExtractionR
 		text: `${langName} Code:\n\n${content.trim()}`,
 		success: true,
 		metadata: {
-			wordCount: content.trim().split(/\s+/).length,
+			wordCount: countWords(content.trim()),
 			format: langName,
 		},
 	};

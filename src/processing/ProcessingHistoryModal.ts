@@ -31,74 +31,74 @@ export class ProcessingHistoryModal extends Modal {
 	onOpen(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.addClass("processing-history-modal");
+		contentEl.addClass("tgai-processing-history-modal");
 
 		// Header
-		contentEl.createEl("h2", { text: t("processing.history.title") });
+		this.titleEl.setText(t("processing.history.title"));
 
 		// Stats bar
-		const statsBar = contentEl.createDiv({ cls: "processing-stats-bar" });
+		const statsBar = contentEl.createDiv({ cls: "tgai-processing-stats-bar" });
 		statsBar.createSpan({
 			text: t("processing.history.active", { count: String(this.stats.active) }),
-			cls: "stat-item stat-active",
+			cls: "tgai-stat-item tgai-stat-active",
 		});
 		statsBar.createSpan({
 			text: t("processing.history.synced", { count: String(this.stats.totalProcessed) }),
-			cls: "stat-item stat-done",
+			cls: "tgai-stat-item tgai-stat-done",
 		});
 		statsBar.createSpan({
 			text: t("processing.history.errors", { count: String(this.stats.totalErrors) }),
-			cls: "stat-item stat-errors",
+			cls: "tgai-stat-item tgai-stat-errors",
 		});
 
 		if (this.records.length === 0) {
 			contentEl.createEl("p", {
 				text: t("processing.history.empty"),
-				cls: "processing-empty",
+				cls: "tgai-processing-empty",
 			});
 			return;
 		}
 
 		// Records list
-		const listEl = contentEl.createDiv({ cls: "processing-records-list" });
+		const listEl = contentEl.createDiv({ cls: "tgai-processing-records-list" });
 
 		for (const record of this.records) {
-			const row = listEl.createDiv({ cls: `processing-record status-${record.status}` });
+			const row = listEl.createDiv({ cls: `tgai-processing-record tgai-status-${record.status}` });
 
 			// Status icon + type
-			const headerEl = row.createDiv({ cls: "record-header" });
+			const headerEl = row.createDiv({ cls: "tgai-record-header" });
 			headerEl.createSpan({
 				text: `${STATUS_ICONS[record.status]} ${record.contentType}`,
-				cls: "record-type",
+				cls: "tgai-record-type",
 			});
 
 			// Duration / time
 			const timeText = record.duration ? `${(record.duration / 1000).toFixed(1)}s` : "...";
-			headerEl.createSpan({ text: timeText, cls: "record-duration" });
+			headerEl.createSpan({ text: timeText, cls: "tgai-record-duration" });
 
 			// AI badge
 			if (record.aiProcessed) {
-				headerEl.createSpan({ text: "AI", cls: "record-ai-badge" });
+				headerEl.createSpan({ text: "AI", cls: "tgai-record-ai-badge" });
 			}
 
 			// Timestamp
 			const date = new Date(record.startedAt);
 			headerEl.createSpan({
 				text: date.toLocaleTimeString(),
-				cls: "record-time",
+				cls: "tgai-record-time",
 			});
 
 			// Preview
 			if (record.preview) {
 				row.createDiv({
 					text: record.preview,
-					cls: "record-preview",
+					cls: "tgai-record-preview",
 				});
 			}
 
 			// Error details
 			if (record.error) {
-				const errorEl = row.createDiv({ cls: "record-error" });
+				const errorEl = row.createDiv({ cls: "tgai-record-error" });
 				errorEl.createSpan({ text: record.error });
 			}
 		}

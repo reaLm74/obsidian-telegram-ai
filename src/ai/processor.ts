@@ -1,6 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import TelegramSyncPlugin from "src/main";
 import { processWithOpenAI, getPromptForContentType } from "./openai";
+import { withOutputLanguage } from "./outputLanguage";
 // import { processWithClaude } from "./claude";
 // import { processWithGemini } from "./gemini";
 
@@ -32,8 +33,10 @@ export async function processWithAI(
 		*/
 
 		if (hasVision) {
-			// For Vision API pass caption as content, image will be processed internally
-			const caption = msg.caption || "Analyze this image";
+			// For Vision API the image is attached internally; the text side must be the
+			// caller's content (e.g. an album's combined captions/transcripts) — falling
+			// back to msg.caption alone would silently drop every other album member's text.
+			const caption = content || msg.caption || "Analyze this image";
 			const prompt = buildHierarchicalPrompt(plugin, contentType, caption, msg);
 
 			switch (provider) {
@@ -107,13 +110,17 @@ function buildHierarchicalPrompt(
 	const specificPrompt = getPromptForContentType(plugin, contentType);
 	const generalPrompt = plugin.settings.aiPromptGeneral;
 
-	// If this is a final request, always include general prompt
+	// The language instruction is appended to both branches: an intermediate result can
+	// reach the note unchanged when there is nothing left to combine it with.
 	if (isFinalRequest) {
-		return buildFinalPrompt(specificPrompt || getDefaultPromptForContentType(contentType), generalPrompt);
+		return withOutputLanguage(
+			buildFinalPrompt(specificPrompt || getDefaultPromptForContentType(contentType), generalPrompt),
+			plugin,
+		);
 	}
 
 	// If not final request, use only specific prompt
-	return specificPrompt || getDefaultPromptForContentType(contentType);
+	return withOutputLanguage(specificPrompt || getDefaultPromptForContentType(contentType), plugin);
 }
 
 /**
@@ -187,7 +194,7 @@ export async function processWithAIMixed(
 		// Build final prompt: text + general
 		const textPrompt = getPromptForContentType(plugin, "text") || getDefaultPromptForContentType("text");
 		const generalPrompt = plugin.settings.aiPromptGeneral;
-		const finalPrompt = buildFinalPrompt(textPrompt, generalPrompt);
+		const finalPrompt = withOutputLanguage(buildFinalPrompt(textPrompt, generalPrompt), plugin);
 
 		const finalResult = await processContentWithPrompt(plugin, combinedContent, finalPrompt, msg);
 		if (finalResult) {
@@ -202,7 +209,7 @@ export async function processWithAIMixed(
 			const finalResult = await processContentWithPrompt(
 				plugin,
 				fileAnalysisResult,
-				plugin.settings.aiPromptGeneral,
+				withOutputLanguage(plugin.settings.aiPromptGeneral, plugin),
 				msg,
 			);
 			return finalResult || fileAnalysisResult;

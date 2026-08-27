@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import LinkifyIt from "linkify-it";
+import { LinkifyIt } from "linkify-it";
 import TelegramSyncPlugin from "src/main";
 import { Topic } from "src/settings/Settings";
 
@@ -117,11 +117,16 @@ export function getUrl(msg: TelegramBot.Message, num = 1, lookInCaptions = true)
 /**
  * Returns all URLs from message (linkify-it + entities fallback for text_link)
  */
+/**
+ * Shared instance. Building one costs a full regex compile, and getUrls/isTextOnlyUrl
+ * run on every incoming message — there is no per-message state to isolate.
+ */
+const linkify = new LinkifyIt();
+
 export function getUrls(msg: TelegramBot.Message, lookInCaptions = true): string[] {
 	const text = (msg.text || "") + (lookInCaptions && msg.caption ? msg.caption : "");
 	if (!text) return [];
 
-	const linkify = LinkifyIt();
 	const matches = linkify.match(text);
 	if (matches && matches.length > 0) {
 		return matches.map((m) => m.url);
@@ -240,7 +245,6 @@ export function isTextOnlyUrl(msg: TelegramBot.Message): boolean {
 	const text = (msg.text || msg.caption || "").trim();
 	if (!text) return false;
 
-	const linkify = LinkifyIt();
 	const matches = linkify.match(text);
 
 	if (matches && matches.length > 0) {

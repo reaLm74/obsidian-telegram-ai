@@ -1,30 +1,25 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.2.0";
+export const releaseVersion = "0.2.1";
 export const showNewFeatures = true;
 export let showBreakingChanges = false;
 
-const newFeatures = `🎉 Version 0.2.0:
+// No version line here — the notes template above prints "Telegram AI <version>" as the
+// heading, and repeating it put the version on screen three times in a row.
+const newFeatures = `🐛 Fixes
+- Text extraction from PDF files works again
+- Old messages are no longer synced twice into duplicate notes
+- Albums are no longer lost when Obsidian closes mid-sync
+- Large files no longer fail to download
+- Edits are no longer lost when a note is appended to while open
+- Sending several links from one site at once no longer fails with "File already exists"
+- The AI timeout setting is now actually applied
+- Notes and titles are written in your interface language, not always in English
 
-🌐 Multi-language support
-- Full Russian and English interface
-- Language auto-detected from Obsidian settings
-
-🤖 AI Processing
-- Configurable AI chains: Whisper → GPT → Formatter
-- Content-type specific prompts (text, photo, voice, document, links)
-- Auto-tagging and WikiLinks from AI processing
-- Smart categorization with keywords + AI classification
-
-📊 Processing Status
-- Live progress indicator in status bar
-- Processing history log (last 50 messages)
-
-🎛️ UX Improvements
-- Setup Wizard for first-time users
-- 4 built-in presets: Personal Diary, Work Tasks, Media Archive, Knowledge Collector
-- Category Manager with custom AI parameters
-- Settings migration — your config is safely preserved on updates`;
+💰 Fewer AI requests
+- Title and category for one message now cost a single request instead of up to three
+- A photo is uploaded once per message, not once per question about it
+- No more retries when the API key has no quota left`;
 
 export const breakingChanges = ``;
 
@@ -46,7 +41,7 @@ export const privacyPolicyLink = "https://github.com/reaLm74/obsidian-telegram-a
 export const notes = `
 <u><b>Telegram AI ${releaseVersion}</b></u>
 
-🆕 ${newFeatures}
+${newFeatures}
 
 📢 ${telegramChannelIntro}
 

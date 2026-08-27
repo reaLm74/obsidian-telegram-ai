@@ -14,14 +14,14 @@ export class CustomAIParametersModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 
-		contentEl.createEl("h2", { text: t("settings.categories.customParams") });
+		this.titleEl.setText(t("settings.categories.customParams"));
 
 		contentEl.createEl("p", {
 			text: t("settings.categories.customParams.intro"),
 		});
 
 		// Show hint about title parameter
-		const hintEl = contentEl.createDiv({ cls: "custom-parameters-hint setting-item-description" });
+		const hintEl = contentEl.createDiv({ cls: "tgai-custom-parameters-hint setting-item-description" });
 		hintEl.createSpan({ text: "💡 " });
 		hintEl.createEl("strong", { text: t("settings.categories.customParams.tipLabel") });
 		hintEl.appendText(" " + t("settings.categories.customParams.tipText"));
@@ -33,7 +33,9 @@ export class CustomAIParametersModal extends Modal {
 		this.displayAddParameterForm();
 
 		// Buttons
-		const buttonContainer = contentEl.createDiv({ cls: "modal-button-container justify-end flex gap-10" });
+		const buttonContainer = contentEl.createDiv({
+			cls: "modal-button-container tgai-justify-end tgai-flex tgai-gap-10",
+		});
 
 		const closeButton = buttonContainer.createEl("button", { text: t("common.ok") });
 		closeButton.onclick = () => this.close();
@@ -72,7 +74,7 @@ export class CustomAIParametersModal extends Modal {
 			textarea.value = prompt;
 
 			// Base styles
-			textarea.addClass("ai-textarea");
+			textarea.addClass("tgai-ai-textarea");
 
 			// Set initial height after small delay
 			window.setTimeout(() => {
@@ -82,7 +84,7 @@ export class CustomAIParametersModal extends Modal {
 			}, 50);
 
 			// Control buttons
-			const buttonGroup = paramContent.createDiv({ cls: "flex gap-10" });
+			const buttonGroup = paramContent.createDiv({ cls: "tgai-flex tgai-gap-10" });
 
 			const saveButton = buttonGroup.createEl("button", { text: t("common.save"), cls: "mod-cta" });
 			saveButton.onclick = () => {
@@ -134,7 +136,7 @@ export class CustomAIParametersModal extends Modal {
 						paramPrompt = value;
 					});
 				text.inputEl.rows = 3;
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 			});
 
 		new Setting(formContainer).addButton((btn) => {

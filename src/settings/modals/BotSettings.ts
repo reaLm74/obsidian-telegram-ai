@@ -9,8 +9,40 @@ export const mainDeviceIdSettingName = "Main device id";
 export class BotSettingsModal extends Modal {
 	botSettingsDiv!: HTMLDivElement;
 	saved = false;
-	constructor(public plugin: TelegramSyncPlugin) {
+	/**
+	 * @param onSaved Runs after the dialog is closed with ✓. Passed in rather than assigned
+	 *                over `onClose` from outside: that assignment would shadow the discard
+	 *                logic below, which is the whole reason it exists.
+	 */
+	constructor(
+		public plugin: TelegramSyncPlugin,
+		private onSaved?: () => Promise<void> | void,
+	) {
 		super(plugin.app);
+	}
+
+	/**
+	 * Rolls back edits when the dialog is dismissed instead of confirmed.
+	 *
+	 * The fields write straight into plugin.settings as they are edited: addBotToken()
+	 * stores the typed token and clears botTokenEncrypted, and the pin toggle decrypts
+	 * both the bot token and the AI key in place so the ✓ button can re-seal them. Closing
+	 * with Esc or a click outside left all of that in memory, so the next saveSettings()
+	 * from anywhere else — a topic name arriving over Telegram, a category edit — wrote the
+	 * bot token to data.json in the clear and left encryption switched off.
+	 */
+	onClose() {
+		void (async () => {
+			if (this.saved) {
+				await this.onSaved?.();
+				return;
+			}
+			await this.plugin.loadSettings();
+			// A pin can only be in memory here because the dismissed toggle put it there;
+			// keeping it would make getBotToken() decrypt the restored token with the wrong
+			// key. When the setting survives the rollback the pin is the user's real one.
+			if (!this.plugin.settings.encryptionByPinCode) this.plugin.pinCode = undefined;
+		})();
 	}
 
 	display() {
@@ -29,9 +61,9 @@ export class BotSettingsModal extends Modal {
 		const limitations = new Setting(this.botSettingsDiv).setDesc(t("settings.bot.limitations"));
 		const lim24Hours = activeDocument.createElement("div");
 		lim24Hours.setText(t("settings.bot.limitations.24h"));
-		lim24Hours.addClass("ml-10");
+		lim24Hours.addClass("tgai-ml-10");
 		const limBlocks = activeDocument.createElement("div");
-		limBlocks.addClass("ml-10");
+		limBlocks.addClass("tgai-ml-10");
 		limBlocks.setText(t("settings.bot.limitations.proxy"));
 		limBlocks.createSpan({
 			text: "([proxy configuration examples],",
@@ -53,9 +85,9 @@ export class BotSettingsModal extends Modal {
 					.setValue(await this.plugin.getBotToken())
 					.onChange((value: string) => {
 						if (!value) {
-							text.inputEl.addClass("error-border");
+							text.inputEl.addClass("tgai-error-border");
 						} else {
-							text.inputEl.removeClass("error-border");
+							text.inputEl.removeClass("tgai-error-border");
 						}
 						this.plugin.settings.botToken = value;
 						this.plugin.settings.botTokenEncrypted = false;
@@ -72,13 +104,15 @@ export class BotSettingsModal extends Modal {
 					.setPlaceholder("Example: username,1227636")
 					.setValue(this.plugin.settings.allowedChats.join(", "))
 					.onChange((value: string) => {
-						value = value.replace(/\s/g, "");
-						if (!value) {
-							textArea.inputEl.addClass("error-border");
+						// Empty entries must never reach allowedChats: "" matches every sender
+						// without a Telegram username and turns the whitelist off entirely.
+						const chats = value.replace(/\s/g, "").split(",").filter(Boolean);
+						if (chats.length == 0) {
+							textArea.inputEl.addClass("tgai-error-border");
 						} else {
-							textArea.inputEl.removeClass("error-border");
+							textArea.inputEl.removeClass("tgai-error-border");
 						}
-						this.plugin.settings.allowedChats = value.split(",");
+						this.plugin.settings.allowedChats = chats;
 					});
 			});
 		// add link to Telegram FAQ about getting username
@@ -136,13 +170,20 @@ export class BotSettingsModal extends Modal {
 							this.plugin.settings.botToken = await this.plugin.getBotToken();
 							this.plugin.settings.botTokenEncrypted = false;
 						}
+						// The AI key rides the same pin. Decrypt it under the OLD key here so
+						// the footer button can re-encrypt it under the new one — otherwise it
+						// stays sealed with a key nothing will ask for again.
+						if (this.plugin.settings.openAIApiKeyEncrypted) {
+							this.plugin.settings.openAIApiKey = this.plugin.getOpenAIApiKey();
+							this.plugin.settings.openAIApiKeyEncrypted = false;
+						}
 						this.plugin.settings.encryptionByPinCode = value;
 						if (!value) {
 							this.plugin.pinCode = undefined;
 							return;
 						}
 						const pinCodeModal = new PinCodeModal(this.plugin, false);
-						pinCodeModal.onClose = () => {
+						pinCodeModal.onDone = () => {
 							if (pinCodeModal.saved && this.plugin.pinCode) return;
 							this.plugin.settings.encryptionByPinCode = false;
 						};
@@ -162,6 +203,7 @@ export class BotSettingsModal extends Modal {
 			b.setTooltip("Connect")
 				.setIcon("checkmark")
 				.onClick(async () => {
+					this.plugin.openAIApiKeyEncrypt();
 					if (!this.plugin.settings.botTokenEncrypted) this.plugin.botTokenEncrypt(true);
 					else await this.plugin.saveSettings();
 					this.saved = true;
@@ -172,8 +214,9 @@ export class BotSettingsModal extends Modal {
 		footerButtons.addExtraButton((b) => {
 			b.setIcon("cross")
 				.setTooltip("Cancel")
-				.onClick(async () => {
-					await this.plugin.loadSettings();
+				.onClick(() => {
+					// The rollback itself lives in onClose(), so Esc and this button behave
+					// identically instead of only one of them undoing the edits.
 					this.saved = false;
 					this.close();
 				});

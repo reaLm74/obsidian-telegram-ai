@@ -21,9 +21,14 @@ export function addAISettings(
 				void (async () => {
 					plugin.settings.aiEnabled = value;
 
-					// If AI processing is disabled, also disable AI categorization
+					// If AI processing is disabled, also disable categorization entirely.
+					// Runtime routing gates on categoriesEnabled alone, so leaving it on
+					// would keep filing notes into category folders while the categories
+					// section shows the feature off (it requires both flags) — the exact
+					// split state the 0.6.0 migration exists to clean up.
 					if (!value) {
 						plugin.settings.aiCategorizationEnabled = false;
+						plugin.settings.categoriesEnabled = false;
 					}
 
 					await plugin.saveSettings();
@@ -79,18 +84,8 @@ export function addAISettings(
 				});
 		});
 
-	// Local Document Text Extraction
-	new Setting(containerEl)
-		.setName(t("settings.ai.extraction"))
-		.setDesc(t("settings.ai.extraction.desc"))
-		.addToggle((toggle) => {
-			toggle.setValue(plugin.settings.enableLocalDocumentExtraction).onChange((value) => {
-				void (async () => {
-					plugin.settings.enableLocalDocumentExtraction = value;
-					await plugin.saveSettings();
-				})();
-			});
-		});
+	// "Read text from documents locally" now lives in Advanced settings — it is a
+	// content-handling detail, not something to decide while setting AI up.
 }
 
 export function getApiKeyStatus(plugin: TelegramSyncPlugin, provider: string): boolean {

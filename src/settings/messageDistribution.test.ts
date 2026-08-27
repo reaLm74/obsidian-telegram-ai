@@ -7,6 +7,10 @@ import {
 	ConditionType,
 	defaultMessageFilterQuery,
 	defaultTelegramFolder,
+	defaultNoteNameTemplate,
+	defaultFileNameTemplate,
+	getBaseFolder,
+	setBaseFolder,
 } from "./messageDistribution";
 
 // ────────────────────────────────────────────────────────
@@ -201,5 +205,78 @@ describe("getMessageDistributionRuleInfo", () => {
 		rule.templateFilePath = "templates/custom.md";
 		const info = getMessageDistributionRuleInfo(rule);
 		expect(info.description).toContain("Template file:");
+	});
+});
+
+describe("getBaseFolder / setBaseFolder", () => {
+	it("reads the folder out of the default rule", () => {
+		expect(getBaseFolder(createDefaultMessageDistributionRule())).toBe("Telegram");
+	});
+
+	it("reads a nested folder", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.notePathTemplate = "Inbox/Telegram/{{content:30}}.md";
+		expect(getBaseFolder(rule)).toBe("Inbox/Telegram");
+	});
+
+	it("returns an empty folder when the note lands in the vault root", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.notePathTemplate = "{{content:30}}.md";
+		expect(getBaseFolder(rule)).toBe("");
+	});
+
+	it("swaps the folder and keeps both name templates", () => {
+		const rule = createDefaultMessageDistributionRule();
+		setBaseFolder(rule, "Knowledge");
+		expect(rule.notePathTemplate).toBe(`Knowledge/${defaultNoteNameTemplate}`);
+		expect(rule.filePathTemplate).toBe(`Knowledge/{{file:type}}s/${defaultFileNameTemplate}`);
+		expect(getBaseFolder(rule)).toBe("Knowledge");
+	});
+
+	it("preserves a customised note name template", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.notePathTemplate = "Telegram/{{date:YYYY-MM-DD}}.md";
+		setBaseFolder(rule, "Journal");
+		expect(rule.notePathTemplate).toBe("Journal/{{date:YYYY-MM-DD}}.md");
+	});
+
+	it("preserves the file:type subfolder", () => {
+		const rule = createDefaultMessageDistributionRule();
+		setBaseFolder(rule, "Media");
+		expect(rule.filePathTemplate).toContain("Media/{{file:type}}s/");
+	});
+
+	it("trims slashes and falls back to the default folder when cleared", () => {
+		const rule = createDefaultMessageDistributionRule();
+		setBaseFolder(rule, "  /Knowledge/  ");
+		expect(getBaseFolder(rule)).toBe("Knowledge");
+		setBaseFolder(rule, "   ");
+		expect(getBaseFolder(rule)).toBe(defaultTelegramFolder);
+	});
+
+	it("prefixes root-level templates with the new folder, keeping their names", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.notePathTemplate = "{{content:30}}.md";
+		rule.filePathTemplate = "{{file:name}}.{{file:extension}}";
+		setBaseFolder(rule, "Knowledge");
+		expect(rule.notePathTemplate).toBe("Knowledge/{{content:30}}.md");
+		expect(rule.filePathTemplate).toBe("Knowledge/{{file:name}}.{{file:extension}}");
+	});
+
+	// A template customised outside the base-folder field (e.g. by the old rules editor)
+	// must survive a base-folder change untouched — there is no UI left to recreate it.
+	it("leaves a template pointing at a different folder untouched", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.filePathTemplate = "Attachments/{{file:name}}.{{file:extension}}";
+		setBaseFolder(rule, "Knowledge");
+		expect(rule.filePathTemplate).toBe("Attachments/{{file:name}}.{{file:extension}}");
+		expect(rule.notePathTemplate).toBe(`Knowledge/${defaultNoteNameTemplate}`);
+	});
+
+	it("leaves an empty template empty", () => {
+		const rule = createDefaultMessageDistributionRule();
+		rule.filePathTemplate = "";
+		setBaseFolder(rule, "Knowledge");
+		expect(rule.filePathTemplate).toBe("");
 	});
 });

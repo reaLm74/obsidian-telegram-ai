@@ -1,5 +1,5 @@
 import { Api } from "telegram";
-import { checkUserService, clientUser, subscribedOnInsiderChannel } from "./client";
+import { checkUserService, clientUser } from "./client";
 import { getOffsetDate } from "src/utils/dateUtils";
 import TelegramSyncPlugin from "src/main";
 import { Dialog } from "telegram/tl/custom/dialog";
@@ -37,7 +37,10 @@ export interface ProcessOldMessagesSettings {
 }
 
 export let cachedUnprocessedMessages: ForwardedMessage[] = [];
-export let canUpdateProcessingDate = true;
+// Starts false: until the old-message scan has run (or is known to be unnecessary),
+// a freshly processed bot message must NOT stamp lastProcessingDate — the stamp would
+// move the scan window past the still-unfetched backlog, silently losing it.
+export let canUpdateProcessingDate = false;
 
 export function getDefaultProcessOldMessagesSettings(): ProcessOldMessagesSettings {
 	return {
@@ -47,6 +50,22 @@ export function getDefaultProcessOldMessagesSettings(): ProcessOldMessagesSettin
 		messagesLimit: defaultMessagesLimit,
 		chatsForSearch: [],
 	};
+}
+
+/**
+ * Reactions that mark a message as already synced, so the old-message scan skips it.
+ *
+ * finalizeMessageProcessing() reacts with the user's configured emoji (🔥 by default), or
+ * with emoticonProcessedEdited for edited messages. Matching only the two hardcoded
+ * constants meant every normally-processed message looked unprocessed and got forwarded
+ * again, duplicating notes. The constants stay in the list so messages marked by earlier
+ * versions — and by the upstream plugin — are still recognised.
+ */
+function getProcessedMarkers(plugin: TelegramSyncPlugin): string[] {
+	const configured = plugin.settings.emojiForProcessedMessages;
+	const markers = [emoticonProcessed, emoticonProcessedEdited];
+	if (configured && !markers.includes(configured)) markers.push(configured);
+	return markers;
 }
 
 export async function getChatsForSearch(plugin: TelegramSyncPlugin, offsetDays: number): Promise<ChatForSearch[]> {
@@ -139,6 +158,8 @@ export async function getUnprocessedMessages(plugin: TelegramSyncPlugin): Promis
 			);
 		}
 
+		const processedMarkers = getProcessedMarkers(plugin);
+
 		messages = messages.filter((msg) => {
 			// filter messages available for bot if order is not important
 			if (msg.date > oneDayAgo && plugin.settings.parallelMessageProcessing) return false;
@@ -164,7 +185,7 @@ export async function getUnprocessedMessages(plugin: TelegramSyncPlugin): Promis
 			if (
 				reactions.find(
 					(r) =>
-						[emoticonProcessed, emoticonProcessedEdited].includes(r.reaction) &&
+						processedMarkers.includes(r.reaction) &&
 						["0", botId.toString(), clientUser?.id.toString()].includes(r.userId),
 				)
 			)
@@ -179,18 +200,28 @@ export async function getUnprocessedMessages(plugin: TelegramSyncPlugin): Promis
 
 export async function forwardUnprocessedMessages(plugin: TelegramSyncPlugin) {
 	const processOldMessagesSettings = plugin.settings.processOldMessagesSettings;
-	if (!(await subscribedOnInsiderChannel())) return;
 	if (processOldMessagesSettings.chatsForSearch.length == 0) {
 		displayAndLog(plugin, "Processing old messages is skipped because chats for search are not listed", 0);
+		// Nothing can ever be recovered without chats to search — stamps are harmless.
+		canUpdateProcessingDate = true;
 		return;
 	}
 	const nowDate = getOffsetDate();
 	const lastProcessingDate = processOldMessagesSettings.lastProcessingDate;
-	if (Math.abs(nowDate - lastProcessingDate) < _24hours) return;
+	if (Math.abs(nowDate - lastProcessingDate) < _24hours) {
+		// No backlog to recover — regular processing may keep the date fresh.
+		canUpdateProcessingDate = true;
+		return;
+	}
 
 	cleanErrorCache();
 	stopUpdatingProcessingDate();
 	const unprocessedMessages = await getUnprocessedMessages(plugin);
+	// getUnprocessedMessages concatenates results per chat, so the list is not globally
+	// chronological. lastProcessingDate below is a resume cursor: it must only ever move
+	// forward through message dates, or an interruption after a newer chat's messages
+	// would permanently skip an older chat's still-unforwarded ones.
+	unprocessedMessages.sort((a, b) => a.date - b.date);
 	clearCachedUnprocessedMessages();
 	try {
 		for (const message of unprocessedMessages) {
@@ -198,7 +229,9 @@ export async function forwardUnprocessedMessages(plugin: TelegramSyncPlugin) {
 				if (message.forward && message.forward.chatId && !message.forward._chat)
 					message.forward._chat = await message.forward.getChat();
 				const forwardedMessage = getFirstMessage(await message.forwardTo(message.inputChat || message.peerId));
-				if (!errorCache) processOldMessagesSettings.lastProcessingDate = message.editDate || message.date;
+				// Advance the cursor with the send date, never editDate: an edit made today on
+				// an old message would jump the cursor past every not-yet-forwarded message.
+				if (!errorCache) processOldMessagesSettings.lastProcessingDate = message.date;
 				cachedUnprocessedMessages.push({ original: message, forwarded: forwardedMessage });
 			} catch (e: unknown) {
 				void displayAndLogError(
@@ -280,6 +313,11 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 
 export function stopUpdatingProcessingDate() {
 	canUpdateProcessingDate = false;
+}
+
+/** Call once it is known no old-message backlog is pending (feature off, or scan done). */
+export function allowUpdatingProcessingDate() {
+	canUpdateProcessingDate = true;
 }
 
 export function clearCachedUnprocessedMessages() {

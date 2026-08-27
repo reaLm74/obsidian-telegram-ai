@@ -66,6 +66,14 @@ function createMockVault(options: MockVaultOptions = {}): Vault {
 			file.path = path;
 			return file;
 		},
+		// Mirrors Vault.process: read + transform + write behind a single lock.
+		async process(file: TFile, fn: (data: string) => string): Promise<string> {
+			const current = existingFiles.get(file.path) ?? createdFiles.get(file.path) ?? "";
+			const next = fn(current);
+			existingFiles.set(file.path, next);
+			createdFiles.set(file.path, next);
+			return next;
+		},
 		async modify(file: TFile, content: string): Promise<void> {
 			existingFiles.set(file.path, content);
 			createdFiles.set(file.path, content);
@@ -175,6 +183,38 @@ describe("sanitizeFilePath", () => {
 			const nameOnly = p.replace(".md", "");
 			expect(nameOnly.length).toBeLessThanOrEqual(200);
 		});
+	});
+
+	// Path segments reach here from Telegram display names, chat titles and {{ai:*}} output.
+	// truncatePathComponents() runs path.join(), which turns a surviving ".." into a real
+	// parent-directory step — so the note would be written outside the vault.
+	it("strips parent-directory segments so the path cannot leave the vault", () => {
+		const result = sanitizeFilePath("telegram/../../../../Desktop/pwned.md");
+		expect(result).toBe("telegram/Desktop/pwned.md");
+		expect(result).not.toContain("..");
+	});
+
+	it("strips a traversal injected through a template variable", () => {
+		// Stands in for whatever a language model returns for {{ai:title}} after a prompt
+		// injection in the message text.
+		const aiTitle = "../../../config/plugins/evil/main";
+		const result = sanitizeFilePath(`Telegram/${aiTitle}.md`);
+		expect(result.startsWith("Telegram/")).toBe(true);
+		expect(result).not.toContain("..");
+	});
+
+	it("keeps dots that are part of a name", () => {
+		expect(sanitizeFilePath("notes/report..final.md")).toBe("notes/report..final.md");
+		expect(sanitizeFilePath("notes/...md")).toContain("...md");
+	});
+
+	it("folds empty and current-directory segments", () => {
+		expect(sanitizeFilePath("/folder//./file.md")).toBe("folder/file.md");
+	});
+
+	it("survives a path made only of traversal segments", () => {
+		expect(() => sanitizeFilePath("../..")).not.toThrow();
+		expect(sanitizeFilePath("../..")).not.toContain("..");
 	});
 });
 
@@ -392,5 +432,125 @@ describe("getUniqueFilePath", () => {
 		await getUniqueFilePath(vault, created, "newfile.md", new Date(), "md");
 		// Should have shifted old entries
 		expect(created.length).toBeLessThanOrEqual(506); // 505 + 1 new - shifts
+	});
+});
+
+// ────────────────────────────────────────────────────────
+// Losing a create race
+// ────────────────────────────────────────────────────────
+
+/**
+ * Several messages can resolve to one note — a burst of links from the same domain all land
+ * in "Links/<domain>.md". Each looks the file up, finds nothing and creates it; whoever
+ * loses gets "File already exists" from the vault. That used to fail the whole message and
+ * drop its link.
+ */
+describe("appendContentToNote — concurrent creation", () => {
+	/** A vault whose index does not yet know about a file that create() already refuses. */
+	function createRacingVault(createError: unknown, findAfterFailure = true): Vault {
+		const stored = new Map<string, string>();
+		let indexVisible = false;
+
+		return {
+			getAbstractFileByPath(path: string): TAbstractFile | null {
+				if (!indexVisible || !stored.has(path)) return null;
+				const file = new TFile();
+				file.path = path;
+				file.name = path.split("/").pop() || "";
+				return file;
+			},
+			async create(path: string): Promise<TFile> {
+				// The other writer got there first.
+				stored.set(path, "- [www.instagram.com](https://www.instagram.com/reel/first/)");
+				indexVisible = findAfterFailure;
+				throw createError;
+			},
+			async process(file: TFile, fn: (data: string) => string): Promise<string> {
+				const next = fn(stored.get(file.path) ?? "");
+				stored.set(file.path, next);
+				return next;
+			},
+			// eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- stub; nothing reads it
+			createFolder: () => Promise.resolve({} as TFolder),
+			read: async (file: TFile) => stored.get(file.path) ?? "",
+		} as unknown as Vault;
+	}
+
+	it("appends to the note the other writer created", async () => {
+		const vault = createRacingVault(new Error("File already exists."));
+
+		await appendContentToNote(
+			vault,
+			"Links/www.instagram.com.md",
+			"- [www.instagram.com](https://www.instagram.com/reel/second/)",
+			"",
+			"\n\n",
+		);
+
+		const file = vault.getAbstractFileByPath("Links/www.instagram.com.md");
+		if (!(file instanceof TFile)) throw new Error("the note was not created");
+		const content = await vault.read(file);
+		expect(content).toContain("reel/first");
+		expect(content).toContain("reel/second");
+	});
+
+	it("handles the error arriving as a bare string", async () => {
+		const vault = createRacingVault("File already exists.");
+
+		await expect(
+			appendContentToNote(vault, "Links/www.instagram.com.md", "- second link", "", "\n\n"),
+		).resolves.not.toThrow();
+	});
+
+	// Only the collision is survivable; anything else still has to surface.
+	it("rethrows an unrelated failure", async () => {
+		const vault = createRacingVault(new Error("EACCES: permission denied"));
+
+		await expect(appendContentToNote(vault, "Links/www.instagram.com.md", "- second link")).rejects.toThrow(
+			"permission denied",
+		);
+	});
+
+	it("rethrows when the note still cannot be found", async () => {
+		const vault = createRacingVault(new Error("File already exists."), false);
+
+		await expect(appendContentToNote(vault, "Links/www.instagram.com.md", "- second link")).rejects.toThrow(
+			"File already exists.",
+		);
+	});
+});
+
+describe("createFolderIfNotExist — concurrent creation", () => {
+	function createFolderVault(createError: unknown): Vault {
+		return {
+			getAbstractFileByPath: () => null,
+			// Obsidian rejects with a bare string in some versions — that is what this covers.
+			// eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+			createFolder: () => Promise.reject(createError),
+		} as unknown as Vault;
+	}
+
+	// The wording depends on which call lost the race, and "File already exists." used to be
+	// rethrown — which is how a folder that already existed failed a message.
+	it("treats 'File already exists' as success", async () => {
+		await expect(
+			createFolderIfNotExist(createFolderVault(new Error("File already exists.")), "Links"),
+		).resolves.toBeUndefined();
+	});
+
+	it("treats 'Folder already exists' as success", async () => {
+		await expect(
+			createFolderIfNotExist(createFolderVault(new Error("Folder already exists.")), "Links"),
+		).resolves.toBeUndefined();
+	});
+
+	it("still reports a real failure", async () => {
+		await expect(createFolderIfNotExist(createFolderVault(new Error("EACCES")), "Links")).rejects.toThrow("EACCES");
+	});
+
+	it("wraps a string failure in an Error", async () => {
+		await expect(createFolderIfNotExist(createFolderVault("something went wrong"), "Links")).rejects.toThrow(
+			"something went wrong",
+		);
 	});
 });

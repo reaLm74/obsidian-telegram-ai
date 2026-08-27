@@ -9,6 +9,9 @@ export default defineConfig({
 		alias: {
 			src: resolve(__dirname, "./src"),
 			obsidian: resolve(__dirname, "./src/__mocks__/obsidian.ts"),
+			// src/telegram/user/client.ts imports this build-time module by a bare
+			// specifier; without the alias any test that reaches main.ts fails to resolve it.
+			"release-notes.mjs": resolve(__dirname, "./release-notes.mjs"),
 		},
 		coverage: {
 			provider: "v8",

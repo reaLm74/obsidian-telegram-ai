@@ -209,7 +209,10 @@ chat: {{chat:name}}
 ## Best Practices
 
 1. **Keep paths short** — deep nesting (>4 levels) is hard to navigate
-2. **Use AI variables sparingly** — each `{{ai:...}}` costs an API call
+2. **AI variables are cheap to combine** — every `{{ai:...}}` in every template for one
+   message is answered by a single request, shared with category detection. Using
+   `{{ai:title}}` in both a rule path and a category path costs the same as using it once,
+   and returns the same title in both
 3. **Test with simple messages** — verify template output before complex setups
 4. **Use `{{content:30}}` in paths** — limit filename length for safety
 5. **Combine date + AI** — `{{date:YYYY-MM}}/{{ai:title}}.md` gives good organization

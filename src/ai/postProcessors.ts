@@ -8,6 +8,7 @@
  */
 
 import { Vault } from "obsidian";
+import { debugLog } from "src/utils/debugLog";
 
 // ─── Minimal plugin shape (avoids importing the full main.ts graph) ──────────
 
@@ -58,7 +59,7 @@ export function applyPostProcessors(aiContent: string, ctx: PostProcessorContext
 			const before = result;
 			result = proc.transform(result, ctx);
 			if (result !== before) {
-				console.debug(`Post-processor "${proc.name}" applied`);
+				debugLog("PostProcess", `Post-processor "${proc.name}" applied`);
 			}
 		}
 	}

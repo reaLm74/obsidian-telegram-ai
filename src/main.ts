@@ -1,15 +1,16 @@
 import { Plugin } from "obsidian";
-import { NoteCategory } from "./categories/types";
 import { DEFAULT_SETTINGS, TelegramSyncSettings, TelegramSyncSettingTab } from "./settings/Settings";
 import TelegramBot from "node-telegram-bot-api";
 import { machineIdSync } from "node-machine-id";
 import {
 	_15sec,
 	_2min,
+	_5sec,
 	displayAndLog,
 	StatusMessages,
 	displayAndLogError,
 	hideMTProtoAlerts,
+	restoreMTProtoAlerts,
 	_day,
 } from "./utils/logUtils";
 import * as Client from "./telegram/user/client";
@@ -18,7 +19,7 @@ import * as User from "./telegram/user/user";
 import { enqueue } from "./utils/queues";
 import { clearTooManyRequestsInterval } from "./telegram/bot/tooManyRequests";
 import { clearCachedMessagesInterval } from "./telegram/convertors/botMessageToClientMessage";
-import { clearHandleMediaGroupInterval } from "./telegram/bot/message/handlers";
+import { flushMediaGroups } from "./telegram/bot/message/handlers";
 import ConnectionStatusIndicator, { checkConnectionMessage } from "./ConnectionStatusIndicator";
 import { mainDeviceIdSettingName } from "./settings/modals/BotSettings";
 import {
@@ -30,13 +31,20 @@ import {
 	defaultTelegramFolder,
 } from "./settings/messageDistribution";
 import os from "os";
-import { clearCachedUnprocessedMessages, forwardUnprocessedMessages } from "./telegram/user/sync";
-import { decrypt, encrypt } from "./utils/crypto256";
+import {
+	allowUpdatingProcessingDate,
+	clearCachedUnprocessedMessages,
+	forwardUnprocessedMessages,
+} from "./telegram/user/sync";
+import { canDecrypt, decrypt, encrypt } from "./utils/crypto256";
+import { applyMigrations } from "./settings/settingsMigrator";
+import { validateSettings } from "./settings/settingsValidator";
 import { PinCodeModal } from "./settings/modals/PinCode";
 import { CategoryManager } from "./categories/CategoryManager";
 
 import { initProcessingStatusBar, destroyProcessingStatusBar } from "./processing/ProcessingTracker";
 import { initLocale, t } from "./locale/i18n";
+import { setDebugMode } from "./utils/debugLog";
 
 // TODO LOW: add "connecting"
 export type ConnectionStatus = "connected" | "disconnected";
@@ -56,7 +64,14 @@ export default class TelegramSyncPlugin extends Plugin {
 	bot?: TelegramBot;
 	botUser?: TelegramBot.User;
 	createdFilePaths: string[] = [];
-	currentDeviceId = machineIdSync(true);
+	// machineIdSync shells out to the OS (REG.exe on Windows) synchronously; computing it
+	// eagerly here would block Obsidian's startup for every user, including the majority
+	// that never set mainDeviceId. Resolved lazily on first access instead.
+	private _currentDeviceId?: string;
+	get currentDeviceId(): string {
+		if (!this._currentDeviceId) this._currentDeviceId = machineIdSync(true);
+		return this._currentDeviceId;
+	}
 	lastPollingErrors: string[] = [];
 	restartingIntervalId?: number;
 	restartingIntervalTime = _15sec;
@@ -163,7 +178,12 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	async processOldMessages() {
 		if (!this.time4processOldMessages) return;
-		if (!this.settings.processOldMessages) clearCachedUnprocessedMessages();
+		if (!this.settings.processOldMessages) {
+			clearCachedUnprocessedMessages();
+			// Feature off — there is no backlog to protect, let regular processing keep
+			// lastProcessingDate fresh so a later enablement doesn't refetch weeks of history.
+			allowUpdatingProcessingDate();
+		}
 		if (!this.userConnected || !this.settings.processOldMessages || !this.botUser) return;
 		try {
 			await forwardUnprocessedMessages(this);
@@ -192,6 +212,8 @@ export default class TelegramSyncPlugin extends Plugin {
 		initLocale();
 
 		await this.loadSettings();
+		// Tracing stays off unless the user asked for it in Advanced settings.
+		setDebugMode(this.settings.debugMode);
 		await this.upgradeSettings();
 
 		// Add a settings tab for this plugin
@@ -249,8 +271,12 @@ export default class TelegramSyncPlugin extends Plugin {
 		try {
 			clearTooManyRequestsInterval();
 			clearCachedMessagesInterval();
-			clearHandleMediaGroupInterval();
+			// Writes out albums whose files are already in the vault but whose note is not.
+			// Cannot be awaited here — onunload is synchronous — but the vault outlives the
+			// plugin, so the writes still complete.
+			void flushMediaGroups(this);
 			destroyProcessingStatusBar();
+			restoreMTProtoAlerts();
 			this.connectionStatusIndicator?.destroy();
 			this.connectionStatusIndicator = undefined;
 			this.settingsTab = undefined;
@@ -267,7 +293,28 @@ export default class TelegramSyncPlugin extends Plugin {
 
 	// Load settings from the plugin's data
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<TelegramSyncSettings>);
+		const stored = ((await this.loadData()) as Partial<TelegramSyncSettings> | null) || {};
+		// Migrations must see the raw data: once DEFAULT_SETTINGS is merged in, an absent
+		// key is indistinguishable from one explicitly set to its default value.
+		applyMigrations(stored as unknown as Record<string, unknown>, this.manifest.version);
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, stored);
+
+		// Type-check what came off disk. Runs after the merge on purpose: absent keys are
+		// already filled by then, so anything repaired here is a genuinely wrong type —
+		// hand-edited data.json, a half-written file, or a value from a future version.
+		// Without this a string where a number belongs (e.g. aiTimeout) propagates into
+		// requests and fails far from its cause.
+		const validation = validateSettings(
+			this.settings as unknown as Record<string, unknown>,
+			DEFAULT_SETTINGS as unknown as Record<string, unknown>,
+		);
+		if (validation.repaired) {
+			displayAndLog(
+				this,
+				`Reset ${validation.repairedFields.length} invalid setting(s) to defaults: ${validation.repairedFields.join(", ")}`,
+				_5sec,
+			);
+		}
 	}
 
 	// Save settings to the plugin's data
@@ -302,34 +349,33 @@ export default class TelegramSyncPlugin extends Plugin {
 			});
 		}
 
-		// Migration: Convert old folderPath to notePathTemplate
-		if (this.settings.noteCategories && this.settings.noteCategories.length > 0) {
-			this.settings.noteCategories.forEach((category: NoteCategory & { folderPath?: string }) => {
-				if (category.folderPath && !category.notePathTemplate) {
-					// Migrate folderPath to notePathTemplate
-					category.notePathTemplate = `${category.folderPath}/{{content:30}}.md`;
-					delete category.folderPath;
-					needToSaveSettings = true;
-				}
-			});
+		// An empty entry in allowedChats matches every sender without a Telegram username
+		// and disables the whitelist. settingsMigrator strips these on load; this guards
+		// against a value typed into the settings field since.
+		const sanitizedChats = this.settings.allowedChats.map((chat) => chat.trim()).filter(Boolean);
+		if (sanitizedChats.length != this.settings.allowedChats.length) {
+			this.settings.allowedChats = sanitizedChats;
+			needToSaveSettings = true;
 		}
 
-		if (!this.settings.botTokenEncrypted) {
+		// With pin-code encryption on, the pin is not known yet at load time (the pin modal
+		// only opens later, on connect). Encrypting now would seal these values with the
+		// compiled-in fallback key while decryption uses the pin — an unrecoverable mismatch.
+		// Defer instead; getBotToken() completes the encryption once the pin is entered.
+		const encryptionKeyAvailable = !this.settings.encryptionByPinCode || !!this.pinCode;
+		if (!this.settings.botTokenEncrypted && encryptionKeyAvailable) {
 			this.botTokenEncrypt();
 			needToSaveSettings = true;
 		}
 
-		// Migration: Add default title parameter if missing
-		if (!this.settings.aiCustomParameters) {
-			this.settings.aiCustomParameters = {};
-			needToSaveSettings = true;
-		}
-		if (!this.settings.aiCustomParameters.title) {
-			this.settings.aiCustomParameters.title =
-				"Generate a concise and clear title for the note (maximum 50 characters, no punctuation at the end)";
+		// Upgrades an install whose key was written before encryption existed.
+		if (this.settings.openAIApiKey && !this.settings.openAIApiKeyEncrypted && encryptionKeyAvailable) {
+			this.openAIApiKeyEncrypt();
 			needToSaveSettings = true;
 		}
 
+		// Value-level migrations (folderPath, aiCustomParameters.title, setupCompleted, …)
+		// live in settingsMigrator.ts and have already run in loadSettings().
 		if (needToSaveSettings) await this.saveSettings();
 	}
 
@@ -358,17 +404,68 @@ export default class TelegramSyncPlugin extends Plugin {
 	async getBotToken(): Promise<string> {
 		if (!this.settings.botTokenEncrypted) return this.settings.botToken;
 
-		if (this.settings.encryptionByPinCode && !this.pinCode) {
-			await new Promise((resolve) => {
-				const pinCodeModal = new PinCodeModal(this, true);
-				pinCodeModal.onClose = () => {
-					if (!this.pinCode) displayAndLog(this, "Plugin Telegram AI stopped. No pin code entered.");
-					resolve(undefined);
-				};
-				pinCodeModal.open();
-			});
+		if (this.settings.encryptionByPinCode) {
+			// A pin left over from a failed attempt must not be reused silently — it would
+			// fail every reconnect until Obsidian restarts. Drop it and ask again.
+			if (this.pinCode && !canDecrypt(this.settings.botToken, this.pinCode)) this.pinCode = undefined;
+
+			if (!this.pinCode) {
+				await new Promise((resolve) => {
+					const pinCodeModal = new PinCodeModal(this, true);
+					pinCodeModal.onDone = () => {
+						if (!this.pinCode) displayAndLog(this, "Plugin Telegram AI stopped. No pin code entered.");
+						resolve(undefined);
+					};
+					pinCodeModal.open();
+				});
+			}
+
+			if (this.pinCode && !canDecrypt(this.settings.botToken, this.pinCode)) {
+				this.pinCode = undefined;
+				throw new Error("Wrong pin code. The bot token could not be decrypted.");
+			}
+
+			// Completes encryptions deferred by upgradeSettings(): legacy plaintext values
+			// must be sealed with the pin, which is only known from this point on.
+			if (this.pinCode && this.settings.openAIApiKey && !this.settings.openAIApiKeyEncrypted)
+				this.openAIApiKeyEncrypt(true);
 		}
 		return decrypt(this.settings.botToken, this.pinCode);
+	}
+
+	/**
+	 * The OpenAI key in the clear, decrypted on demand.
+	 *
+	 * Stored the same way as the bot token — AES-256-GCM, keyed by the pin code when one
+	 * is set and by a compiled-in constant otherwise. Previously it sat in data.json as
+	 * plain text, which meant syncing a vault to git or a cloud drive published a billable
+	 * credential. Callers get "" on failure rather than an exception: a message that cannot
+	 * be AI-processed should degrade to the unprocessed note, not abort the sync.
+	 */
+	getOpenAIApiKey(): string {
+		if (!this.settings.openAIApiKey || !this.settings.openAIApiKeyEncrypted) return this.settings.openAIApiKey;
+		try {
+			return decrypt(this.settings.openAIApiKey, this.pinCode);
+		} catch {
+			displayAndLog(
+				this,
+				"The OpenAI API key could not be decrypted. Re-enter it in the AI provider settings.",
+				0,
+			);
+			return "";
+		}
+	}
+
+	/** Encrypts the stored OpenAI key in place. No-op when empty or already encrypted. */
+	openAIApiKeyEncrypt(saveSettings = false) {
+		if (!this.settings.openAIApiKey || this.settings.openAIApiKeyEncrypted) return;
+		this.settings.openAIApiKey = encrypt(this.settings.openAIApiKey, this.pinCode);
+		this.settings.openAIApiKeyEncrypted = true;
+		if (saveSettings) {
+			void (async () => {
+				await this.saveSettings();
+			})();
+		}
 	}
 
 	botTokenEncrypt(saveSettings = false) {
