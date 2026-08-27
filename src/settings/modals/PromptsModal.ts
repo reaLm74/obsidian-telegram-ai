@@ -1,6 +1,7 @@
 import { App, Modal, Setting, TextAreaComponent } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { t } from "src/locale/i18n";
+import { AUTO_LANGUAGE, CUSTOM_LANGUAGE } from "src/ai/outputLanguage";
 
 export class PromptsModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -13,13 +14,18 @@ export class PromptsModal extends Modal {
 	}
 
 	onOpen() {
+		this.render();
+	}
+
+	/** Re-entrant so the language row can show or hide its free-text field. */
+	private render() {
 		const { contentEl } = this;
 		contentEl.empty();
 
 		// Make modal wider for better editing experience
-		this.modalEl.addClass("prompt-modal");
+		this.modalEl.addClass("tgai-prompt-modal");
 
-		contentEl.createEl("h2", { text: t("settings.ai.prompts.title") });
+		this.titleEl.setText(t("settings.ai.prompts.title"));
 
 		contentEl.createEl("p", {
 			text: t("settings.ai.prompts.intro"),
@@ -28,6 +34,8 @@ export class PromptsModal extends Modal {
 			text: t("settings.ai.prompts.hint"),
 			cls: "setting-item-description",
 		});
+
+		this.addOutputLanguage(contentEl);
 
 		// --- General Formatting ---
 		new Setting(contentEl).setName(t("settings.ai.generalPrompt")).setDesc(t("settings.ai.generalPrompt.desc"));
@@ -197,16 +205,63 @@ export class PromptsModal extends Modal {
 		});
 	}
 
+	/**
+	 * Language of the notes, not of the prompts.
+	 *
+	 * Sits above the prompt editors because it applies to all of them at once — including
+	 * the title prompt, which has no editor here and used to force English no matter what
+	 * the user wrote below.
+	 */
+	private addOutputLanguage(containerEl: HTMLElement) {
+		const isCustom = this.plugin.settings.aiOutputLanguage === CUSTOM_LANGUAGE;
+
+		new Setting(containerEl)
+			.setName(t("settings.ai.outputLanguage"))
+			.setDesc(t("settings.ai.outputLanguage.desc"))
+			.addDropdown((dropdown) => {
+				dropdown
+					.addOption(AUTO_LANGUAGE, t("settings.ai.outputLanguage.auto"))
+					.addOption("en", "English")
+					.addOption("ru", "Русский")
+					.addOption(CUSTOM_LANGUAGE, t("settings.ai.outputLanguage.custom"))
+					.setValue(this.plugin.settings.aiOutputLanguage || AUTO_LANGUAGE)
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.aiOutputLanguage = value;
+							await this.plugin.saveSettings();
+							this.onUpdate();
+							// Only the dropdown redraws the modal: doing it per keystroke in
+							// the field below would steal focus on every character.
+							this.render();
+						})();
+					});
+			});
+
+		if (!isCustom) return;
+
+		new Setting(containerEl).setName(t("settings.ai.outputLanguage.customName")).addText((text) => {
+			text.setPlaceholder(t("settings.ai.outputLanguage.customPlaceholder"))
+				.setValue(this.plugin.settings.aiOutputLanguageCustom)
+				.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.aiOutputLanguageCustom = value;
+						await this.plugin.saveSettings();
+						this.onUpdate();
+					})();
+				});
+		});
+	}
+
 	private createFullWidthTextArea(
 		container: HTMLElement,
 		value: string,
 		placeholder: string,
 		onChange: (value: string) => void,
 	) {
-		const div = container.createDiv({ cls: "prompt-textarea-container" });
+		const div = container.createDiv({ cls: "tgai-prompt-textarea-container" });
 
 		const ta = new TextAreaComponent(div);
-		ta.inputEl.addClass("prompt-textarea");
+		ta.inputEl.addClass("tgai-prompt-textarea");
 		ta.inputEl.rows = 6;
 		ta.setPlaceholder(placeholder);
 		ta.setValue(value);

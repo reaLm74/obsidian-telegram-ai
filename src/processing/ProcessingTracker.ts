@@ -69,21 +69,32 @@ export function initProcessingStatusBar(plugin: TelegramSyncPlugin): void {
 
 	statusBarEl = plugin.addStatusBarItem();
 	statusBarEl.id = "processing-status-indicator";
-	statusBarEl.addClass("processing-status-bar");
+	statusBarEl.addClass("tgai-processing-status-bar");
 	setIcon(statusBarEl, "activity");
 	statusBarLabel = statusBarEl.createEl("label");
 	statusBarLabel.setAttr("for", "processing-status-indicator");
 
-	// Click to open history
-	statusBarEl.addEventListener("click", () => {
+	// registerDomEvent, not addEventListener: Obsidian then removes the listener when
+	// the plugin unloads, instead of it outliving the plugin.
+	plugin.registerDomEvent(statusBarEl, "click", () => {
 		void openProcessingHistory(plugin);
 	});
-	statusBarEl.setCssStyles({ cursor: "pointer" });
 
 	updateStatusBar();
+}
 
-	// Periodic refresh (every 1s while processing, or idle text)
-	updateIntervalId = window.setInterval(updateStatusBar, 1000);
+/**
+ * Ticks the status bar once a second while work is in flight, so elapsed-time text stays
+ * fresh. Idle state is static, so the timer is stopped rather than left running for the
+ * rest of the session. Only called once a status bar exists.
+ */
+function syncRefreshTimer(): void {
+	if (activeCount > 0 && !updateIntervalId) {
+		updateIntervalId = window.setInterval(updateStatusBar, 1000);
+	} else if (activeCount === 0 && updateIntervalId) {
+		window.clearInterval(updateIntervalId);
+		updateIntervalId = undefined;
+	}
 }
 
 /**
@@ -140,7 +151,9 @@ export function recordProcessingDone(id: string, aiProcessed = false): void {
 		record.status = "done";
 		record.finishedAt = Date.now();
 		record.duration = record.finishedAt - record.startedAt;
-		record.aiProcessed = aiProcessed;
+		// Never clear a flag markAiUsedForMessage() already set: the caller that finishes
+		// the message does not know whether a provider was reached somewhere below it.
+		record.aiProcessed = aiProcessed || record.aiProcessed;
 	}
 
 	activeCount = Math.max(0, activeCount - 1);
@@ -163,6 +176,19 @@ export function recordProcessingError(id: string, error: string): void {
 	activeCount = Math.max(0, activeCount - 1);
 	totalErrors++;
 	updateStatusBar();
+}
+
+/**
+ * Marks the in-flight record for a message as AI-processed.
+ *
+ * Called from the provider once a request is actually issued, rather than inferred from
+ * settings: "AI is enabled" and "this message went to OpenAI" are different things —
+ * content-type toggles, empty content and Vision fallbacks all decide it per message.
+ * Matching on chat+message id avoids threading a tracking id through every layer.
+ */
+export function markAiUsedForMessage(chatId: number, messageId: number): void {
+	const record = history.find((r) => r.chatId === chatId && r.messageId === messageId && r.status === "processing");
+	if (record) record.aiProcessed = true;
 }
 
 /**
@@ -205,20 +231,21 @@ export function resetProcessingTracker(): void {
 
 function updateStatusBar(): void {
 	if (!statusBarLabel) return;
+	syncRefreshTimer();
 
 	if (activeCount > 0) {
 		statusBarLabel.setText(`${activeCount} processing...`);
-		statusBarEl?.removeClass("status-idle");
-		statusBarEl?.addClass("status-active");
+		statusBarEl?.removeClass("tgai-status-idle");
+		statusBarEl?.addClass("tgai-status-active");
 	} else if (totalErrors > 0 && totalProcessed === 0) {
 		statusBarLabel.setText(`⚠ ${totalErrors} errors`);
-		statusBarEl?.removeClass("status-active");
-		statusBarEl?.addClass("status-error");
+		statusBarEl?.removeClass("tgai-status-active");
+		statusBarEl?.addClass("tgai-status-error");
 	} else {
 		const text = totalProcessed > 0 ? `✓ ${totalProcessed} synced` : "idle";
 		statusBarLabel.setText(text);
-		statusBarEl?.removeClass("status-active", "status-error");
-		statusBarEl?.addClass("status-idle");
+		statusBarEl?.removeClass("tgai-status-active", "tgai-status-error");
+		statusBarEl?.addClass("tgai-status-idle");
 	}
 
 	// Tooltip with summary

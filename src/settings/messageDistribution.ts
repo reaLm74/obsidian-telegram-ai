@@ -68,6 +68,46 @@ export function createDefaultMessageDistributionRule(): MessageDistributionRule 
 	};
 }
 
+/**
+ * The base folder a rule writes into — the leading path segment of its note template.
+ *
+ * Distribution rules are no longer edited directly in settings: the base rule is expected
+ * to be the default one, and everything past the folder (naming, per-category routing) is
+ * handled by templates and the categories section. This exposes the one part a user still
+ * needs to change.
+ */
+export function getBaseFolder(rule: MessageDistributionRule): string {
+	const template = rule.notePathTemplate || rule.filePathTemplate;
+	const lastSlash = template.lastIndexOf("/");
+	return lastSlash > -1 ? template.slice(0, lastSlash) : "";
+}
+
+/**
+ * Repoints a rule at a different base folder, keeping its file-name templates intact.
+ *
+ * Only the leading folder is swapped, so a customised name template — or the
+ * `{{file:type}}s` subfolder in the file path — survives the change. A template that does
+ * not start with the current base was customised elsewhere (e.g. by the removed rules
+ * editor) and is left untouched: rebuilding it from defaults would destroy user data,
+ * with no UI left to restore it. A root-level template simply gains the folder prefix.
+ */
+export function setBaseFolder(rule: MessageDistributionRule, folder: string): void {
+	const newFolder = folder.trim().replace(/^\/+|\/+$/g, "") || defaultTelegramFolder;
+	const oldFolder = getBaseFolder(rule);
+
+	const repoint = (template: string): string => {
+		if (!template) return "";
+		if (oldFolder && template.startsWith(`${oldFolder}/`)) {
+			return newFolder + template.slice(oldFolder.length);
+		}
+		if (!template.includes("/")) return `${newFolder}/${template}`;
+		return template;
+	};
+
+	rule.notePathTemplate = repoint(rule.notePathTemplate);
+	rule.filePathTemplate = repoint(rule.filePathTemplate);
+}
+
 export function createBlankMessageDistributionRule(): MessageDistributionRule {
 	return {
 		messageFilterQuery: "",

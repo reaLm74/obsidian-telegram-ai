@@ -7,19 +7,24 @@ Telegram AI implements multiple layers of security to protect your sensitive inf
 ## Token and API Key Protection
 
 ### Bot Token Encryption
-The plugin uses AES-256 encryption to securely store your Telegram bot token locally on your device.
+Your Telegram bot token is stored encrypted with AES-256-GCM, using a random salt and IV
+for every value. What that protects depends on whether you set a PIN code.
 
-#### Default Encryption
-- **Algorithm**: AES-256 encryption
-- **Storage**: Encrypted token saved locally in Obsidian settings
-- **Access**: Protected from unauthorized access by other applications
+#### Without a PIN code
+- **Algorithm**: AES-256-GCM
+- **Key**: a constant compiled into the plugin
+- **What this gives you**: the token is not readable at a glance in `data.json`. It is
+  **obfuscation, not protection** — anyone who has the file can recover the token, because
+  the key ships with the plugin. Treat `data.json` as sensitive regardless.
 
-#### PIN Code Enhanced Encryption
-For additional security, enable PIN-based encryption:
+#### With a PIN code (recommended)
+Enable it in *Bot settings → Encryption by pin code*.
 
 **Benefits:**
-- **User-Controlled Key**: PIN exists only in your memory, not stored anywhere
-- **Plugin Protection**: Prevents other Obsidian plugins from accessing your token
+- **User-Controlled Key**: the key is derived from your PIN via scrypt; the PIN exists only
+  in your memory and is never stored
+- **Safe to sync**: a copy of `data.json` in git, a backup or a cloud drive is useless
+  without the PIN
 - **Session-Based**: PIN required each time Obsidian starts
 
 **How It Works:**
@@ -28,13 +33,17 @@ For additional security, enable PIN-based encryption:
 3. Enter PIN each time Obsidian starts
 4. Token remains encrypted when Obsidian is closed
 
-### API Key Security
-AI provider API keys are protected with the same encryption standards:
+> **The PIN cannot be recovered.** Forgetting it means re-entering the bot token and the
+> API key by hand.
 
-#### Supported Providers
-- **OpenAI API Keys**: Encrypted storage with optional PIN protection
-- **Anthropic Claude Keys**: Secure local storage
-- **Google Gemini Keys**: Protected with AES-256 encryption
+### API Key Security
+Your OpenAI API key rides the same setting as the bot token — same algorithm, same PIN,
+so protecting one protects the other. A key saved by a version before 0.2.1 was kept as
+plain text and is upgraded to the encrypted form the next time the plugin loads.
+
+Anthropic Claude and Google Gemini are not available yet. Their key fields exist in the
+settings schema but nothing reads them, and unlike the OpenAI key they are **not**
+encrypted — do not put real keys there.
 
 #### Best Practices
 - **Rotate Keys Regularly**: Change API keys periodically

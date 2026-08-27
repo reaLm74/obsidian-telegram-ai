@@ -30,22 +30,20 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
 			else if (plugin.isBotConnected()) botSettingsButton.setButtonText(t("settings.bot.settings"));
 			else botSettingsButton.setButtonText(t("settings.bot.connect"));
 			botSettingsButton.onClick(() => {
-				const botSettingsModal = new BotSettingsModal(plugin);
-				botSettingsModal.onClose = () => {
-					void (async () => {
-						if (botSettingsModal.saved) {
-							if (plugin.settings.telegramSessionType == "bot") {
-								plugin.settings.telegramSessionId = Client.getNewSessionId();
-								plugin.userConnected = false;
-							}
-							await plugin.saveSettings();
-							// Initialize the bot with the new token
-							plugin.setBotStatus("disconnected");
-							// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
-							await enqueue(plugin, plugin.initTelegram);
-						}
-					})();
-				};
+				// Passed to the constructor instead of assigned over onClose: the modal's own
+				// onClose discards edits when the dialog is dismissed, and overwriting it
+				// would leave the unencrypted bot token sitting in settings.
+				const botSettingsModal = new BotSettingsModal(plugin, async () => {
+					if (plugin.settings.telegramSessionType == "bot") {
+						plugin.settings.telegramSessionId = Client.getNewSessionId();
+						plugin.userConnected = false;
+					}
+					await plugin.saveSettings();
+					// Initialize the bot with the new token
+					plugin.setBotStatus("disconnected");
+					// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
+					await enqueue(plugin, plugin.initTelegram);
+				});
 				botSettingsModal.open();
 			});
 		});
@@ -59,7 +57,17 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
 	botSettings.descEl.appendChild(botFatherLink);
 }
 
-export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _update: () => void) {
+/**
+ * Telegram account login.
+ *
+ * Rendered inside ProcessOldMessagesSettingsModal rather than the settings tab: signing in
+ * as the account is only possible with MTProto credentials, and only useful for the
+ * features behind them, so the two belong on the same screen.
+ *
+ * `update` matters here — a modal has no refresh interval to notice that the connection
+ * state changed, so logging in has to redraw the host explicitly.
+ */
+export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, update: () => void) {
 	const userSettings = new Setting(containerEl)
 		.setName(t("settings.user.name"))
 		.setDesc(t("settings.user.desc"))
@@ -80,6 +88,7 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _u
 						// Log Out
 						await User.connect(plugin, "bot");
 						displayAndLog(plugin, t("settings.user.loggedOut"), _15sec);
+						update();
 					} else {
 						// Log In
 						const initialSessionType = plugin.settings.telegramSessionType;
@@ -90,6 +99,7 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _u
 									plugin.settings.telegramSessionType = initialSessionType;
 									await plugin.saveSettings();
 								}
+								update();
 							})();
 						};
 						userLogInModal.open();
@@ -105,6 +115,7 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _u
 				void (async () => {
 					await User.connect(plugin, "user", plugin.settings.telegramSessionId);
 					refreshButton.setDisabled(true);
+					update();
 				})();
 			});
 		});

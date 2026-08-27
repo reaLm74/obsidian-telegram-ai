@@ -12,6 +12,15 @@ Checklist for releasing a new plugin version using the Release Please + develop/
   - `fix:` — bug fix (patch bump)
   - `feat!:` / `BREAKING CHANGE:` — breaking changes (major bump)
   - `docs:`, `chore:`, `refactor:` — no version bump
+- [ ] **Match `releaseVersion` to what Release Please will compute** — decide the target
+      version from the commit types above *before* opening the PR, and set
+      `releaseVersion` in `release-notes.mjs` to exactly that. One `feat:` in the batch
+      turns a planned `0.2.1` into `0.3.0`, and `release-notes-check` then fails —
+      **after** the release PR has already been merged and `manifest.json` rewritten,
+      leaving `develop` with a bumped `package.json` and stale `manifest.json` to repair
+      by hand.
+- [ ] **Update the docs** — any user-visible setting or behaviour change needs its entry in
+      `README.md`, `docs/README.md` and the relevant guide, in the same PR as the code
 - [ ] **Local check** — `npm run build` passes without errors
 
 ---

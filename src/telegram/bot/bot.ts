@@ -79,23 +79,13 @@ export async function disconnect(plugin: TelegramSyncPlugin) {
 function handlePollingError(this: void, plugin: TelegramSyncPlugin, error: unknown) {
 	let pollingError = "unknown";
 
-	try {
-		const errorCode = (error as { response?: { body?: { error_code?: number } } }).response?.body?.error_code;
+	// Optional chaining never throws, so the EFATAL fallback must be a plain else-branch:
+	// as a catch block it was unreachable and every network fatal was reported as "unknown".
+	const errorCode = (error as { response?: { body?: { error_code?: number } } }).response?.body?.error_code;
 
-		if (errorCode === 409) {
-			pollingError = "twoBotInstances";
-		}
-
-		if (errorCode === 401) {
-			pollingError = "unAuthorized";
-		}
-	} catch {
-		try {
-			pollingError = (error as { code?: string }).code === "EFATAL" ? "fatalError" : pollingError;
-		} catch {
-			pollingError = "unknown";
-		}
-	}
+	if (errorCode === 409) pollingError = "twoBotInstances";
+	else if (errorCode === 401) pollingError = "unAuthorized";
+	else if ((error as { code?: string }).code === "EFATAL") pollingError = "fatalError";
 
 	if (plugin.lastPollingErrors.length == 0 || !plugin.lastPollingErrors.includes(pollingError)) {
 		plugin.lastPollingErrors.push(pollingError);

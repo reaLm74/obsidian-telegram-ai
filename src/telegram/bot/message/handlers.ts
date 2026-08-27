@@ -31,6 +31,7 @@ import { ProgressBarType, _3MB, createProgressBar, deleteProgressBar, updateProg
 import { getDomainFromUrl, getFileObject, getUrls, isTextOnlyUrl } from "./getters";
 import { enqueue } from "src/utils/queues";
 import { _15sec, displayAndLog, displayAndLogError } from "src/utils/logUtils";
+import { debugLog } from "src/utils/debugLog";
 import { getMessageDistributionRule } from "./filterEvaluations";
 import { MessageDistributionRule, getMessageDistributionRuleInfo } from "src/settings/messageDistribution";
 import { getOffsetDate, unixTime2Date } from "src/utils/dateUtils";
@@ -38,7 +39,9 @@ import { addOriginalUserMsg, canUpdateProcessingDate } from "src/telegram/user/s
 import { getMessageContentType } from "src/ai/openai";
 import { processWithAI } from "src/ai/processor";
 // Removed unused imports
-export { clearHandleMediaGroupInterval } from "./mediaGroupHandler";
+export { clearHandleMediaGroupInterval, flushMediaGroups } from "./mediaGroupHandler";
+import { accessDeniedMessage, isSenderAllowed } from "./accessControl";
+import { recordProcessingDone, recordProcessingError, recordProcessingStart } from "src/processing/ProcessingTracker";
 import {
 	applyCategorization,
 	applyCategoryNotePathTemplate,
@@ -48,7 +51,13 @@ import {
 
 export { applyCategorization, applyCategoryNotePathTemplate, createNoteContent, tryExtractDocumentText };
 
-import { appendFileToNote, startMediaGroupInterval, mediaGroups } from "./mediaGroupHandler";
+import {
+	appendFileToNote,
+	beginMediaGroupDownload,
+	endMediaGroupDownload,
+	startMediaGroupInterval,
+	mediaGroups,
+} from "./mediaGroupHandler";
 
 /** Shape of a Telegram file object returned by the bot API */
 interface TelegramFileObject {
@@ -64,6 +73,16 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	if (!plugin.isBotConnected()) {
 		plugin.setBotStatus("connected");
 		plugin.lastPollingErrors = [];
+	}
+
+	// Authorise BEFORE doing anything else. A Telegram bot can be messaged by anyone who
+	// knows its username, so every side effect below — writing settings via /topicName,
+	// sending release notes, caching the message — must sit behind this check.
+	if (!isSenderAllowed(plugin.settings, msg)) {
+		void plugin.bot?.sendMessage(msg.chat.id, accessDeniedMessage(msg), {
+			reply_to_message_id: msg.message_id,
+		});
+		return;
 	}
 
 	// if user disconnected and should be connected then reconnect it
@@ -93,7 +112,7 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	}
 
 	// Store topic name if "/topicName " command
-	if (msg.text?.includes("/topicName")) {
+	if (msg.text?.startsWith("/topicName")) {
 		await plugin.settingsTab?.storeTopicName(msg);
 		return;
 	}
@@ -126,20 +145,6 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 		);
 	}
 
-	// Check if message has been sended by allowed users or chats
-	const telegramUserName = msg.from?.username ?? "";
-	const allowedChats = plugin.settings.allowedChats;
-
-	if (!allowedChats.includes(telegramUserName) && !allowedChats.includes(msg.chat.id.toString())) {
-		const telegramUserNameFull = telegramUserName ? `your username "${telegramUserName}" or` : "";
-		void plugin.bot?.sendMessage(
-			msg.chat.id,
-			`Access denied. Add ${telegramUserNameFull} this chat id "${msg.chat.id}" in the plugin setting "Allowed Chats".`,
-			{ reply_to_message_id: msg.message_id },
-		);
-		return;
-	}
-
 	// save topic name and skip handling other data
 	if (msg.forum_topic_created || msg.forum_topic_edited) {
 		const topicName = {
@@ -161,31 +166,34 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 	}
 
 	++plugin.messagesLeftCnt;
+	// Feeds the status bar counter and the "Show processing history" command. Started here
+	// rather than at the top of handleMessage so that skipped messages — system messages,
+	// unauthorised senders, /start — never show up as processed work.
+	const trackingId = recordProcessingStart(msg.message_id, msg.chat.id, getMessageContentType(msg), msgText);
 	try {
 		// Check if message contains file
 		const { fileObject } = getFileObject(msg);
 		const hasFile = fileObject !== undefined;
 
-		displayAndLog(
-			plugin,
-			`🔍 MESSAGE TYPE: hasFile=${hasFile}, hasText=${!!msg.text}, hasCaption=${!!msg.caption}`,
-			0,
-		);
+		debugLog("Message", `type: hasFile=${hasFile}, hasText=${!!msg.text}, hasCaption=${!!msg.caption}`);
 
 		if (hasFile && distributionRule.filePathTemplate) {
-			await handleFiles(plugin, msg, distributionRule);
+			// Register this album member as in flight for the whole download+append span,
+			// so handleMediaGroup never finalizes the group while its own file is coming.
+			if (msg.media_group_id) beginMediaGroupDownload(msg.media_group_id);
+			try {
+				await handleFiles(plugin, msg, distributionRule);
+			} finally {
+				if (msg.media_group_id) endMediaGroupDownload(msg.media_group_id);
+			}
 		} else {
 			await handleMessageText(plugin, msg, distributionRule);
 		}
+		recordProcessingDone(trackingId);
 	} catch (error: unknown) {
-		await displayAndLogError(
-			plugin,
-			error instanceof Error ? error : new Error(String(error)),
-			"",
-			"",
-			msg,
-			_15sec,
-		);
+		const failure = error instanceof Error ? error : new Error(String(error));
+		recordProcessingError(trackingId, failure.message);
+		await displayAndLogError(plugin, failure, "", "", msg, _15sec);
 	} finally {
 		--plugin.messagesLeftCnt;
 		if (plugin.messagesLeftCnt == 0 && canUpdateProcessingDate) {
@@ -218,7 +226,7 @@ export async function handleMessageText(
 				const linkContent = `- [${domain}](${url})`;
 				const linkDelimiter = noteFile ? delimiter : "";
 
-				void createFolderIfNotExist(plugin.app.vault, path.dirname(notePath));
+				await createFolderIfNotExist(plugin.app.vault, path.dirname(notePath));
 
 				await enqueue(appendContentToNote, plugin.app.vault, notePath, linkContent, "", linkDelimiter, false);
 				displayAndLog(plugin, `Link saved to ${notePath}`, 0);
@@ -245,7 +253,7 @@ export async function handleMessageText(
 		displayAndLog(plugin, `Downloading content from ${urls.length} URLs for AI processing...`, 0);
 		for (const url of urls) {
 			try {
-				const mdContent = await fetchWebpageAsMarkdown(url);
+				const mdContent = await fetchWebpageAsMarkdown(url, undefined, plugin.settings.aiTimeout);
 				// Truncate to avoid exploding context windows
 				const limit = 40000;
 				const sliced = mdContent.length > limit ? mdContent.substring(0, limit) + "...(truncated)" : mdContent;
@@ -313,7 +321,7 @@ export async function handleMessageText(
 	formattedContent = categorization.finalContent;
 
 	let noteFolderPath = path.dirname(notePath);
-	if (noteFolderPath != ".") void createFolderIfNotExist(plugin.app.vault, noteFolderPath);
+	if (noteFolderPath != ".") await createFolderIfNotExist(plugin.app.vault, noteFolderPath);
 	else noteFolderPath = "";
 
 	await enqueue(
@@ -341,32 +349,30 @@ export async function handleFiles(
 
 	// Logging for media group diagnostics
 	if (msg.photo && msg.photo.length > 1) {
-		displayAndLog(plugin, `Processing photo with ${msg.photo.length} sizes, using highest quality`, 0);
+		debugLog("Files", `photo has ${msg.photo.length} sizes, using highest quality`);
 	}
 	if (msg.media_group_id) {
 		const existingGroup = mediaGroups.find((mg) => mg.id === msg.media_group_id);
 		const groupStatus = existingGroup ? `existing (${existingGroup.mediaMessages.length} files)` : "new";
-		displayAndLog(
-			plugin,
-			`🖼️ MEDIA GROUP: Processing file with media_group_id: ${msg.media_group_id} (${groupStatus})`,
-			0,
+		debugLog(
+			"MediaGroup",
+			`file in group ${msg.media_group_id} (${groupStatus}), groups in memory: ${mediaGroups.length}`,
 		);
-		displayAndLog(plugin, `📊 MEDIA GROUP: Current groups in memory: ${mediaGroups.length}`, 0);
-
-		if (msg.caption) {
-			displayAndLog(plugin, `📝 MEDIA GROUP: Message has caption: "${msg.caption.substring(0, 50)}..."`, 0);
-		}
 	} else {
-		displayAndLog(plugin, `📄 SINGLE FILE: Processing without media_group_id`, 0);
+		debugLog("Files", "single file, no media_group_id");
 	}
 
 	try {
 		// Iterate through each file type
 		const { fileType, fileObject } = getFileObject(msg);
 
-		const fileObjectToUse: TelegramFileObject = (
-			Array.isArray(fileObject) ? (fileObject as TelegramFileObject[]).pop() : (fileObject as TelegramFileObject)
-		) as TelegramFileObject;
+		// Read the largest size without mutating: getFileObject returns msg.photo by
+		// reference, and a pop() here would strip the size the Vision path later reads
+		// via msg.photo[msg.photo.length - 1] — degrading it to a thumbnail, or to an
+		// empty array when Telegram delivered a single size.
+		const fileObjectToUse: TelegramFileObject = Array.isArray(fileObject)
+			? (fileObject as TelegramFileObject[])[fileObject.length - 1]
+			: (fileObject as TelegramFileObject);
 		const fileId = fileObjectToUse.file_id;
 		telegramFileName = ("file_name" in fileObjectToUse && fileObjectToUse.file_name) || "";
 		let fileByteArray: Uint8Array;
@@ -410,12 +416,10 @@ export async function handleFiles(
 				await deleteProgressBar(plugin.bot, msg, progressBarMessage);
 			}
 
-			fileByteArray = new Uint8Array(
-				fileChunks.reduce<number[]>((acc, val) => {
-					acc.push(...val);
-					return acc;
-				}, []),
-			);
+			// Buffer.concat, not push(...chunk) into a number[]: spreading a 64 KB stream
+			// chunk overflows V8's argument limit (RangeError), and a number[] boxes every
+			// byte of the file — a 20 MB download became 20 million heap objects.
+			fileByteArray = new Uint8Array(Buffer.concat(fileChunks));
 		} catch (e: unknown) {
 			error = e instanceof Error ? e : new Error(String(e));
 			const media = await Client.downloadMedia(
@@ -464,28 +468,27 @@ export async function handleFiles(
 		else error = e instanceof Error ? e : new Error(String(e));
 	}
 
-	displayAndLog(
-		plugin,
-		`📋 FILE PROCESSING: caption=${!!msg.caption}, templateFilePath=${!!distributionRule.templateFilePath}, mediaGroupId=${!!msg.media_group_id}`,
-		0,
+	debugLog(
+		"Files",
+		`caption=${!!msg.caption}, templateFilePath=${!!distributionRule.templateFilePath}, mediaGroupId=${!!msg.media_group_id}`,
 	);
 
 	// Always process files if they were successfully downloaded
 	// This ensures forwarded files without captions are not skipped
 	if (filePath) {
-		displayAndLog(plugin, `📝 CALLING appendFileToNote for file: ${filePath}`, 0);
+		debugLog("Files", `appending to note: ${filePath}`);
 		await appendFileToNote(plugin, msg, distributionRule, filePath, error);
 	} else if (msg.media_group_id || msg.caption || distributionRule.templateFilePath) {
 		// Handle edge cases where file download failed but we still need to process
-		displayAndLog(plugin, `📝 CALLING appendFileToNote (no filePath but has other content)`, 0);
+		debugLog("Files", "appending to note without a file path (download failed, other content present)");
 		await appendFileToNote(plugin, msg, distributionRule, filePath, error);
 	} else {
-		displayAndLog(plugin, `⚠️ SKIPPING appendFileToNote - no file and no content`, 0);
+		debugLog("Files", "skipped: no file and no content");
 	}
 
 	if (msg.media_group_id) {
 		// Start interval for media group processing if not already started
-		startMediaGroupInterval(plugin, distributionRule);
+		startMediaGroupInterval(plugin);
 	} else {
 		// For single files process immediately
 		await finalizeMessageProcessing(plugin, msg, error);
@@ -496,19 +499,20 @@ export async function handleFiles(
 export async function ifNewReleaseThenShowChanges(plugin: TelegramSyncPlugin, msg: TelegramBot.Message) {
 	if (plugin.settings.pluginVersion == release.releaseVersion) return;
 
+	// Capture the version the user was on BEFORE marking this release as seen: an empty
+	// value means a fresh install, which should not be greeted with "what's new".
+	const previousVersion = plugin.settings.pluginVersion;
 	plugin.settings.pluginVersion = release.releaseVersion;
 	await plugin.saveSettings();
 
-	if (plugin.userConnected && (await Client.subscribedOnInsiderChannel())) return;
-
-	if (plugin.settings.pluginVersion && release.showNewFeatures) {
+	if (previousVersion && release.showNewFeatures) {
 		const options: SendMessageOptions = {
 			parse_mode: "HTML",
 		};
 		await plugin.bot?.sendMessage(msg.chat.id, release.notes, options);
 	}
 
-	if (plugin.settings.pluginVersion && release.showBreakingChanges && !plugin.userConnected) {
+	if (previousVersion && release.showBreakingChanges && !plugin.userConnected) {
 		await plugin.bot?.sendMessage(msg.chat.id, release.breakingChanges, { parse_mode: "HTML" });
 	}
 }

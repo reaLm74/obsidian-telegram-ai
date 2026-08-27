@@ -29,12 +29,26 @@ export async function createFolderIfNotExist(vault: Vault, folderPath: string) {
 	}
 
 	await vault.createFolder(normalizedPath).catch((error: unknown) => {
-		if (error instanceof Error && error.message !== "Folder already exists.") {
-			throw error;
-		} else if (typeof error === "string" && error !== "Folder already exists.") {
-			throw new Error(error);
+		// Anything that means "it is already there" is success: the folder exists, which is
+		// all this function promises. Matching only the exact phrase "Folder already exists."
+		// meant that the same collision reported as "File already exists." — which is what
+		// Obsidian says when the entry appeared between the check above and this call —
+		// aborted the message instead.
+		if (!isAlreadyExistsError(error)) {
+			throw error instanceof Error ? error : new Error(String(error));
 		}
 	});
+}
+
+/**
+ * Whether a vault error means the thing we were creating is already there.
+ *
+ * Obsidian words this differently depending on which call lost the race and on the version,
+ * so the phrase is matched loosely rather than compared to one exact string.
+ */
+function isAlreadyExistsError(error: unknown): boolean {
+	const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+	return /already exists/i.test(message);
 }
 
 export function sanitizeFileName(fileName: string): string {
@@ -42,9 +56,28 @@ export function sanitizeFileName(fileName: string): string {
 	return fileName.replace(invalidCharacters, "_");
 }
 
+/**
+ * Makes a vault-relative path out of a template result.
+ *
+ * Unlike sanitizeFileName this keeps "/", because the value IS a path — which is exactly
+ * why ".." has to go. Path segments here come from attacker-supplied places (a Telegram
+ * display name, a chat title, the text a language model wrote for {{ai:title}}), and
+ * truncatePathComponents() below runs them through path.join(), which collapses ".."
+ * into a real parent-directory step: "telegram/../../notes.md" becomes "../notes.md"
+ * and lands outside the vault. Dropping the segments is safe — no legitimate note path
+ * needs them — and it closes the hole for every caller at once, rather than relying on
+ * each variable substitution to remember to sanitize itself.
+ *
+ * Empty segments go too, which folds "a//b" and a leading "/" the way normalizePath does.
+ */
 export function sanitizeFilePath(filePath: string): string {
 	const invalidCharacters = /[\\:*?"<>|\n\r]/g;
-	return normalizePath(truncatePathComponents(filePath.replace(invalidCharacters, "_")));
+	const withoutTraversal = filePath
+		.replace(invalidCharacters, "_")
+		.split("/")
+		.filter((segment) => segment !== ".." && segment !== "." && segment !== "")
+		.join("/");
+	return normalizePath(truncatePathComponents(withoutTraversal));
 }
 
 export async function getUniqueFilePath(
@@ -59,7 +92,14 @@ export async function getUniqueFilePath(
 	else fileFolderPath = "";
 
 	let filePath = initialFilePath;
-	if (!(vault.getAbstractFileByPath(filePath) instanceof TFile)) return filePath;
+	// The fast path must consult and update createdFilePaths too: callers create the file
+	// outside this (queued) function, so a second concurrent caller can look up the vault
+	// before the first caller's create lands. Only this list makes the path unique then.
+	if (!createdFilePaths.includes(filePath) && !(vault.getAbstractFileByPath(filePath) instanceof TFile)) {
+		createdFilePaths.push(filePath);
+		if (createdFilePaths.length > 500) createdFilePaths.shift();
+		return filePath;
+	}
 
 	const initialFileName = path.basename(filePath, "." + fileExtension);
 	const dateString = date2DateString(date);
@@ -96,8 +136,42 @@ export async function appendContentToNote(
 	const abstractFile = vault.getAbstractFileByPath(notePath);
 	const noteFile = abstractFile instanceof TFile ? abstractFile : null;
 
-	let currentContent = "";
-	if (noteFile) currentContent = await vault.read(noteFile);
+	if (!noteFile) {
+		try {
+			await vault.create(notePath, insertContent("", newContent, startLine, delimiter, reversedOrder));
+			return;
+		} catch (error: unknown) {
+			// Several messages can resolve to one note — a burst of links from the same
+			// domain all land in "Links/<domain>.md" — and each of them looked the file up,
+			// found nothing and tried to create it. Whoever lost that race failed the whole
+			// message with "File already exists" and its link was dropped. The file exists
+			// now, so append to it, which is what this call was for in the first place.
+			if (!isAlreadyExistsError(error)) throw error;
+
+			const created = vault.getAbstractFileByPath(notePath);
+			if (!(created instanceof TFile)) throw error;
+			await vault.process(created, (currentContent) =>
+				insertContent(currentContent, newContent, startLine, delimiter, reversedOrder),
+			);
+			return;
+		}
+	}
+	// Vault.process reads and writes under a lock. Doing it as read-then-modify would
+	// silently drop an edit made in between — likely here, since notes are appended to
+	// while the user has them open.
+	await vault.process(noteFile, (currentContent) =>
+		insertContent(currentContent, newContent, startLine, delimiter, reversedOrder),
+	);
+}
+
+/** Splices newContent into currentContent at the heading anchor, or at either end. */
+function insertContent(
+	currentContent: string,
+	newContent: string,
+	startLine: string,
+	delimiter: string,
+	reversedOrder: boolean,
+): string {
 	let index = reversedOrder ? 0 : currentContent.length;
 	if (currentContent.length == 0 && !startLine) delimiter = "";
 	newContent = reversedOrder ? newContent + delimiter : delimiter + newContent;
@@ -108,9 +182,7 @@ export async function appendContentToNote(
 		else newContent = reversedOrder ? newContent + startLine : startLine + newContent;
 	}
 
-	const content = currentContent.slice(0, index) + newContent + currentContent.slice(index);
-	if (!noteFile) await vault.create(notePath, content);
-	else if (currentContent != content) await vault.modify(noteFile, content);
+	return currentContent.slice(0, index) + newContent + currentContent.slice(index);
 }
 
 export function base64ToString(base64: string): string {
@@ -136,17 +208,4 @@ function truncatePathComponents(filePath: string, maxLength = 200): string {
 	const truncatedPath = path.join(...truncatedComponents, truncatedFileName + parsedPath.ext);
 
 	return truncatedPath;
-}
-
-export async function replaceMainJs(vault: Vault, mainJs: Buffer | "main-prod.js") {
-	const mainJsPath = normalizePath(vault.configDir + "/plugins/telegram-sync/main.js");
-	const mainProdJsPath = normalizePath(vault.configDir + "/plugins/telegram-sync/main-prod.js");
-	if (mainJs instanceof Buffer) {
-		await vault.adapter.writeBinary(mainProdJsPath, await vault.adapter.readBinary(mainJsPath));
-		const arrayBuf = new Uint8Array(mainJs.subarray(0)).buffer;
-		await vault.adapter.writeBinary(mainJsPath, arrayBuf);
-	} else {
-		if (!(await vault.adapter.exists(mainProdJsPath))) return;
-		await vault.adapter.writeBinary(mainJsPath, await vault.adapter.readBinary(mainProdJsPath));
-	}
 }

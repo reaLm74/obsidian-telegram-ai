@@ -53,7 +53,7 @@ export default class ConnectionStatusIndicator {
 	private setConnected() {
 		if (!this.icon) return;
 		this.label?.setText("");
-		this.label?.removeClass("status-indicator-error");
+		this.label?.removeClass("tgai-status-indicator-error");
 		this.icon.removeAttribute("data-tooltip-position");
 		this.icon.removeAttribute("aria-label");
 	}
@@ -64,7 +64,7 @@ export default class ConnectionStatusIndicator {
 			"data-tooltip-position": "top",
 			"aria-label": `${error || ""}\n${checkConnectionMessage}`.trimStart(),
 		});
-		this.label?.addClass("status-indicator-error");
+		this.label?.addClass("tgai-status-indicator-error");
 		this.label?.setText("X");
 	}
 }

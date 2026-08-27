@@ -1,6 +1,6 @@
 import { Api, TelegramClient } from "telegram";
 import { StoreSession } from "telegram/sessions";
-import { releaseVersion, versionALessThanVersionB } from "release-notes.mjs";
+import { releaseVersion } from "release-notes.mjs";
 import TelegramBot from "node-telegram-bot-api";
 import QRCode from "qrcode";
 import os from "os";
@@ -11,7 +11,8 @@ import { formatDateTime } from "src/utils/dateUtils";
 import { LogLevel, Logger } from "telegram/extensions/Logger";
 import { _1min, _5sec, sleep } from "src/utils/logUtils";
 import * as config from "./config";
-import bigInt from "big-integer";
+import { ApiCredentials } from "./apiCredentials";
+export { parseApiCredentials } from "./apiCredentials";
 import { PromisedWebSockets } from "telegram/extensions";
 
 export type SessionType = "bot" | "user";
@@ -32,7 +33,26 @@ export function getNewSessionId(): number {
 	return Number(formatDateTime(new Date(), "YYYYMMDDHHmmssSSS"));
 }
 
-export const insiderChannel = new Api.PeerChannel({ channelId: bigInt("1913400014") });
+/** Credentials the user entered, if any. Set by setApiCredentials() before init(). */
+let _apiCredentials: ApiCredentials | undefined;
+
+export const NoApiCredentials = new Error(
+	'Telegram API credentials are not set. Open "Process old messages" settings in the plugin ' +
+		`settings and add your own api_id and api_hash from ${config.apiCredentialsUrl}.`,
+);
+
+export function setApiCredentials(credentials: ApiCredentials | undefined) {
+	_apiCredentials = credentials;
+}
+
+export function hasApiCredentials(): boolean {
+	return _apiCredentials !== undefined;
+}
+
+function getApiCredentials(): ApiCredentials {
+	if (!_apiCredentials) throw NoApiCredentials;
+	return _apiCredentials;
+}
 
 // Stop the bot polling
 export async function stop() {
@@ -60,10 +80,11 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 			// TODO in 2024: add user connection status checking and setting by controlling error and info logs
 			//if (message == "Automatic reconnection failed 2 time(s)")
 		};
+		const { apiId, apiHash } = getApiCredentials();
 		const session = new StoreSession(`${sessionType}_${sessionId}_${deviceId}`);
 		_sessionId = sessionId;
 		_sessionType = sessionType;
-		client = new TelegramClient(session, config.dIipa, config.hsaHipa, {
+		client = new TelegramClient(session, apiId, apiHash, {
 			connectionRetries: 10,
 			deviceModel: os.hostname() || os.type(),
 			appVersion: releaseVersion,
@@ -115,15 +136,9 @@ export async function signInAsBot(botToken: string) {
 		if (_botToken == botToken) return;
 	}
 	try {
-		const botUser = await client.signInBot(
-			{
-				apiId: config.dIipa,
-				apiHash: config.hsaHipa,
-			},
-			{
-				botAuthToken: botToken,
-			},
-		);
+		const botUser = await client.signInBot(getApiCredentials(), {
+			botAuthToken: botToken,
+		});
 		_botToken = botToken;
 		clientUser = botUser as Api.User;
 	} catch (e: unknown) {
@@ -138,32 +153,29 @@ export async function signInAsUserWithQrCode(container: HTMLDivElement, password
 	if ((await client.checkAuthorization()) && (await client.isBot()))
 		throw new Error("User session is missed. Try to restart the plugin or Obsidian");
 	try {
-		const user = await client.signInUserWithQrCode(
-			{ apiId: config.dIipa, apiHash: config.hsaHipa },
-			{
-				qrCode: async (qrCode) => {
-					const url = "tg://login?token=" + qrCode.token.toString("base64");
-					const qrCodeSvg = await QRCode.toString(url, { type: "svg" });
-					const parser = new DOMParser();
-					const svg = parser.parseFromString(qrCodeSvg, "image/svg+xml").documentElement;
-					svg.setAttribute("width", "150");
-					svg.setAttribute("height", "150");
-					// Removes all children from `container`
-					while (container.firstChild) {
-						container.removeChild(container.firstChild);
-					}
-					container.appendChild(svg);
-				},
-				password: (_hint) => {
-					return Promise.resolve(password ? password : "");
-				},
-				onError: (error) => {
-					container.setText(`Error: ${error.message}`);
-					console.error(`Telegram Sync => ${error}`);
-					return Promise.resolve(true);
-				},
+		const user = await client.signInUserWithQrCode(getApiCredentials(), {
+			qrCode: async (qrCode) => {
+				const url = "tg://login?token=" + qrCode.token.toString("base64");
+				const qrCodeSvg = await QRCode.toString(url, { type: "svg" });
+				const parser = new DOMParser();
+				const svg = parser.parseFromString(qrCodeSvg, "image/svg+xml").documentElement;
+				svg.setAttribute("width", "150");
+				svg.setAttribute("height", "150");
+				// Removes all children from `container`
+				while (container.firstChild) {
+					container.removeChild(container.firstChild);
+				}
+				container.appendChild(svg);
 			},
-		);
+			password: (_hint) => {
+				return Promise.resolve(password ? password : "");
+			},
+			onError: (error) => {
+				container.setText(`Error: ${error.message}`);
+				console.error(`Telegram Sync => ${error}`);
+				return Promise.resolve(true);
+			},
+		});
 		clientUser = user as Api.User;
 	} catch (e: unknown) {
 		clientUser = undefined;
@@ -278,11 +290,11 @@ export async function transcribeAudio(
 				}),
 			);
 			stage = await updateProgressBar(bot, botMsg, progressBarMessage, 14, i, stage);
-			if (transcribedAudio.pending)
-				await sleep(_5sec); // 5 sec delay between updates
-			else if (i == limit * 14)
-				throw new Error("Very long audio. Transcribing can't be longer then 15 min lasting.");
-			else break;
+			// A finished transcription is complete no matter which iteration delivered it;
+			// only running out of attempts while still pending is the "too long" failure.
+			if (!transcribedAudio.pending) break;
+			if (i == limit * 14) throw new Error("Very long audio. Transcribing can't be longer then 15 min lasting.");
+			await sleep(_5sec); // 5 sec delay between updates
 		}
 	} finally {
 		await deleteProgressBar(bot, botMsg, progressBarMessage);
@@ -291,36 +303,4 @@ export async function transcribeAudio(
 	if (!_voiceTranscripts.has(`${botMsg.chat.id}_${botMsg.message_id}`))
 		_voiceTranscripts.set(`${botMsg.chat.id}_${botMsg.message_id}`, transcribedAudio.text);
 	return transcribedAudio.text;
-}
-
-export async function subscribedOnInsiderChannel(): Promise<boolean> {
-	if (!client || !client.connected || _sessionType == "bot") return false;
-	try {
-		const { checkedClient } = await checkUserService();
-		const messages = await checkedClient.getMessages(insiderChannel, { limit: 1 });
-		return messages.length > 0;
-	} catch {
-		return false;
-	}
-}
-
-export async function getLastBetaRelease(currentVersion: string): Promise<{ betaVersion: string; mainJs: Buffer }> {
-	const { checkedClient } = await checkUserService();
-	const messages = await checkedClient.getMessages(insiderChannel, {
-		limit: 10,
-		filter: new Api.InputMessagesFilterDocument(),
-		search: "-beta.",
-	});
-	if (messages.length == 0) throw new Error("No beta versions in Insider channel!");
-	const message = messages[0];
-	const match = message.message.match(/Obsidian Telegram Sync (\S+)/);
-	const betaVersion = match ? match[1] : "";
-	if (!betaVersion) throw new Error("Can't find the version label in the message: " + message.message);
-	if (versionALessThanVersionB(betaVersion, currentVersion))
-		throw new Error(
-			`The last beta version ${betaVersion} can't be installed because it less than current version ${currentVersion}!`,
-		);
-	const mainJs = (await messages[0].downloadMedia()) as Buffer;
-	if (!mainJs) throw new Error("Can't find main.js in the last 10 messages of Insider channel");
-	return { betaVersion: betaVersion, mainJs };
 }

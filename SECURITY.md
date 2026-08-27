@@ -6,26 +6,50 @@ We actively maintain and provide security updates for the following versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.2.x   | :white_check_mark: |
 
 ## Security Features
 
 ### Data Protection
-- **Local Processing**: Supported document formats (TXT, JSON, CSV, XML, HTML, Markdown, YAML, code files) are processed locally without sending to external AI services
-- **API Key Encryption**: All API keys are encrypted before storage using AES-256 encryption
+- **Local Processing**: Supported document formats (TXT, JSON, CSV, XML, HTML, Markdown, YAML, code files, PDF, DOCX) are extracted locally, without being sent to an external AI service
 - **No Data Collection**: The plugin does not collect, store, or transmit any user data for analytics or tracking purposes
-- **Vault Privacy**: All processed content remains within your local Obsidian vault
+- **Vault Privacy**: Processed content is written to your local vault. It leaves your machine only through the services listed under *Third-party services* below
+
+### Credential storage — read this before enabling AI
+
+Plugin settings, including credentials, live in `.obsidian/plugins/telegram-ai/data.json` inside your vault.
+
+- **Telegram bot token** and **AI provider API keys** (OpenAI) are stored encrypted with AES-256-GCM, with a random salt and IV per value. Both ride the same setting, so protecting one protects the other. Two cases:
+  - **With a pin code** (*Bot settings → Encryption by pin code*): the key is derived from your pin via scrypt. Someone with a copy of `data.json` cannot read the token or the API key without the pin. **The pin is not recoverable — if you forget it, you must re-enter both secrets.**
+  - **Without a pin code**: the key is a constant compiled into the plugin. This is obfuscation, not protection — it keeps the values from being readable at a glance, and nothing more. Anyone with the file can recover them.
+  - An API key written by an earlier version is upgraded from plain text to the encrypted form the next time the plugin loads.
+- **Telegram app credentials** (`api_id` / `api_hash`, needed only for account login) are stored in plain text. They identify the application rather than the account: on their own they do not grant access to your Telegram account or messages, and Telegram requires a separate login for that. They are yours — the plugin ships no credentials of its own, so a leak or ban affects only your install.
+- Nothing here protects against malware already running under your user account.
+
+If your vault is synced or backed up somewhere you do not fully control and you have **not** set a pin code, treat the API keys as exposed: use restricted keys and rotate them.
 
 ### Network Security
-- **HTTPS Only**: All external API communications use HTTPS encryption
-- **Token Validation**: Telegram bot tokens are validated before use
+- **HTTPS Only**: All external API communications use HTTPS
 - **Rate Limiting**: Built-in rate limiting prevents API abuse
 - **Timeout Protection**: Network requests have configurable timeouts to prevent hanging connections
 
 ### Access Control
-- **Whitelist System**: Only authorized Telegram users can send messages to the bot
-- **Bot Token Security**: Telegram bot tokens are securely stored and never logged
-- **API Key Management**: AI provider API keys are encrypted at rest
+- **Whitelist System**: Only chats and usernames listed in *Allowed Chats* are processed. A Telegram bot can be messaged by anyone who knows its username, so this whitelist is the plugin's access control — the bot token alone does not restrict who reaches the bot.
+- **Deny by default**: The whitelist starts empty and blank entries are ignored, so an unconfigured plugin accepts nothing. Message the bot once and it replies with the chat id to add.
+- **Bot Token Security**: The bot token is never written to logs or note content
+- **Debug logging**: Verbose tracing is off by default and must be enabled explicitly in *Advanced settings → Debug logging*. It writes message content to the developer console, so leave it off unless you are diagnosing a problem.
+
+## Third-party services
+
+Content is sent off your machine only in these cases:
+
+| Service | When | What is sent |
+| ------- | ---- | ------------ |
+| Telegram (`api.telegram.org`) | Always | Bot polling; message and file downloads |
+| OpenAI (`api.openai.com`) | Only when AI processing is enabled | Message text, transcripts, and — with Vision on — images, plus your prompts |
+| Jina Reader (`r.jina.ai`) | Only when *Process links* is enabled | The URLs contained in your messages, so the page can be fetched and summarised |
+
+Disabling AI processing keeps everything except Telegram traffic local.
 
 ## Reporting a Vulnerability
 

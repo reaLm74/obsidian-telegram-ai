@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { checkIfTooManyRequests, isTooManyRequests } from "./tooManyRequests";
+import { debugLog } from "src/utils/debugLog";
 
 export enum ProgressBarType {
 	DOWNLOADING = "downloading",
@@ -42,7 +43,7 @@ export async function updateProgressBar(
 			{ chat_id: msg.chat.id, message_id: progressBarMessage.message_id },
 		);
 	} catch (e: unknown) {
-		if (!checkIfTooManyRequests(e)) console.debug(`Telegram Sync => ${String(e)}`);
+		if (!checkIfTooManyRequests(e)) debugLog("ProgressBar", `Telegram Sync => ${String(e)}`);
 	}
 	return stage;
 }

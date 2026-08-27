@@ -27,6 +27,12 @@ import { defaultFileNameTemplate, defaultNoteNameTemplate } from "src/settings/m
 import { Api } from "telegram";
 import { setReaction } from "../bot";
 import { emoticonProcessedEdited } from "src/telegram/user/config";
+import { debugLog } from "src/utils/debugLog";
+// These lived here as private copies while templateUtils.ts held identical, unit-tested
+// ones — so the tested implementation was not the one that ran. Importing them makes the
+// existing templateUtils tests cover the code path that actually processes templates.
+import { getFallbackValue, processText } from "./templateUtils";
+import { resolveMessageMetadata } from "src/ai/messageMetadata";
 
 // Delete a message or send a confirmation reply based on settings and message age
 export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg: TelegramBot.Message, error?: Error) {
@@ -53,7 +59,10 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 	if (plugin.settings.processedMessageAction === "DELETE" && originalMsg) {
 		await originalMsg.delete();
 	} else if (plugin.settings.processedMessageAction === "DELETE" && hoursDifference <= 24) {
+		// mediaMessages includes msg itself (the group's initial message) — deleting it
+		// again would make Telegram reject the second call and abort finalization.
 		for (const mediaMsg of mediaMessages) {
+			if (mediaMsg.chat.id == msg.chat.id && mediaMsg.message_id == msg.message_id) continue;
 			await plugin.bot.deleteMessage(mediaMsg.chat.id, mediaMsg.message_id);
 		}
 		await plugin.bot.deleteMessage(msg.chat.id, msg.message_id);
@@ -152,7 +161,9 @@ export async function applyNoteContentTemplate(
 			const url1 = getUrl(msg);
 			if (url1) {
 				if (!height || Number.isInteger(parseFloat(height))) {
-					linkPreview = `<iframe width="100%" height="${height || 250}" src="${url1}"></iframe>`;
+					// The url comes from a Telegram message; a quote in it would break out of
+					// the src attribute and inject arbitrary markup into the rendered note.
+					linkPreview = `<iframe width="100%" height="${height || 250}" src="${escapeHtmlAttribute(url1)}"></iframe>`;
 				} else {
 					displayAndLog(plugin, `Template variable {{url1:preview${height}}} isn't supported!`, _15sec);
 				}
@@ -297,7 +308,7 @@ export async function processBasicVariables(
 
 	// Process AI parameters if they exist in template
 	if (processedContent.includes("{{ai:")) {
-		console.debug("Processing AI variables in template:", processedContent);
+		debugLog("Template", "Processing AI variables in template:", processedContent);
 		processedContent = await processAIVariables(
 			plugin,
 			msg,
@@ -305,7 +316,7 @@ export async function processBasicVariables(
 			messageContent || messageText || "",
 			skipAIVariables,
 		);
-		console.debug("AI variables processed result:", processedContent);
+		debugLog("Template", "AI variables processed result:", processedContent);
 	}
 
 	return processedContent;
@@ -313,6 +324,11 @@ export async function processBasicVariables(
 
 function prepareIfPath(isPath: boolean, value: string): string {
 	return isPath ? sanitizeFileName(value) : value;
+}
+
+/** Escapes a value for safe interpolation into a double-quoted HTML attribute. */
+function escapeHtmlAttribute(value: string): string {
+	return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /**
@@ -325,7 +341,7 @@ async function processAIVariables(
 	content: string,
 	skipAIVariables = false,
 ): Promise<string> {
-	console.debug("processAIVariables called with:", {
+	debugLog("Template", "processAIVariables called with:", {
 		template,
 		content,
 		aiEnabled: plugin.settings.aiEnabled,
@@ -334,10 +350,10 @@ async function processAIVariables(
 
 	// If AI is not enabled or skip requested (e.g. URL-only messages), use fallbacks
 	if (!plugin.settings.aiEnabled || skipAIVariables) {
-		console.debug("AI disabled, using fallback values");
+		debugLog("Template", "AI disabled, using fallback values");
 		return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
 			const fallbackValue = getFallbackValue(paramName, content);
-			console.debug(`Replacing {{ai:${paramName}}} with fallback:`, fallbackValue);
+			debugLog("Template", `Replacing {{ai:${paramName}}} with fallback:`, fallbackValue);
 			return fallbackValue;
 		});
 	}
@@ -358,7 +374,7 @@ async function processAIVariables(
 	for (const paramName of undefinedParams) {
 		const fallbackValue = getFallbackValue(paramName, content);
 		processedTemplate = processedTemplate.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
-		console.debug(`Undefined parameter {{ai:${paramName}}} replaced with fallback:`, fallbackValue);
+		debugLog("Template", `Undefined parameter {{ai:${paramName}}} replaced with fallback:`, fallbackValue);
 	}
 
 	// If there are no defined parameters, return the result
@@ -366,215 +382,44 @@ async function processAIVariables(
 		return processedTemplate;
 	}
 
-	// Create prompt only for defined parameters
-	const aiPrompt = createAIParametersPrompt(plugin, definedParams, content);
-
 	try {
-		// Get AI response with custom prompt
-		const aiResponse = await processWithCustomPrompt(plugin, content, aiPrompt, msg);
-		console.debug("AI response:", aiResponse);
+		// One request per message, shared with the category classifier and with any other
+		// template that asks for {{ai:*}} later — the category folder template, typically.
+		const metadata = await resolveMessageMetadata(plugin, msg, content);
+		debugLog("Template", "AI metadata:", metadata);
 
-		if (!aiResponse) {
-			console.debug("No AI response, using fallback values");
+		if (!metadata.fromAI) {
+			debugLog("Template", "No AI response, using fallback values");
 			// If AI didn't respond, use default values
 			return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
 				const fallbackValue = getFallbackValue(paramName, content);
-				console.debug(`Fallback for ${paramName}:`, fallbackValue);
+				debugLog("Template", `Fallback for ${paramName}:`, fallbackValue);
 				return fallbackValue;
 			});
 		}
 
-		// Extract parameters from AI response
-		const extractedParams = extractAIParameters(aiResponse || "", definedParams);
-		console.debug("Extracted AI params:", extractedParams);
-
-		// Replace variables in processed template
+		// Replace variables in processed template. metadata.params covers every configured
+		// parameter, so only the ones this template actually uses are substituted here.
 		let result = processedTemplate;
-		for (const [paramName, value] of Object.entries(extractedParams)) {
+		for (const paramName of definedParams) {
+			const value = metadata.params[paramName];
+			if (value === undefined) continue;
 			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), value);
-			console.debug(`Replaced {{ai:${paramName}}} with:`, value);
+			debugLog("Template", `Replaced {{ai:${paramName}}} with:`, value);
 		}
 
 		return result;
 	} catch (error) {
-		console.error("Error processing AI variables:", error);
+		debugLog("Template", "Error processing AI variables:", error);
 		// On error, use default values for defined parameters
 		let result = processedTemplate;
 		for (const paramName of definedParams) {
 			const fallbackValue = getFallbackValue(paramName, content);
 			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
-			console.debug(`Error fallback for ${paramName}:`, fallbackValue);
+			debugLog("Template", `Error fallback for ${paramName}:`, fallbackValue);
 		}
 		return result;
 	}
-}
-
-/**
- * Creates prompt for generating AI parameters
- */
-function createAIParametersPrompt(plugin: TelegramSyncPlugin, paramNames: string[], content: string): string {
-	let prompt = "Analyze the following text and create parameters for note organization.\n\n";
-	prompt += `Text: ${content}\n\n`;
-	prompt += "Create the following parameters:\n";
-
-	for (const paramName of paramNames) {
-		const description = plugin.settings.aiCustomParameters[paramName];
-		if (description) {
-			prompt += `- ${paramName}: ${description}\n`;
-		}
-	}
-
-	prompt += "\nReturn result in format:\n";
-	for (const paramName of paramNames) {
-		prompt += `${paramName}: [value]\n`;
-	}
-
-	prompt += "\nUse English language. Be concise and accurate.";
-
-	return prompt;
-}
-
-/**
- * Processes content through AI with custom prompt
- */
-async function processWithCustomPrompt(
-	plugin: TelegramSyncPlugin,
-	content: string,
-	customPrompt: string,
-	msg?: TelegramBot.Message,
-): Promise<string | null> {
-	if (!plugin.settings.aiEnabled) {
-		return null;
-	}
-
-	const provider = plugin.settings.aiProvider || "openai";
-
-	try {
-		let result: string | null = null;
-
-		switch (provider) {
-			case "openai": {
-				const { processWithOpenAI } = await import("../../../ai/openai");
-				result = await processWithOpenAI(plugin, content, customPrompt, msg);
-				break;
-			}
-			/* Coming soon in future versions:
-			case "claude": {
-				const { processWithClaude } = await import("../../../ai/claude");
-				result = await processWithClaude(plugin, content, customPrompt, msg);
-				break;
-			}
-			case "gemini": {
-				const { processWithGemini } = await import("../../../ai/gemini");
-				result = await processWithGemini(plugin, content, customPrompt, msg);
-				break;
-			}
-			*/
-			default: {
-				const { processWithOpenAI } = await import("../../../ai/openai");
-				result = await processWithOpenAI(plugin, content, customPrompt, msg);
-				break;
-			}
-		}
-
-		return result;
-	} catch (error) {
-		console.error("Error processing with custom prompt:", error);
-		return null;
-	}
-}
-
-/**
- * Gets fallback value for AI parameter
- */
-function getFallbackValue(paramName: string, _content: string): string {
-	// For undefined parameters, use safe value
-	return `param_${paramName}`;
-}
-
-/**
- * Extracts parameters from AI response
- */
-function extractAIParameters(aiResponse: string, paramNames: string[]): Record<string, string> {
-	const params: Record<string, string> = {};
-
-	for (const paramName of paramNames) {
-		// Look for strings like "paramName: value"
-		const regex = new RegExp(`${paramName}:\\s*(.+)`, "i");
-		const match = aiResponse.match(regex);
-
-		if (match && match[1]) {
-			params[paramName] = match[1].trim().replace(/^\[|\]$/g, ""); // Remove brackets if present
-		} else {
-			// Default values if not found
-			switch (paramName) {
-				case "title":
-					params[paramName] = "Untitled";
-					break;
-				default:
-					// For custom parameters, use parameter name
-					params[paramName] = paramName;
-			}
-		}
-	}
-
-	return params;
-}
-
-// Copy tab and blockquotes to every new line of {{content*}} or {{voiceTranscript*}} if they are placed in front of this variables.
-// Legacy compatibility for template processing
-function addLeadingForEveryLine(text: string, leadingChars?: string): string {
-	if (!leadingChars) return text;
-	return text
-		.split("\n")
-		.map((line) => leadingChars + line)
-		.join("\n");
-}
-
-function processText(text: string, leadingChars?: string, property?: string): string {
-	let finalText = "";
-	const lowerCaseProperty = (property && property.toLowerCase()) || "text";
-
-	if (lowerCaseProperty == "text") finalText = text;
-	// if property is length
-	else if (Number.isInteger(parseFloat(lowerCaseProperty))) finalText = text.substring(0, Number(property));
-
-	if (finalText) return addLeadingForEveryLine(finalText, leadingChars);
-
-	// if property is range
-	const rangePattern = /^\[\d+-\d+\]$/;
-	const singleLinePattern = /^\[\d+\]$/;
-	const lastLinePattern = /^\[-\d+\]$/;
-	const fromLineToEndPattern = /^\[\d+-\]$/;
-
-	let lines = text.split("\n");
-	let startLine = 0;
-	let endLine = lines.length;
-
-	if (rangePattern.test(lowerCaseProperty)) {
-		const range = lowerCaseProperty
-			.substring(1, lowerCaseProperty.length - 1)
-			.split("-")
-			.map(Number);
-		startLine = Math.max(0, range[0] - 1);
-		endLine = Math.min(lines.length, range[1]);
-	} else if (singleLinePattern.test(lowerCaseProperty)) {
-		startLine = Number(lowerCaseProperty.substring(1, lowerCaseProperty.length - 1)) - 1;
-		endLine = startLine + 1;
-	} else if (lastLinePattern.test(lowerCaseProperty)) {
-		startLine = Math.max(
-			0,
-			lines.length - Number(lowerCaseProperty.substring(2, lowerCaseProperty.length - 1)) - 1,
-		);
-		endLine = startLine + 1;
-	} else if (fromLineToEndPattern.test(lowerCaseProperty)) {
-		startLine = Number(lowerCaseProperty.substring(1, lowerCaseProperty.length - 2)) - 1;
-		endLine = lines.length;
-	} else lines = [];
-
-	finalText = lines.slice(startLine, endLine).join("\n");
-
-	return addLeadingForEveryLine(finalText, leadingChars);
 }
 
 function pasteText(

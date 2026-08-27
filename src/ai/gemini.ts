@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { displayAndLogError, sleep } from "src/utils/logUtils";
-import { requestUrl } from "obsidian";
+import { requestUrlWithTimeout } from "src/utils/requestWithTimeout";
 import TelegramSyncPlugin from "src/main";
 
 interface AIErrorResponse {
@@ -173,7 +173,7 @@ export async function processWithGemini(
 			};
 
 			const model = plugin.settings.geminiModel || "gemini-1.5-flash";
-			const response = await requestUrl({
+			const response = await requestUrlWithTimeout({
 				url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${plugin.settings.geminiApiKey}`,
 				method: "POST",
 				headers: {

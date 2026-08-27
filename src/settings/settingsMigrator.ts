@@ -2,13 +2,16 @@
  * Settings migration pipeline.
  *
  * Each migration has a `from` version, a `to` version, and a `migrate` function.
- * Migrations are applied in order when the stored `pluginVersion` is older than
- * the migration's `from` version.
+ * Migrations are applied in order when the stored `settingsVersion` is older than
+ * the migration's target version.
  *
- * Usage in main.ts:
- *   await this.loadSettings();
- *   applyMigrations(this.settings, CURRENT_VERSION);
- *   await this.saveSettings();
+ * Migrations run against the RAW data read from disk, before it is merged with
+ * DEFAULT_SETTINGS — see TelegramSyncPlugin.loadSettings(). That is what lets a
+ * migration distinguish "key absent" from "key set to the default value".
+ *
+ * `settingsVersion` is deliberately separate from `pluginVersion`: the latter
+ * tracks which release notes the user has already seen and is owned by
+ * ifNewReleaseThenShowChanges().
  */
 
 export interface SettingsMigration {
@@ -102,14 +105,61 @@ export const MIGRATIONS: SettingsMigration[] = [
 			}
 		},
 	},
+	{
+		fromVersion: "0.3.0",
+		toVersion: "0.4.0",
+		description: "Drop empty entries from allowedChats",
+		migrate: (settings) => {
+			// An empty string in allowedChats matched every sender without a Telegram
+			// username (msg.from?.username ?? ""), silently disabling the whitelist.
+			// The old default was [""], so almost every install carries one.
+			const allowedChats = settings.allowedChats;
+			if (Array.isArray(allowedChats)) {
+				settings.allowedChats = allowedChats
+					.filter((chat): chat is string => typeof chat === "string")
+					.map((chat) => chat.trim())
+					.filter(Boolean);
+			}
+		},
+	},
+	{
+		fromVersion: "0.4.0",
+		toVersion: "0.5.0",
+		description: "Drop the unused categorizationRules engine",
+		migrate: (settings) => {
+			// The rule list was never written to — no UI ever created a rule and the
+			// array stayed empty — while category keywords do the matching instead.
+			delete settings.categorizationRules;
+		},
+	},
+	{
+		fromVersion: "0.5.0",
+		toVersion: "0.6.0",
+		description: "Switch categorization off when AI classification is off",
+		migrate: (settings) => {
+			// Categorisation only ever worked through AI classification: category keywords
+			// are a hint in the prompt, never matched against message content. With
+			// aiCategorizationEnabled off the feature classified nothing and simply forced
+			// every note into the default category, so the two flags now move together.
+			if (settings.categoriesEnabled === true && settings.aiCategorizationEnabled !== true) {
+				settings.categoriesEnabled = false;
+			}
+		},
+	},
 ];
+
+/** Highest schema level this build knows how to migrate to. */
+export function latestSettingsVersion(): string {
+	return MIGRATIONS.reduce((max, m) => (compareVersions(m.toVersion, max) > 0 ? m.toVersion : max), "0.0.0");
+}
 
 /**
  * Apply all pending migrations to the settings object.
  * Returns the list of migrations that were applied.
  */
 export function applyMigrations(settings: Record<string, unknown>, currentVersion: string): SettingsMigration[] {
-	const storedVersion = (settings.pluginVersion as string) || "0.0.0";
+	// Installs made before settingsVersion existed carry their state in pluginVersion.
+	const storedVersion = (settings.settingsVersion as string) || (settings.pluginVersion as string) || "0.0.0";
 	const applied: SettingsMigration[] = [];
 
 	for (const migration of MIGRATIONS) {
@@ -120,9 +170,12 @@ export function applyMigrations(settings: Record<string, unknown>, currentVersio
 		}
 	}
 
-	// Update stored version to current
+	// Stamp the schema level actually reached, not the plugin version. A migration may
+	// target a version the plugin has not shipped yet; stamping currentVersion would
+	// leave storedVersion below it and re-run every migration on every load.
 	if (applied.length > 0) {
-		settings.pluginVersion = currentVersion;
+		const reached = latestSettingsVersion();
+		settings.settingsVersion = compareVersions(currentVersion, reached) > 0 ? currentVersion : reached;
 	}
 
 	return applied;

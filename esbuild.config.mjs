@@ -84,24 +84,33 @@ const context = await esbuild.context({
 			setup(build) {
 				// Replace inline setImmediate polyfills that use createElement("script")
 				// with safe setTimeout-based alternatives. Targets jszip's embedded copy.
-				build.onLoad({ filter: /\.m?js$/ }, async (args) => {
-					// Only process files from node_modules that might contain the pattern
-					if (!args.path.includes("node_modules")) return null;
+				//
+				// Scoped to jszip on purpose: rewriting every node_modules file that mentions
+				// createElement("script") would silently break any dependency that creates
+				// script elements legitimately, and the breakage would only surface at runtime.
+				build.onLoad({ filter: /[\\/]node_modules[\\/]jszip[\\/].*\.m?js$/ }, async (args) => {
 					const { readFile } = await import("fs/promises");
 					let contents = await readFile(args.path, "utf8");
-					// Fast check: skip if no script injection pattern present
-					if (!contents.includes('createElement') || !contents.includes('script')) return null;
+					// Only files that actually construct a script element are candidates.
+					const createsScriptElement = /\.createElement\(\s*["']script["']\s*\)/;
+					if (!createsScriptElement.test(contents)) return null;
 					const original = contents;
 					// Replace the script-injection setImmediate pattern with setTimeout
 					contents = contents.replace(
 						/["']onreadystatechange["']\s*in\s+\w+(?:\.document)?\.createElement\(["']script["']\)/g,
 						"false",
 					);
-					contents = contents.replace(
-						/\w+(?:\.document)?\.createElement\(["']script["']\)/g,
-						"undefined",
-					);
-					if (contents === original) return null;
+					contents = contents.replace(/\w+(?:\.document)?\.createElement\(["']script["']\)/g, "undefined");
+					// Fail the build rather than shipping the injection. The patterns above are
+					// pinned to jszip's current shape; an upgrade that renames the receiver would
+					// otherwise slip a createElement("script") into main.js, and Obsidian's plugin
+					// review rejects that — a failure here is far cheaper to notice than there.
+					if (contents === original) {
+						throw new Error(
+							`strip-script-injection: ${args.path} creates a script element but matched no known ` +
+								`pattern. Inspect the file and update the replacements in esbuild.config.mjs.`,
+						);
+					}
 					return { contents, loader: "js" };
 				});
 			},
@@ -113,6 +122,9 @@ const context = await esbuild.context({
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	minify: prod,
+	// src/utils/queues.ts keys its serialization queues by Function.prototype.name.
+	// Minified names would make those keys meaningless.
+	keepNames: true,
 	outfile: mainPath,
 });
 

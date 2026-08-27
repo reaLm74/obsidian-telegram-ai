@@ -1,4 +1,4 @@
-import { requestUrl } from "obsidian";
+import { requestUrlWithTimeout } from "src/utils/requestWithTimeout";
 
 /**
  * Parses and extracts text from a web page using Jina Reader API.
@@ -6,9 +6,11 @@ import { requestUrl } from "obsidian";
  * and returns clean Markdown ideal for LLMs.
  *
  * @param url The actual web link to parse
+ * @param apiKey Optional Jina Reader key, for higher rate limits
+ * @param timeoutMs Abandon the fetch after this long; omit for no deadline
  * @returns Clean Markdown string of the web page content
  */
-export async function fetchWebpageAsMarkdown(url: string, apiKey?: string): Promise<string> {
+export async function fetchWebpageAsMarkdown(url: string, apiKey?: string, timeoutMs?: number): Promise<string> {
 	if (!url) {
 		throw new Error("URL cannot be empty");
 	}
@@ -23,11 +25,14 @@ export async function fetchWebpageAsMarkdown(url: string, apiKey?: string): Prom
 	}
 
 	try {
-		const response = await requestUrl({
-			url: requestUrlPath,
-			method: "GET",
-			headers,
-		});
+		const response = await requestUrlWithTimeout(
+			{
+				url: requestUrlPath,
+				method: "GET",
+				headers,
+			},
+			timeoutMs,
+		);
 
 		if (response.status !== 200) {
 			throw new Error(`Jina Reader returned status ${response.status}`);

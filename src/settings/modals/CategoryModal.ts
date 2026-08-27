@@ -22,12 +22,10 @@ export class CategoryModal extends Modal {
 		// Set high z-index for modal window
 		const modalEl = this.containerEl.parentElement;
 		if (modalEl) {
-			modalEl.addClass("ai-modal-on-top");
+			modalEl.addClass("tgai-ai-modal-on-top");
 		}
 
-		contentEl.createEl("h2", {
-			text: this.category ? t("settings.categories.edit") : t("settings.categories.addTitle"),
-		});
+		this.titleEl.setText(this.category ? t("settings.categories.edit") : t("settings.categories.addTitle"));
 
 		let name = this.category?.name || "";
 		let description = this.category?.description || "";
@@ -46,7 +44,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						name = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 			});
 
 		new Setting(contentEl)
@@ -58,7 +56,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						description = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 				text.inputEl.rows = 3;
 			});
 
@@ -82,7 +80,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						notePathTemplate = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 				text.inputEl.rows = 2;
 			});
 
@@ -95,7 +93,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						filePathOverride = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 				text.inputEl.rows = 2;
 			});
 
@@ -108,7 +106,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						keywords = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 				text.inputEl.rows = 2;
 			});
 
@@ -121,7 +119,7 @@ export class CategoryModal extends Modal {
 					.onChange((value) => {
 						templatePath = value;
 					});
-				text.inputEl.addClass("ai-w-full");
+				text.inputEl.addClass("tgai-ai-w-full");
 			});
 
 		// Buttons

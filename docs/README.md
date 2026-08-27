@@ -34,11 +34,13 @@ Welcome to the comprehensive documentation for Telegram AI! This collection of g
 2. Check **[Template Variables Reference](Template%20Variables%20Reference.md)** for API reference
 3. Explore **[Advanced Features Guide](Advanced%20Features%20Guide.md)** for integration options
 4. **[Release Checklist](Release%20Checklist.md)** — release checklist for new features
+5. **[Roadmap 2026-2028](Roadmap%202026-2028.md)** — two-year development roadmap (Q3 2026 → Q2 2028)
 
 ## 🎯 Feature Highlights
 
 ### 🤖 AI-Powered Processing
-- **AI Pipelines**: Configurable chains — Whisper → GPT → Formatter
+- **Content-Aware Flow**: Whisper → GPT → post-processors, routed by content type
+- **Note Language**: Output follows the interface language, or any language you choose
 - **Post-Processors**: WikiLinker, AutoTagger, Summarization
 - **Custom Parameters**: Dynamic variables like `{{ai:title}}`
 - **Web Link Parsing**: Scrape and summarize URLs via Jina Reader API

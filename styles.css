@@ -1,33 +1,19 @@
-.settings-donation-container {
-	width: 80%;
-	height: 50vh;
-	margin: 0 auto;
-	text-align: center;
-	color: var(--text-normal);
-}
+/* Telegram AI — all plugin classes are prefixed `tgai-` to avoid colliding
+   with themes, other plugins, and Obsidian core styles. */
 
-.modal-button-container {
-	text-align: right;
-	margin-top: 20px;
-}
-
-.ai-input-wide {
+.tgai-ai-input-wide {
 	width: 300px;
 }
 
-.ai-input-medium {
+.tgai-ai-input-medium {
 	width: 200px;
 }
 
-.ai-input-small {
-	width: 100px;
-}
-
-.ai-w-full {
+.tgai-ai-w-full {
 	width: 100%;
 }
 
-.status-indicator-error {
+.tgai-status-indicator-error {
 	position: relative;
 	left: -3px;
 	bottom: -3px;
@@ -35,249 +21,97 @@
 	color: var(--text-error);
 }
 
-.ai-modal-on-top {
+.tgai-ai-modal-on-top {
 	z-index: 1001;
 }
 
-.category-item {
-	border: 1px solid var(--background-modifier-border);
-	border-radius: 4px;
-	padding: 16px;
-	margin-bottom: 8px;
-	background: var(--background-secondary);
-}
-
-.category-header {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 8px;
-}
-
-.category-controls {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.category-details {
-	font-size: 0.9em;
-	color: var(--text-muted);
-	margin-top: 8px;
-}
-
-.ml-10 {
+.tgai-ml-10 {
 	margin-left: 10px;
 }
 
-.error-border.error-border {
+.tgai-error-border.tgai-error-border {
 	border: 2px solid var(--text-error);
 }
 
-.custom-parameters-hint {
+.tgai-custom-parameters-hint {
 	margin-bottom: 20px;
 	padding: 10px;
 	background: var(--background-secondary);
 	border-radius: 5px;
 }
 
-.ai-textarea {
-	width: 100%; 
-	min-height: 100px; 
-	margin-bottom: 10px; 
-	resize: vertical;
-	padding: 8px;
-	font-family: var(--font-monospace);
-	font-size: 13px;
-	line-height: 1.4;
-	overflow-y: auto;
-}
-
-.flex {
-	display: flex;
-}
-
-.gap-10 {
-	gap: 10px;
-}
-
-.justify-end {
-	justify-content: flex-end;
-}
-
-.prompt-modal {
-	width: 85vw;
-	max-width: 1000px;
-}
-
-.prompt-textarea-container {
-	margin-bottom: 20px;
-	margin-top: -10px;
-}
-
-.prompt-textarea {
-	width: 100%;
-	resize: vertical;
-	font-family: var(--font-monospace);
-	font-size: 13px;
-}
-
-.justify-between {
-	justify-content: space-between;
-}
-
-.opacity-50 {
-	opacity: 0.5;
-}
-
-.modal-height-90vh {
-	height: 90vh;
-}
-
-.modal-width-60vw {
-	width: 60vw;
-}
-
-.w-55pc {
-	width: 55%;
-}
-
-.w-45pc {
-	width: 45%;
-}
-
-.h-4_5em {
-	height: 4.5em;
-}
-
-.text-blue {
-	color: var(--text-accent);
-}
-
-.text-error {
-	color: var(--text-error);
-}
-
-.text-success {
-	color: var(--text-success);
-}
-
-.text-bold {
-	font-weight: bold;
-}
-
-.white-space-pre-wrap {
-	white-space: pre-wrap;
-}
-
-.text-center {
-	text-align: center;
-}
-
-.mt-20 {
-	margin-top: 20px;
-}
-
-.mb-20 {
-	margin-bottom: 20px;
-}
-
-.ml-10 {
-	margin-left: 10px;
-}
-
-.ml-20 {
-	margin-left: 20px;
-}
-
-.border-red {
-	border: 2px solid var(--text-error);
-}
-
-.modal.ai-modal-on-top {
-	z-index: 1000;
-}
-
-.ai-w-full {
-	width: 100%;
-}
-
-.w-full {
-	width: 100%;
-}
-
-.flex {
-	display: flex;
-}
-
-.justify-end {
-	justify-content: flex-end;
-}
-
-.gap-10 {
-	gap: 10px;
-}
-
-.gap-20 {
-	gap: 20px;
-}
-
-.ai-textarea {
+.tgai-ai-textarea {
 	width: 100%;
 	min-height: 100px;
 	margin-bottom: 10px;
 }
 
-.prompt-modal {
+.tgai-flex {
+	display: flex;
+}
+
+.tgai-gap-10 {
+	gap: 10px;
+}
+
+.tgai-justify-end {
+	justify-content: flex-end;
+}
+
+.tgai-prompt-modal {
 	width: 50vw;
 }
 
-.prompt-textarea-container {
+.tgai-prompt-textarea-container {
 	margin-bottom: 20px;
 }
 
-.prompt-textarea {
+.tgai-prompt-textarea {
 	width: 100%;
 }
 
-.category-item {
-	border-bottom: 1px solid var(--background-modifier-border);
-	padding: 10px 16px;
-	margin-bottom: 10px;
-}
-
-.category-header {
-	display: flex;
+.tgai-justify-between {
 	justify-content: space-between;
-	align-items: center;
-	margin-bottom: 5px;
 }
 
-.category-controls {
-	display: flex;
-	gap: 10px;
-	align-items: center;
+.tgai-text-blue {
+	color: var(--text-accent);
 }
 
-.category-details {
-	font-size: 0.9em;
-	opacity: 0.8;
-	margin-top: 5px;
+.tgai-text-error {
+	color: var(--text-error);
 }
 
-/* ─── Setup Wizard ───────────────────────────────────────────────────── */
+.tgai-text-success {
+	color: var(--text-success);
+}
 
-.setup-wizard-modal {
+.tgai-text-bold {
+	font-weight: bold;
+}
+
+.tgai-white-space-pre-wrap {
+	white-space: pre-wrap;
+}
+
+.tgai-border-red {
+	border: 2px solid var(--text-error);
+}
+
+.modal.tgai-ai-modal-on-top {
+	z-index: 1000;
+}
+
+/* ─── Setup Wizard ───────────────────────────────────────────────────── */ .tgai-setup-wizard-modal {
 	width: 520px;
 	max-width: 90vw;
 }
 
-.wizard-header h2 {
+.tgai-wizard-header h2 {
 	margin: 0 0 12px;
 }
 
-/* Step progress bar */
-.wizard-progress {
+/* Step progress bar */ .tgai-wizard-progress {
 	display: flex;
 	gap: 4px;
 	margin-bottom: 20px;
@@ -285,7 +119,7 @@
 	border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.wizard-step-indicator {
+.tgai-wizard-step-indicator {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -297,18 +131,18 @@
 	transition: all 0.15s ease;
 }
 
-.wizard-step-indicator.active {
+.tgai-wizard-step-indicator.active {
 	color: var(--text-on-accent);
 	background: var(--interactive-accent);
 	font-weight: 600;
 }
 
-.wizard-step-indicator.completed {
+.tgai-wizard-step-indicator.completed {
 	color: var(--text-success);
 	background: var(--background-modifier-success);
 }
 
-.step-number {
+.tgai-step-number {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -322,48 +156,46 @@
 	flex-shrink: 0;
 }
 
-.wizard-step-indicator.active .step-number {
+.tgai-wizard-step-indicator.active .tgai-step-number {
 	background: rgba(255, 255, 255, 0.25);
 	color: var(--text-on-accent);
 }
 
-.wizard-step-indicator.completed .step-number {
+.tgai-wizard-step-indicator.completed .tgai-step-number {
 	background: var(--text-success);
 	color: var(--background-primary);
 }
 
-.step-label {
+.tgai-step-label {
 	white-space: nowrap;
 }
 
-/* Wizard body */
-.wizard-body {
+/* Wizard body */ .tgai-wizard-body {
 	min-height: 180px;
 	margin-bottom: 16px;
 }
 
-.wizard-body p {
+.tgai-wizard-body p {
 	color: var(--text-muted);
 	margin-bottom: 12px;
 }
 
-/* Token validation */
-.wizard-validation-status {
+/* Token validation */ .tgai-wizard-validation-status {
 	margin: 8px 0 12px;
 	min-height: 20px;
 }
 
-.wizard-status-error {
+.tgai-wizard-status-error {
 	color: var(--text-error);
 	font-size: 13px;
 }
 
-.wizard-status-pending {
+.tgai-wizard-status-pending {
 	color: var(--text-accent);
 	font-size: 13px;
 }
 
-.wizard-status-success {
+.tgai-wizard-status-success {
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -371,47 +203,44 @@
 	font-size: 13px;
 }
 
-.wizard-validate-btn {
+.tgai-wizard-validate-btn {
 	margin-bottom: 8px;
 }
 
-/* Folder info */
-.wizard-info {
+/* Folder info */ .tgai-wizard-info {
 	background: var(--background-secondary);
 	border-radius: 6px;
 	padding: 10px 14px;
 	margin-top: 12px;
 }
 
-.wizard-info p {
+.tgai-wizard-info p {
 	margin: 4px 0;
 	font-size: 13px;
 	font-family: var(--font-monospace);
 	color: var(--text-muted);
 }
 
-/* AI key container */
-.wizard-ai-key-container {
+/* AI key container */ .tgai-wizard-ai-key-container {
 	margin-top: 8px;
 	padding-top: 8px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
-.wizard-external-link {
+.tgai-wizard-external-link {
 	display: inline-block;
 	margin-top: 6px;
 	font-size: 13px;
 }
 
-/* Preset cards */
-.wizard-presets-grid {
+/* Preset cards */ .tgai-wizard-presets-grid {
 	display: grid;
 	grid-template-columns: repeat(2, 1fr);
 	gap: 10px;
 	margin-top: 12px;
 }
 
-.wizard-preset-card {
+.tgai-wizard-preset-card {
 	border: 2px solid var(--background-modifier-border);
 	border-radius: 8px;
 	padding: 12px;
@@ -420,46 +249,375 @@
 	background: var(--background-secondary);
 }
 
-.wizard-preset-card:hover {
+.tgai-wizard-preset-card:hover {
 	border-color: var(--interactive-accent);
 	background: var(--background-secondary-alt);
 }
 
-.wizard-preset-card.selected {
+.tgai-wizard-preset-card.selected {
 	border-color: var(--interactive-accent);
 	background: var(--background-modifier-active-hover);
 	box-shadow: 0 0 0 1px var(--interactive-accent);
 }
 
-.preset-card-header {
+.tgai-preset-card-header {
 	margin-bottom: 6px;
 }
 
-.preset-card-title {
+.tgai-preset-card-title {
 	font-weight: 600;
 	font-size: 14px;
 }
 
-.preset-card-desc {
+.tgai-preset-card-desc {
 	font-size: 12px;
 	color: var(--text-muted);
 	margin: 0 0 8px;
 }
 
-.preset-card-features {
+.tgai-preset-card-features {
 	font-size: 12px;
 }
 
-.preset-feature {
+.tgai-preset-feature {
 	color: var(--text-success);
 	margin: 2px 0;
 }
 
-/* Navigation */
-.wizard-navigation {
+/* Navigation */ .tgai-wizard-navigation {
 	display: flex;
 	justify-content: space-between;
 	padding-top: 12px;
 	border-top: 1px solid var(--background-modifier-border);
 }
 
+.tgai-pin-error {
+	color: var(--text-error);
+	font-size: var(--font-ui-smaller);
+	min-height: 1.2em;
+}
+
+/* ─── Status bar indicator ───────────────────────────────────────────── */
+
+.tgai-processing-status-bar {
+	cursor: pointer;
+}
+
+.tgai-status-active {
+	color: var(--text-accent);
+}
+
+.tgai-status-error {
+	color: var(--text-error);
+}
+
+.tgai-status-idle {
+	color: var(--text-muted);
+}
+
+/* ─── Processing history modal ───────────────────────────────────────── */
+
+.tgai-processing-history-modal {
+	max-height: 70vh;
+	overflow-y: auto;
+}
+
+.tgai-processing-stats-bar {
+	display: flex;
+	gap: 16px;
+	padding: 8px 0 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	margin-bottom: 12px;
+}
+
+.tgai-stat-item {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.tgai-stat-active {
+	color: var(--text-accent);
+}
+
+.tgai-stat-done {
+	color: var(--text-success);
+}
+
+.tgai-stat-errors {
+	color: var(--text-error);
+}
+
+.tgai-processing-empty {
+	color: var(--text-muted);
+	text-align: center;
+	padding: 24px 0;
+}
+
+.tgai-processing-records-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.tgai-processing-record {
+	border-left: 3px solid var(--background-modifier-border);
+	border-radius: 4px;
+	background: var(--background-secondary);
+	padding: 8px 10px;
+}
+
+.tgai-processing-record.tgai-status-error {
+	border-left-color: var(--text-error);
+}
+
+.tgai-processing-record.tgai-status-done {
+	border-left-color: var(--text-success);
+}
+
+.tgai-processing-record.tgai-status-processing {
+	border-left-color: var(--text-accent);
+}
+
+.tgai-record-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: var(--font-ui-small);
+}
+
+.tgai-record-type {
+	font-weight: var(--font-semibold);
+}
+
+.tgai-record-duration,
+.tgai-record-time {
+	color: var(--text-muted);
+}
+
+.tgai-record-time {
+	margin-left: auto;
+}
+
+.tgai-record-ai-badge {
+	background: var(--background-modifier-border);
+	border-radius: 3px;
+	padding: 0 5px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+}
+
+.tgai-record-preview {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
+}
+
+.tgai-record-error {
+	margin-top: 4px;
+	font-size: var(--font-ui-smaller);
+	color: var(--text-error);
+	overflow-wrap: anywhere;
+}
+
+/* ─── Misc containers ────────────────────────────────────────────────── */
+
+.tgai-ai-provider-container,
+.tgai-categories-container {
+	display: flex;
+	flex-direction: column;
+}
+
+.tgai-qr-code-container {
+	display: flex;
+	justify-content: center;
+	padding: 12px 0;
+}
+
+/* ─── Telegram API credentials ───────────────────────────────────────── */
+
+.tgai-api-intro {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.tgai-api-intro ol {
+	padding-left: 20px;
+	margin: 8px 0;
+}
+
+.tgai-api-intro li {
+	margin-bottom: 4px;
+}
+
+.tgai-api-note {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-faint);
+}
+
+.tgai-api-status {
+	font-size: var(--font-ui-small);
+	padding: 6px 0;
+	min-height: 1.2em;
+}
+
+.tgai-api-status-ok {
+	color: var(--text-success);
+}
+
+.tgai-api-status-warn {
+	color: var(--text-warning);
+}
+
+/* ─── Category manager ───────────────────────────────────────────────── */
+
+.tgai-category-manager {
+	max-width: 720px;
+	width: 90vw;
+}
+
+.tgai-categories-container {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 50vh;
+	overflow-y: auto;
+	padding-right: 4px;
+	/* Keeps the last card off the scroll edge, so it does not read as clipped. */
+	padding-bottom: 8px;
+}
+
+.tgai-category-item {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	padding: 10px 12px;
+}
+
+.tgai-category-disabled {
+	opacity: 0.55;
+}
+
+.tgai-category-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.tgai-category-swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: var(--text-faint);
+	flex-shrink: 0;
+}
+
+.tgai-category-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+}
+
+.tgai-category-name {
+	font-weight: var(--font-semibold);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.tgai-category-badge {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	background: var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	padding: 1px 6px;
+	flex-shrink: 0;
+}
+
+.tgai-category-controls {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	flex-shrink: 0;
+}
+
+.tgai-category-toggle {
+	margin-right: 4px;
+}
+
+.tgai-icon-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	box-shadow: none;
+	padding: 4px;
+	cursor: pointer;
+}
+
+.tgai-icon-button.mod-warning {
+	color: var(--text-error);
+}
+
+.tgai-category-description {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	margin-top: 6px;
+}
+
+.tgai-category-details {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-top: 6px;
+	font-size: var(--font-ui-smaller);
+}
+
+.tgai-category-detail {
+	display: flex;
+	gap: 6px;
+	min-width: 0;
+}
+
+.tgai-category-detail-label {
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+
+.tgai-category-detail-value {
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-family: var(--font-monospace);
+}
+
+.tgai-categories-empty {
+	text-align: center;
+	color: var(--text-muted);
+	padding: 28px 12px;
+}
+
+.tgai-categories-empty-icon {
+	display: flex;
+	justify-content: center;
+	margin-bottom: 8px;
+	color: var(--text-faint);
+}
+
+.tgai-category-footer {
+	margin-top: 24px;
+	padding-top: 8px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.tgai-category-footer .setting-item {
+	border-top: none;
+}
+
+/* Generic visibility helper — replaces inline element.style.display toggling. */
+.tgai-hidden {
+	display: none;
+}

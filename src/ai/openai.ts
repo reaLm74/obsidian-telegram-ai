@@ -1,7 +1,9 @@
 import TelegramBot from "node-telegram-bot-api";
 import { displayAndLog, displayAndLogError, sleep } from "src/utils/logUtils";
-import { requestUrl } from "obsidian";
+import { requestUrlWithTimeout } from "src/utils/requestWithTimeout";
+import { markAiUsedForMessage } from "src/processing/ProcessingTracker";
 import TelegramSyncPlugin from "src/main";
+import { debugLog } from "src/utils/debugLog";
 
 interface AIErrorResponse {
 	error?: {
@@ -69,6 +71,7 @@ function isRetryableError(error: unknown, status?: number): boolean {
 		const message = error.message.toLowerCase();
 		return (
 			message.includes("timeout") ||
+			message.includes("timed out") ||
 			message.includes("network") ||
 			message.includes("connection") ||
 			message.includes("rate limit")
@@ -120,14 +123,9 @@ async function getImageBase64(plugin: TelegramSyncPlugin, msg: TelegramBot.Messa
 			chunks.push(new Uint8Array(chunk as ArrayBuffer));
 		}
 
-		const fileBuffer = new Uint8Array(
-			chunks.reduce<number[]>((acc, val) => {
-				acc.push(...val);
-				return acc;
-			}, []),
-		);
-
-		const base64Data = Buffer.from(fileBuffer).toString("base64");
+		// Buffer.concat, not push(...chunk) into a number[]: spreading a stream chunk
+		// blows the argument limit (RangeError above ~100 KB) and boxes every byte.
+		const base64Data = Buffer.concat(chunks).toString("base64");
 		const dataUrl = `data:image/jpeg;base64,${base64Data}`;
 
 		displayAndLog(
@@ -200,7 +198,8 @@ export async function processWithOpenAI(
 		return null;
 	}
 
-	if (!plugin.settings.openAIApiKey) {
+	const apiKey = plugin.getOpenAIApiKey();
+	if (!apiKey) {
 		const errorMsg = "OpenAI API key not set. " + "Specify it in plugin settings.";
 		await displayAndLogError(plugin, new Error(errorMsg), "AI Processing Error", "", msg, 0);
 		return null;
@@ -209,6 +208,8 @@ export async function processWithOpenAI(
 	if (!content || content.trim().length === 0) {
 		return null;
 	}
+
+	if (msg) markAiUsedForMessage(msg.chat.id, msg.message_id);
 
 	const maxAttempts = plugin.settings.aiRetryAttempts || 3;
 	const baseDelay = plugin.settings.aiRetryDelay || 1000;
@@ -250,21 +251,28 @@ export async function processWithOpenAI(
 				displayAndLog(plugin, `🖼️ Vision: Sending request to OpenAI API using model ${model}...`, 0);
 			}
 
-			const response = await requestUrl({
-				url: "https://api.openai.com/v1/chat/completions",
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					Authorization: `Bearer ${plugin.settings.openAIApiKey}`,
+			const response = await requestUrlWithTimeout(
+				{
+					url: "https://api.openai.com/v1/chat/completions",
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${apiKey}`,
+					},
+					body: JSON.stringify(requestBody),
+					throw: false,
 				},
-				body: JSON.stringify(requestBody),
-				throw: false,
-			});
+				plugin.settings.aiTimeout,
+			);
 
 			if (response.status < 200 || response.status >= 300) {
 				let errorMessage = `HTTP ${response.status}`;
 				let errorData: unknown = null;
 				let userFriendlyMessage = "";
+				// Set for failures no amount of waiting will fix. Retrying those burns the
+				// full backoff — up to 7 seconds by default — before reporting what was
+				// already known on the first response.
+				let terminalError = false;
 
 				try {
 					const data = response.json as AIErrorResponse;
@@ -275,36 +283,40 @@ export async function processWithOpenAI(
 					// Check for specific error types
 					const errorType = errorBody?.type || "";
 					const errorCode = errorBody?.code || "";
+					const lowerMessage = errorMessage.toLowerCase();
 
-					// Quota exceeded (no money)
-					if (
+					// Quota exceeded (no money). A bare 429 is NOT enough to conclude this:
+					// plain rate limiting shares that status and is exactly what the retry
+					// loop is for. Only a response that names the quota is terminal.
+					const isQuotaError =
 						errorType === "insufficient_quota" ||
 						errorCode === "insufficient_quota" ||
-						response.status === 429 ||
 						response.status === 402 ||
-						errorMessage.toLowerCase().includes("quota") ||
-						errorMessage.toLowerCase().includes("exceeded your current quota")
-					) {
-						userFriendlyMessage = "💳 Quota exceeded. Please top up balance at platform.openai.com";
-					}
-					// Invalid or blocked API key
-					else if (
+						lowerMessage.includes("quota");
+
+					// Invalid or blocked API key. Matched on the type/code the API sends and
+					// on 401 — not on the word "invalid" anywhere in the message, which also
+					// appears in ordinary request-validation errors and mislabelled them as
+					// a bad key.
+					const isAuthError =
 						errorType === "invalid_api_key" ||
 						errorType === "access_terminated" ||
 						errorCode === "invalid_api_key" ||
 						errorCode === "access_terminated" ||
-						response.status === 401 ||
-						errorMessage.toLowerCase().includes("invalid") ||
-						errorMessage.toLowerCase().includes("terminated")
-					) {
+						response.status === 401;
+
+					if (isQuotaError) {
+						userFriendlyMessage = "💳 Quota exceeded. Please top up balance at platform.openai.com";
+					} else if (isAuthError) {
 						userFriendlyMessage = "🔑 API key is invalid or revoked";
 					}
+					terminalError = isQuotaError || isAuthError;
 				} catch {
 					errorMessage = response.text;
 				}
 
 				// Don't retry quota/auth errors
-				if (attempt < maxAttempts && isRetryableError(errorData, response.status)) {
+				if (!terminalError && attempt < maxAttempts && isRetryableError(errorData, response.status)) {
 					await exponentialDelay(attempt, baseDelay);
 					continue;
 				}
@@ -386,7 +398,8 @@ export async function transcribeOpenAI(
 	fileBuffer: ArrayBuffer,
 	fileExtension: string,
 ): Promise<string | null> {
-	if (!plugin.settings.aiEnabled || !plugin.settings.openAIApiKey) return null;
+	const apiKey = plugin.getOpenAIApiKey();
+	if (!plugin.settings.aiEnabled || !apiKey) return null;
 
 	try {
 		// Whisper supports: mp3, mp4, mpeg, mpga, m4a, wav, and webm.
@@ -407,16 +420,20 @@ export async function transcribeOpenAI(
 		body.set(new Uint8Array(fileBuffer), preamble.byteLength);
 		body.set(epilogue, preamble.byteLength + fileBuffer.byteLength);
 
-		const response = await requestUrl({
-			url: "https://api.openai.com/v1/audio/transcriptions",
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${plugin.settings.openAIApiKey}`,
-				"Content-Type": `multipart/form-data; boundary=${boundary}`,
+		const response = await requestUrlWithTimeout(
+			{
+				url: "https://api.openai.com/v1/audio/transcriptions",
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${apiKey}`,
+					"Content-Type": `multipart/form-data; boundary=${boundary}`,
+				},
+				body: body.buffer,
+				throw: false,
 			},
-			body: body.buffer,
-			throw: false,
-		});
+			// Whisper uploads up to 25 MB, so give them room beyond the chat-completion budget.
+			plugin.settings.aiTimeout ? plugin.settings.aiTimeout * 4 : undefined,
+		);
 
 		if (response.status < 200 || response.status >= 300) {
 			const errorText = response.text;
@@ -427,7 +444,7 @@ export async function transcribeOpenAI(
 
 		return (result as { text?: string }).text || null;
 	} catch (error) {
-		console.error("Transcription error:", error);
+		debugLog("AI", "Transcription error:", error);
 		await displayAndLogError(
 			plugin,
 			error instanceof Error ? error : new Error(String(error)),
@@ -443,20 +460,26 @@ export async function transcribeOpenAI(
 /**
  * Tests OpenAI API key validity
  */
-export async function testOpenAIApiKey(apiKey: string): Promise<{ success: boolean; message: string }> {
+export async function testOpenAIApiKey(
+	apiKey: string,
+	timeoutMs = 30000,
+): Promise<{ success: boolean; message: string }> {
 	if (!apiKey || apiKey.trim().length === 0) {
 		return { success: false, message: "API key is empty" };
 	}
 
 	try {
-		const response = await requestUrl({
-			url: "https://api.openai.com/v1/models",
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
+		const response = await requestUrlWithTimeout(
+			{
+				url: "https://api.openai.com/v1/models",
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${apiKey}`,
+				},
+				throw: false,
 			},
-			throw: false,
-		});
+			timeoutMs,
+		);
 
 		if (response.status >= 200 && response.status < 300) {
 			return { success: true, message: "✅ API key is valid" };
@@ -468,14 +491,15 @@ export async function testOpenAIApiKey(apiKey: string): Promise<{ success: boole
 			const errorType = errorData.error?.type || "";
 			const errorCode = errorData.error?.code || "";
 
-			// Quota exceeded
-			if (
-				errorType === "insufficient_quota" ||
-				errorCode === "insufficient_quota" ||
-				response.status === 429 ||
-				response.status === 402
-			) {
+			// Quota exceeded. As in processWithOpenAI(), a bare 429 means rate limiting —
+			// reporting it as an empty balance sends the user to the billing page over a
+			// key that is fine.
+			if (errorType === "insufficient_quota" || errorCode === "insufficient_quota" || response.status === 402) {
 				return { success: false, message: "💳 Quota exceeded. Please top up balance at platform.openai.com" };
+			}
+			// Rate limited: the key itself is valid, the request just came too fast.
+			else if (response.status === 429) {
+				return { success: false, message: "⏳ Rate limited — the key works, try again in a moment" };
 			}
 			// Invalid or blocked API key
 			else if (

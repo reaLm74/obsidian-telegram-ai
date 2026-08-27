@@ -1,11 +1,12 @@
 /**
  * Setup Wizard — first-run onboarding for new users.
  *
- * 4-step wizard:
+ * 5-step wizard:
  *   1. Bot Token — paste token, live validation via getMe()
- *   2. Folder — choose where notes are stored
- *   3. AI Setup — optional OpenAI key
- *   4. Preset — pick a usage preset
+ *   2. Allowed chats — who may write into the vault (the plugin's only access control)
+ *   3. Folder — choose where notes are stored
+ *   4. AI Setup — optional OpenAI key
+ *   5. Preset — pick a usage preset
  *
  * Shown automatically when botToken is empty (first install).
  * Can also be triggered via Command Palette: "Run setup wizard".
@@ -13,6 +14,7 @@
 
 import { Modal, App, Setting, Notice, setIcon } from "obsidian";
 import TelegramSyncPlugin from "../main";
+import { DEFAULT_SETTINGS } from "./Settings";
 import { PRESETS, PresetConfig } from "../settings/presets";
 import {
 	defaultTelegramFolder,
@@ -20,8 +22,10 @@ import {
 	defaultFileNameTemplate,
 } from "../settings/messageDistribution";
 import { t } from "../locale/i18n";
+import { PinCodeModal } from "./modals/PinCode";
+import { debugLog } from "src/utils/debugLog";
 
-type WizardStep = 1 | 2 | 3 | 4;
+type WizardStep = 1 | 2 | 3 | 4 | 5;
 
 export class SetupWizardModal extends Modal {
 	private plugin: TelegramSyncPlugin;
@@ -29,6 +33,7 @@ export class SetupWizardModal extends Modal {
 
 	// Step data
 	private botToken = "";
+	private allowedChats = "";
 	private notesFolder = defaultTelegramFolder;
 	private aiEnabled = false;
 	private openAIKey = "";
@@ -40,15 +45,20 @@ export class SetupWizardModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
-		this.modalEl.addClass("setup-wizard-modal");
+		this.modalEl.addClass("tgai-setup-wizard-modal");
 		// Pre-fill from existing settings, decrypting if needed
 		if (this.plugin.settings.botToken) {
 			try {
 				this.botToken = await this.plugin.getBotToken();
 			} catch {
-				this.botToken = this.plugin.settings.botToken;
+				// Decryption failed (pin cancelled / wrong pin). Pre-filling with the stored
+				// ciphertext would let Finish re-encrypt it, destroying the token for good —
+				// leave the field empty and make the user paste the real token instead.
+				this.botToken = "";
+				new Notice(t("wizard.tokenDecryptFailed"));
 			}
 		}
+		this.allowedChats = this.plugin.settings.allowedChats.join(", ");
 		this.renderStep();
 	}
 
@@ -61,26 +71,29 @@ export class SetupWizardModal extends Modal {
 		contentEl.empty();
 
 		// Header
-		const header = contentEl.createDiv({ cls: "wizard-header" });
+		const header = contentEl.createDiv({ cls: "tgai-wizard-header" });
 		header.createEl("h2", { text: t("wizard.title") });
 
 		// Progress bar
 		this.renderProgress(header);
 
 		// Step content
-		const body = contentEl.createDiv({ cls: "wizard-body" });
+		const body = contentEl.createDiv({ cls: "tgai-wizard-body" });
 
 		switch (this.currentStep) {
 			case 1:
 				this.renderStepToken(body);
 				break;
 			case 2:
-				this.renderStepFolder(body);
+				this.renderStepAccess(body);
 				break;
 			case 3:
-				this.renderStepAI(body);
+				this.renderStepFolder(body);
 				break;
 			case 4:
+				this.renderStepAI(body);
+				break;
+			case 5:
 				this.renderStepPreset(body);
 				break;
 		}
@@ -90,19 +103,20 @@ export class SetupWizardModal extends Modal {
 	}
 
 	private renderProgress(container: HTMLElement): void {
-		const bar = container.createDiv({ cls: "wizard-progress" });
+		const bar = container.createDiv({ cls: "tgai-wizard-progress" });
 		const steps = [
 			t("wizard.steps.token"),
+			t("wizard.steps.access"),
 			t("wizard.steps.folder"),
 			t("wizard.steps.ai"),
 			t("wizard.steps.preset"),
 		];
 		for (let i = 0; i < steps.length; i++) {
 			const step = bar.createDiv({
-				cls: `wizard-step-indicator ${i + 1 === this.currentStep ? "active" : ""} ${i + 1 < this.currentStep ? "completed" : ""}`,
+				cls: `tgai-wizard-step-indicator ${i + 1 === this.currentStep ? "active" : ""} ${i + 1 < this.currentStep ? "completed" : ""}`,
 			});
-			step.createSpan({ text: `${i + 1}`, cls: "step-number" });
-			step.createSpan({ text: steps[i], cls: "step-label" });
+			step.createSpan({ text: `${i + 1}`, cls: "tgai-step-number" });
+			step.createSpan({ text: steps[i], cls: "tgai-step-label" });
 		}
 	}
 
@@ -131,23 +145,23 @@ export class SetupWizardModal extends Modal {
 				}),
 		);
 
-		const statusEl = container.createDiv({ cls: "wizard-validation-status" });
+		const statusEl = container.createDiv({ cls: "tgai-wizard-validation-status" });
 
 		const validateBtn = container.createEl("button", {
 			text: t("wizard.token.validate"),
-			cls: "mod-cta wizard-validate-btn",
+			cls: "mod-cta tgai-wizard-validate-btn",
 		});
 
 		validateBtn.addEventListener("click", () => {
 			void (async () => {
 				if (!this.botToken) {
 					statusEl.empty();
-					statusEl.createSpan({ text: t("wizard.token.empty"), cls: "wizard-status-error" });
+					statusEl.createSpan({ text: t("wizard.token.empty"), cls: "tgai-wizard-status-error" });
 					return;
 				}
 
 				statusEl.empty();
-				statusEl.createSpan({ text: t("wizard.token.validating"), cls: "wizard-status-pending" });
+				statusEl.createSpan({ text: t("wizard.token.validating"), cls: "tgai-wizard-status-pending" });
 				validateBtn.setAttr("disabled", "true");
 
 				try {
@@ -156,7 +170,7 @@ export class SetupWizardModal extends Modal {
 					const me = await testBot.getMe();
 
 					statusEl.empty();
-					const successEl = statusEl.createDiv({ cls: "wizard-status-success" });
+					const successEl = statusEl.createDiv({ cls: "tgai-wizard-status-success" });
 					setIcon(successEl.createSpan(), "check-circle");
 					successEl.createSpan({
 						text: ` Connected to @${me.username} (${me.first_name})`,
@@ -165,7 +179,7 @@ export class SetupWizardModal extends Modal {
 					statusEl.empty();
 					statusEl.createSpan({
 						text: t("wizard.token.invalid", { error: e instanceof Error ? e.message : "Unknown error" }),
-						cls: "wizard-status-error",
+						cls: "tgai-wizard-status-error",
 					});
 				} finally {
 					validateBtn.removeAttribute("disabled");
@@ -175,6 +189,40 @@ export class SetupWizardModal extends Modal {
 	}
 
 	// ─── Step 2: Folder ──────────────────────────────────────────────────────
+
+	// ─── Step 2: Allowed chats ───────────────────────────────────────────────
+
+	/**
+	 * The whitelist is the plugin's only access control, and it denies everything while
+	 * empty — so a wizard that never asks for it hands the user a install that silently
+	 * rejects their own messages.
+	 */
+	private renderStepAccess(container: HTMLElement): void {
+		container.createEl("p", { text: t("wizard.access.intro") });
+
+		new Setting(container)
+			.setName(t("wizard.access.name"))
+			.setDesc(t("wizard.access.desc"))
+			.addTextArea((text) =>
+				text
+					.setPlaceholder("Example: username, 1227636")
+					.setValue(this.allowedChats)
+					.onChange((value) => {
+						this.allowedChats = value;
+					}),
+			);
+	}
+
+	/** Splits the free-text field into the stored list, dropping blanks (a "" entry would
+	 *  match every sender without a username and switch the whitelist off). */
+	private parseAllowedChats(): string[] {
+		return this.allowedChats
+			.split(",")
+			.map((chat) => chat.trim())
+			.filter(Boolean);
+	}
+
+	// ─── Step 3: Folder ──────────────────────────────────────────────────────
 
 	private renderStepFolder(container: HTMLElement): void {
 		container.createEl("p", {
@@ -193,7 +241,7 @@ export class SetupWizardModal extends Modal {
 					}),
 			);
 
-		const infoEl = container.createDiv({ cls: "wizard-info" });
+		const infoEl = container.createDiv({ cls: "tgai-wizard-info" });
 		infoEl.createEl("p", {
 			text: `📁 Notes: ${this.notesFolder}/note-name.md`,
 		});
@@ -202,7 +250,7 @@ export class SetupWizardModal extends Modal {
 		});
 	}
 
-	// ─── Step 3: AI Setup ────────────────────────────────────────────────────
+	// ─── Step 4: AI Setup ────────────────────────────────────────────────────
 
 	private renderStepAI(container: HTMLElement): void {
 		container.createEl("p", {
@@ -215,12 +263,12 @@ export class SetupWizardModal extends Modal {
 			.addToggle((toggle) =>
 				toggle.setValue(this.aiEnabled).onChange((value) => {
 					this.aiEnabled = value;
-					keyContainer.style.display = value ? "block" : "none";
+					keyContainer.toggleClass("tgai-hidden", !value);
 				}),
 			);
 
-		const keyContainer = container.createDiv({ cls: "wizard-ai-key-container" });
-		keyContainer.style.display = this.aiEnabled ? "block" : "none";
+		const keyContainer = container.createDiv({ cls: "tgai-wizard-ai-key-container" });
+		keyContainer.toggleClass("tgai-hidden", !this.aiEnabled);
 
 		new Setting(keyContainer)
 			.setName(t("wizard.ai.key"))
@@ -239,17 +287,17 @@ export class SetupWizardModal extends Modal {
 			href: "https://platform.openai.com/api-keys",
 		});
 		linkEl.setAttr("target", "_blank");
-		linkEl.addClass("wizard-external-link");
+		linkEl.addClass("tgai-wizard-external-link");
 	}
 
-	// ─── Step 4: Preset ──────────────────────────────────────────────────────
+	// ─── Step 5: Preset ──────────────────────────────────────────────────────
 
 	private renderStepPreset(container: HTMLElement): void {
 		container.createEl("p", {
 			text: t("wizard.preset.intro"),
 		});
 
-		const presetsGrid = container.createDiv({ cls: "wizard-presets-grid" });
+		const presetsGrid = container.createDiv({ cls: "tgai-wizard-presets-grid" });
 
 		// Add "No preset" option
 		this.renderPresetCard(presetsGrid, {
@@ -269,31 +317,31 @@ export class SetupWizardModal extends Modal {
 
 	private renderPresetCard(container: HTMLElement, preset: PresetConfig): void {
 		const card = container.createDiv({
-			cls: `wizard-preset-card ${this.selectedPresetId === preset.id ? "selected" : ""}`,
+			cls: `tgai-wizard-preset-card ${this.selectedPresetId === preset.id ? "selected" : ""}`,
 		});
 
 		card.addEventListener("click", () => {
 			this.selectedPresetId = preset.id;
 			// Re-render to update selection
-			container.querySelectorAll(".wizard-preset-card").forEach((el) => el.removeClass("selected"));
+			container.querySelectorAll(".tgai-wizard-preset-card").forEach((el) => el.removeClass("selected"));
 			card.addClass("selected");
 		});
 
-		const headerEl = card.createDiv({ cls: "preset-card-header" });
-		headerEl.createSpan({ text: `${preset.icon} ${preset.name}`, cls: "preset-card-title" });
+		const headerEl = card.createDiv({ cls: "tgai-preset-card-header" });
+		headerEl.createSpan({ text: `${preset.icon} ${preset.name}`, cls: "tgai-preset-card-title" });
 
-		card.createEl("p", { text: preset.description, cls: "preset-card-desc" });
+		card.createEl("p", { text: preset.description, cls: "tgai-preset-card-desc" });
 
-		const featuresEl = card.createDiv({ cls: "preset-card-features" });
+		const featuresEl = card.createDiv({ cls: "tgai-preset-card-features" });
 		for (const feature of preset.features) {
-			featuresEl.createDiv({ text: `✓ ${feature}`, cls: "preset-feature" });
+			featuresEl.createDiv({ text: `✓ ${feature}`, cls: "tgai-preset-feature" });
 		}
 	}
 
 	// ─── Navigation ──────────────────────────────────────────────────────────
 
 	private renderNavigation(container: HTMLElement): void {
-		const nav = container.createDiv({ cls: "wizard-navigation" });
+		const nav = container.createDiv({ cls: "tgai-wizard-navigation" });
 
 		if (this.currentStep > 1) {
 			const backBtn = nav.createEl("button", { text: t("wizard.nav.back") });
@@ -305,7 +353,7 @@ export class SetupWizardModal extends Modal {
 			nav.createDiv(); // Spacer
 		}
 
-		if (this.currentStep < 4) {
+		if (this.currentStep < 5) {
 			const nextBtn = nav.createEl("button", {
 				text: t("wizard.nav.next"),
 				cls: "mod-cta",
@@ -336,29 +384,44 @@ export class SetupWizardModal extends Modal {
 	private async applySettings(): Promise<void> {
 		const { settings } = this.plugin;
 
-		// Step 1: Bot Token — save the raw (decrypted) token first
+		// Step 1: Bot Token — hold the raw value; it is encrypted at the end of this method,
+		// once the preset has been applied and encryptionByPinCode is known.
 		settings.botToken = this.botToken;
 		settings.botTokenEncrypted = false;
 
-		// Step 2: Folder
+		// Step 2: Allowed chats
+		settings.allowedChats = this.parseAllowedChats();
+
+		// Step 3: Folder
 		const folder = this.notesFolder || defaultTelegramFolder;
 		if (settings.messageDistributionRules && settings.messageDistributionRules.length > 0) {
 			settings.messageDistributionRules[0].notePathTemplate = `${folder}/${defaultNoteNameTemplate}`;
 			settings.messageDistributionRules[0].filePathTemplate = `${folder}/{{file:type}}s/${defaultFileNameTemplate}`;
 		}
 
-		// Step 3: AI
+		// Step 4: AI
 		settings.aiEnabled = this.aiEnabled;
 		if (this.openAIKey) {
+			// Held raw here; encrypted below, once the pin code (if any) is known.
 			settings.openAIApiKey = this.openAIKey;
+			settings.openAIApiKeyEncrypted = false;
 			settings.aiProvider = "openai";
 		}
 
-		// Step 4: Preset
+		// Step 5: Preset
 		if (this.selectedPresetId && this.selectedPresetId !== "none") {
 			const preset = PRESETS.find((p) => p.id === this.selectedPresetId);
 			if (preset) {
-				Object.assign(settings, preset.settings);
+				// Presets are untyped Record<string, unknown>; copying them wholesale would
+				// let a typo'd key add a field the plugin never reads and never removes.
+				for (const [key, value] of Object.entries(preset.settings)) {
+					if (key in DEFAULT_SETTINGS) (settings as unknown as Record<string, unknown>)[key] = value;
+					else
+						debugLog(
+							"Wizard",
+							`Setup wizard: preset "${preset.id}" sets unknown setting "${key}" — ignored`,
+						);
+				}
 				// Also update folder to preset folder if user didn't customize
 				if (this.notesFolder === defaultTelegramFolder) {
 					const presetFolder = preset.folder;
@@ -373,10 +436,27 @@ export class SetupWizardModal extends Modal {
 		// Mark setup as completed
 		settings.setupCompleted = true;
 
-		// Re-encrypt the token if pin-code encryption is active
-		if (settings.encryptionByPinCode) {
-			this.plugin.botTokenEncrypt();
+		// Never persist the token in the clear. With pin-code encryption on, ask for the pin
+		// first: encrypting with an unset pin would produce a value that getBotToken() —
+		// which decrypts WITH the pin — could never read back.
+		if (settings.encryptionByPinCode && !this.plugin.pinCode) {
+			const pinCodeModal = new PinCodeModal(this.plugin, false);
+			await new Promise((resolve) => {
+				pinCodeModal.onDone = () => resolve(undefined);
+				pinCodeModal.open();
+			});
+			// Gate on `saved`, not just on a non-empty pinCode: a partial pin abandoned via
+			// Esc/backdrop must never become the encryption key (PinCodeModal clears it in
+			// onClose, but the belt-and-braces check keeps this path safe regardless).
+			if (!pinCodeModal.saved || !this.plugin.pinCode) {
+				// No pin entered — fall back to the unprotected default rather than
+				// locking the user out of their own token.
+				settings.encryptionByPinCode = false;
+				new Notice(t("wizard.pinSkipped"));
+			}
 		}
+		this.plugin.botTokenEncrypt();
+		this.plugin.openAIApiKeyEncrypt();
 
 		await this.plugin.saveSettings();
 
@@ -386,6 +466,7 @@ export class SetupWizardModal extends Modal {
 		}
 
 		new Notice(t("wizard.complete"));
+		if (settings.allowedChats.length === 0) new Notice(t("wizard.access.empty"), 10000);
 		this.close();
 	}
 }

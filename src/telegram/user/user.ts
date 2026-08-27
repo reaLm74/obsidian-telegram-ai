@@ -14,6 +14,30 @@ export async function connect(
 	if (!(sessionType == "user" || plugin.settings.botToken !== "")) return;
 	if (sessionType == "user" && !sessionId && !qrCodeContainer) return;
 
+	// MTProto needs app credentials the user supplies themselves. Without them the plugin
+	// runs bot-only: everything works through the Bot API except account login and the
+	// >20 MB file download fallback.
+	const credentials = Client.parseApiCredentials(plugin.settings.telegramApiId, plugin.settings.telegramApiHash);
+	Client.setApiCredentials(credentials);
+	if (!credentials) {
+		plugin.userConnected = false;
+		if (sessionType == "user") {
+			await displayAndLogError(plugin, Client.NoApiCredentials, "", "", undefined, 0);
+			return `Connection failed.\n${Client.NoApiCredentials.message}`;
+		}
+		// Dropping back to bot-only is local state, not an MTProto operation, so it must not
+		// depend on credentials. Returning here without it made "log out" a no-op that still
+		// reported success: telegramSessionType stayed "user", the button kept saying "Log
+		// out", and pressing it again did nothing — which is exactly what an install left
+		// over from a version with bundled credentials ends up in.
+		if (plugin.settings.telegramSessionType != "bot" && !sessionId) {
+			plugin.settings.telegramSessionType = "bot";
+			plugin.settings.telegramSessionId = Client.getNewSessionId();
+			await plugin.saveSettings();
+		}
+		return;
+	}
+
 	plugin.checkingUserConnection = true;
 	try {
 		const newSessionId = sessionId || Client.getNewSessionId();

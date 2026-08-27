@@ -11,15 +11,20 @@ import path from "path";
 import { applyNoteContentTemplate, applyNotePathTemplate, finalizeMessageProcessing } from "./processors";
 import { enqueue } from "src/utils/queues";
 import { displayAndLog, displayAndLogError } from "src/utils/logUtils";
+import { debugLog } from "src/utils/debugLog";
 import { MessageDistributionRule } from "src/settings/messageDistribution";
 import { getMessageContentType } from "src/ai/openai";
 import { processWithAI } from "src/ai/processor";
-import { MEDIA_GROUP_TIMEOUT_MS } from "src/ai/constants";
+import { MEDIA_GROUP_MAX_WAIT_MS, MEDIA_GROUP_TIMEOUT_MS } from "src/ai/constants";
+import { TFile } from "obsidian";
 import { createNoteContent, applyCategorization, tryExtractDocumentText } from "./contentHandler";
 
 export interface MediaGroup {
 	id: string;
 	notePath: string;
+	/** Rule this album was matched against. Each album keeps its own — the polling
+	 *  interval must not reuse whichever rule happened to start it. */
+	distributionRule: MessageDistributionRule;
 	initialMsg: TelegramBot.Message;
 	mediaMessages: TelegramBot.Message[];
 	error?: Error;
@@ -29,7 +34,25 @@ export interface MediaGroup {
 	isComplete: boolean;
 }
 
+/** OpenAI rejects audio uploads above 25 MB. */
+const WHISPER_MAX_FILE_SIZE = 25 * 1024 * 1024;
+
 export const mediaGroups: MediaGroup[] = [];
+
+// Album members still being downloaded (or appended), keyed by media_group_id. Tracked
+// separately from plugin.messagesLeftCnt, which counts every message in flight and so
+// cannot tell "this album's own file is still coming" from "an unrelated message is slow".
+const pendingGroupDownloads = new Map<string, number>();
+
+export function beginMediaGroupDownload(groupId: string) {
+	pendingGroupDownloads.set(groupId, (pendingGroupDownloads.get(groupId) ?? 0) + 1);
+}
+
+export function endMediaGroupDownload(groupId: string) {
+	const left = (pendingGroupDownloads.get(groupId) ?? 1) - 1;
+	if (left <= 0) pendingGroupDownloads.delete(groupId);
+	else pendingGroupDownloads.set(groupId, left);
+}
 
 let handleMediaGroupIntervalId: number | undefined;
 
@@ -37,14 +60,33 @@ export function clearHandleMediaGroupInterval() {
 	if (handleMediaGroupIntervalId) {
 		window.clearInterval(handleMediaGroupIntervalId);
 		handleMediaGroupIntervalId = undefined;
+		debugLog("MediaGroup", "processing interval cleared");
+	}
+}
 
-		// Clean up incomplete media groups on stop
-		if (mediaGroups.length > 0) {
-			console.debug(`Clearing ${mediaGroups.length} unprocessed media groups`);
-			mediaGroups.length = 0;
-		}
+/**
+ * Writes out every album still in memory, then stops the interval. Called on unload.
+ *
+ * The files of a pending group are already downloaded into the vault at this point, but
+ * their note has not been written and the messages have not been marked processed.
+ * Dropping the groups — which is what stopping the interval used to do — lost both: the
+ * attachments stayed in the vault unreferenced, and Telegram still showed the messages as
+ * new without them ever being synced again.
+ *
+ * onunload() cannot await this. The write path only needs plugin.app.vault, which outlives
+ * the plugin, so the notes still land; the bot-side finalisation quietly skips itself once
+ * plugin.bot is gone.
+ */
+export async function flushMediaGroups(plugin: TelegramSyncPlugin) {
+	clearHandleMediaGroupInterval();
+	if (mediaGroups.length === 0) return;
 
-		console.debug("Media group processing interval cleared");
+	debugLog("MediaGroup", `flushing ${mediaGroups.length} pending group(s) before unload`);
+	try {
+		await handleMediaGroup(plugin, true);
+	} finally {
+		// Whatever could not be written must not be carried into the next load.
+		mediaGroups.length = 0;
 	}
 }
 
@@ -89,19 +131,18 @@ export function createCombinedMediaGroupContent(
 		});
 	}
 
-	displayAndLog(
-		plugin,
-		`Combined content for media group ${mediaGroup.id}: ${combinedContent.substring(0, 100)}...`,
-		0,
-	);
+	debugLog("MediaGroup", `combined content for ${mediaGroup.id}: ${combinedContent.substring(0, 100)}...`);
 
 	return combinedContent;
 }
 
 /**
  * Handles completed media groups — processes content, applies categorization, saves notes.
+ *
+ * @param force Treat every group as complete regardless of timing. Used by
+ *              flushMediaGroups() on unload, where waiting is no longer an option.
  */
-export async function handleMediaGroup(plugin: TelegramSyncPlugin, distributionRule: MessageDistributionRule) {
+export async function handleMediaGroup(plugin: TelegramSyncPlugin, force = false) {
 	if (mediaGroups.length === 0) return;
 
 	const currentTime = Date.now();
@@ -115,20 +156,31 @@ export async function handleMediaGroup(plugin: TelegramSyncPlugin, distributionR
 		const timeSinceLastMessage = currentTime - mg.lastMessageTime;
 		const isTimedOut = timeSinceLastMessage > MEDIA_GROUP_TIMEOUT_MS;
 		const allMessagesProcessed = plugin.messagesLeftCnt === 0;
+		// messagesLeftCnt counts every message in flight, not just this album's, so a slow
+		// unrelated one — a large download, a stuck AI request — would hold every album back
+		// indefinitely. Past the ceiling the album is written with what has arrived — but
+		// never while one of ITS OWN files is still downloading: finalizing then would split
+		// the album into two notes, since the late file finds no group to join. A genuinely
+		// hung own-download keeps the album pending until flushMediaGroups() on unload.
+		const ownDownloadsPending = (pendingGroupDownloads.get(mg.id) ?? 0) > 0;
+		const isStalled = timeSinceLastMessage > MEDIA_GROUP_MAX_WAIT_MS && !ownDownloadsPending;
+		if (isStalled && !allMessagesProcessed) {
+			debugLog("MediaGroup", `group ${mg.id} waited ${Math.round(timeSinceLastMessage / 1000)}s, forcing`);
+		}
 
-		if (isTimedOut && allMessagesProcessed && !mg.isComplete) {
+		if ((force || isStalled || (isTimedOut && allMessagesProcessed)) && !mg.isComplete) {
 			mg.isComplete = true;
 			completedGroups.push(mg);
-			displayAndLog(
-				plugin,
-				`✅ MEDIA GROUP: Group ${mg.id} completed with ${mg.mediaMessages.length} files, ${mg.filesPaths.length} file paths`,
-				0,
+			debugLog(
+				"MediaGroup",
+				`group ${mg.id} completed: ${mg.mediaMessages.length} files, ${mg.filesPaths.length} paths`,
 			);
 		}
 	}
 
 	// Process completed groups
 	for (const mg of completedGroups) {
+		const distributionRule = mg.distributionRule;
 		try {
 			// Prepare combined content for AI processing
 			const combinedContent = createCombinedMediaGroupContent(plugin, mg, distributionRule);
@@ -201,23 +253,17 @@ export async function appendFileToNote(
 		mediaGroup.mediaMessages.push(msg);
 		mediaGroup.lastMessageTime = Date.now();
 
-		displayAndLog(
-			plugin,
-			`➕ MEDIA GROUP: Added file to existing group ${msg.media_group_id}. Total files: ${mediaGroup.filesPaths.length}`,
-			0,
+		debugLog(
+			"MediaGroup",
+			`added ${filePath} to group ${msg.media_group_id} (${mediaGroup.filesPaths.length} files)`,
 		);
-		displayAndLog(plugin, `📁 MEDIA GROUP: File path added: ${filePath}`, 0);
 
 		// Select best message as main:
 		// 1. Message with caption
 		// 2. First message if no captions
 		if (msg.caption && msg.caption.trim()) {
 			mediaGroup.initialMsg = msg;
-			displayAndLog(
-				plugin,
-				`📝 MEDIA GROUP: Updated main message in group ${msg.media_group_id} - found message with caption`,
-				0,
-			);
+			debugLog("MediaGroup", `main message of group ${msg.media_group_id} replaced by the captioned one`);
 		} else if (!mediaGroup.initialMsg.caption) {
 			// If current main message has no caption, keep the first one
 			if (mediaGroup.mediaMessages.length === 1) {
@@ -237,15 +283,15 @@ export async function appendFileToNote(
 			const fileName = filePath.split("/").pop() || "";
 			extractedText = await tryExtractDocumentText(plugin, filePath, fileName, msg.document?.mime_type);
 			if (extractedText) {
-				displayAndLog(plugin, `📄 Extracted text from ${fileName} for path generation`, 0);
+				debugLog("Files", `extracted text from ${fileName} for path generation`);
 			}
 		} else if (contentType === "photo" && plugin.settings.aiEnabled && !msg.caption) {
 			// For images without caption, get AI description for better title generation
-			displayAndLog(plugin, `🖼️ Processing image without caption through AI Vision for title generation`, 0);
+			debugLog("AI", "image without caption — using Vision for title generation");
 			const fileContent = await applyNoteContentTemplate(plugin, distributionRule.templateFilePath, msg, []);
 			extractedText = await processWithAI(plugin, fileContent, contentType, msg);
 			if (extractedText) {
-				displayAndLog(plugin, `🖼️ Got AI description for image: ${extractedText.substring(0, 100)}...`, 0);
+				debugLog("AI", `image description: ${extractedText.substring(0, 100)}...`);
 			}
 		} else if (
 			(contentType === "voice" || contentType === "audio" || contentType === "video") &&
@@ -253,11 +299,12 @@ export async function appendFileToNote(
 		) {
 			// Transcribe audio/video/voice via Whisper
 			try {
-				const stats = await plugin.app.vault.adapter.stat(filePath);
-				if (stats && stats.size < 25 * 1024 * 1024) {
-					// 25MB limit for Whisper
+				// Vault API rather than vault.adapter: the adapter bypasses Obsidian's file
+				// cache and does not know about the abstract file tree.
+				const file = plugin.app.vault.getAbstractFileByPath(filePath);
+				if (file instanceof TFile && file.stat.size < WHISPER_MAX_FILE_SIZE) {
 					displayAndLog(plugin, `🎤 Transcribing ${contentType} via Whisper API...`, 0);
-					const fileData = await plugin.app.vault.adapter.readBinary(filePath);
+					const fileData = await plugin.app.vault.readBinary(file);
 					const { transcribeOpenAI } = await import("src/ai/openai");
 					const ext = filePath.split(".").pop() || "";
 
@@ -270,7 +317,6 @@ export async function appendFileToNote(
 					displayAndLog(plugin, `⚠️ File too large for Whisper API (>25MB), skipping transcription`, 0);
 				}
 			} catch (e: unknown) {
-				console.error("Error reading/transcribing file:", e);
 				const eMsg = e instanceof Error ? e.message : String(e);
 				displayAndLog(plugin, `❌ Error transcribing file: ${eMsg}`, 0);
 			}
@@ -286,13 +332,14 @@ export async function appendFileToNote(
 	);
 
 	let noteFolderPath = path.dirname(notePath);
-	if (noteFolderPath != ".") void createFolderIfNotExist(plugin.app.vault, noteFolderPath);
+	if (noteFolderPath != ".") await createFolderIfNotExist(plugin.app.vault, noteFolderPath);
 	else noteFolderPath = "";
 
 	if (msg.media_group_id) {
 		mediaGroup = {
 			id: msg.media_group_id,
 			notePath,
+			distributionRule,
 			initialMsg: msg,
 			mediaMessages: [msg],
 			error: error,
@@ -301,13 +348,10 @@ export async function appendFileToNote(
 			isComplete: false,
 		};
 		mediaGroups.push(mediaGroup);
-		displayAndLog(
-			plugin,
-			`🆕 MEDIA GROUP: Created new group ${msg.media_group_id} with ${mediaGroup.mediaMessages.length} message(s)`,
-			0,
+		debugLog(
+			"MediaGroup",
+			`created group ${msg.media_group_id}, first file ${filePath}, groups in memory: ${mediaGroups.length}`,
 		);
-		displayAndLog(plugin, `📁 MEDIA GROUP: First file path: ${filePath}`, 0);
-		displayAndLog(plugin, `📊 MEDIA GROUP: Total groups in memory: ${mediaGroups.length}`, 0);
 		return;
 	}
 
@@ -349,14 +393,15 @@ export async function appendFileToNote(
 /**
  * Starts the media group processing interval if not already running.
  */
-export function startMediaGroupInterval(plugin: TelegramSyncPlugin, distributionRule: MessageDistributionRule) {
-	if (!handleMediaGroupIntervalId) {
-		handleMediaGroupIntervalId = window.setInterval(
-			() => {
-				void enqueue(handleMediaGroup, plugin, distributionRule);
-			},
-			500, // Check every 500ms for faster processing
-		);
-		displayAndLog(plugin, `Started media group processing interval`, 0);
-	}
+export function startMediaGroupInterval(plugin: TelegramSyncPlugin) {
+	if (handleMediaGroupIntervalId) return;
+
+	handleMediaGroupIntervalId = window.setInterval(
+		() => {
+			// handleMediaGroup() clears this interval once the last group is flushed.
+			void enqueue(handleMediaGroup, plugin);
+		},
+		500, // Check every 500ms for faster processing
+	);
+	debugLog("MediaGroup", "processing interval started");
 }

@@ -54,7 +54,7 @@ export class UserLogInModal extends Modal {
 				b.setButtonText("Generate qr code");
 				b.onClick(() => {
 					void (async () => {
-						this.showQrCodeGeneratingState("🔵 QR code generating...\n", "text-blue");
+						this.showQrCodeGeneratingState("🔵 QR code generating...\n", "tgai-text-blue");
 						const error = await User.connect(
 							this.plugin,
 							"user",
@@ -62,13 +62,13 @@ export class UserLogInModal extends Modal {
 							this.qrCodeContainer,
 							this.password,
 						);
-						if (error) this.showQrCodeGeneratingState(`🔴 ${error}\n`, "text-error");
-						else this.showQrCodeGeneratingState("🟢 Successfully logged in!\n", "text-success");
+						if (error) this.showQrCodeGeneratingState(`🔴 ${error}\n`, "tgai-text-error");
+						else this.showQrCodeGeneratingState("🟢 Successfully logged in!\n", "tgai-text-success");
 					})();
 				});
 			});
 		this.qrCodeContainer = this.userLoginDiv.createDiv({
-			cls: "qr-code-container",
+			cls: "tgai-qr-code-container",
 		});
 	}
 
@@ -101,6 +101,6 @@ export class UserLogInModal extends Modal {
 		this.cleanQrContainer();
 		const message = this.qrCodeContainer.createEl("pre", { text });
 		if (cls) message.addClass(cls);
-		message.addClass("text-bold", "white-space-pre-wrap");
+		message.addClass("tgai-text-bold", "tgai-white-space-pre-wrap");
 	}
 }

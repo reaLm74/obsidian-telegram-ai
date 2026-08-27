@@ -1,6 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { displayAndLogError, sleep } from "src/utils/logUtils";
-import { requestUrl } from "obsidian";
+import { requestUrlWithTimeout } from "src/utils/requestWithTimeout";
 import TelegramSyncPlugin from "src/main";
 
 interface AIErrorResponse {
@@ -95,11 +95,11 @@ export async function processWithClaude(
 
 			const requestBody = {
 				model: plugin.settings.claudeModel || "claude-3-haiku-20240307",
-				max_tokens: plugin.settings.openAIMaxTokens || 2000,
+				max_tokens: plugin.settings.claudeMaxTokens || 2000,
 				messages: messages,
 			};
 
-			const response = await requestUrl({
+			const response = await requestUrlWithTimeout({
 				url: "https://api.anthropic.com/v1/messages",
 				method: "POST",
 				headers: {

@@ -3,6 +3,13 @@ import TelegramSyncPlugin from "src/main";
 import { t } from "src/locale/i18n";
 
 import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
+import { setDebugMode } from "src/utils/debugLog";
+import {
+	createDefaultMessageDistributionRule,
+	defaultTelegramFolder,
+	getBaseFolder,
+	setBaseFolder,
+} from "../messageDistribution";
 
 export class AdvancedSettingsModal extends Modal {
 	advancedSettingsDiv!: HTMLDivElement;
@@ -18,6 +25,93 @@ export class AdvancedSettingsModal extends Modal {
 		this.addProcessedMessageAction();
 		this.addMessageDelimiterSetting();
 		this.addParallelMessageProcessing();
+
+		new Setting(this.advancedSettingsDiv).setName(t("settings.advanced.content")).setHeading();
+		this.addNotesFolder();
+		this.addLocalDocumentExtraction();
+		this.addLinksFolder();
+
+		// Category tags and folders are NOT here — they live in CategorySettingsModal,
+		// opened from the categories section, where the user is already thinking about them.
+
+		// Last on purpose: a diagnostic switch, not something to meet while configuring.
+		this.addDebugMode();
+	}
+
+	addDebugMode() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.advanced.debug"))
+			.setDesc(t("settings.advanced.debug.desc"))
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.debugMode);
+				toggle.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.debugMode = value;
+						setDebugMode(value);
+						await this.plugin.saveSettings();
+					})();
+				});
+			});
+	}
+
+	/**
+	 * Base folder for everything the plugin writes.
+	 *
+	 * This replaces the old distribution-rules editor: the base rule stays at its defaults
+	 * and only the folder is exposed, while routing that depends on content is handled by
+	 * categories after AI processing.
+	 */
+	addNotesFolder() {
+		const rules = this.plugin.settings.messageDistributionRules;
+		if (rules.length == 0) rules.push(createDefaultMessageDistributionRule());
+		const baseRule = rules[0];
+
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.folder.name"))
+			.setDesc(t("settings.folder.desc"))
+			.addText((text) =>
+				text
+					.setPlaceholder(defaultTelegramFolder)
+					.setValue(getBaseFolder(baseRule))
+					.onChange((value) => {
+						void (async () => {
+							setBaseFolder(baseRule, value);
+							await this.plugin.saveSettings();
+						})();
+					}),
+			);
+	}
+
+	addLocalDocumentExtraction() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.ai.extraction"))
+			.setDesc(t("settings.ai.extraction.desc"))
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.enableLocalDocumentExtraction);
+				toggle.onChange((value) => {
+					void (async () => {
+						this.plugin.settings.enableLocalDocumentExtraction = value;
+						await this.plugin.saveSettings();
+					})();
+				});
+			});
+	}
+
+	addLinksFolder() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.categories.links"))
+			.setDesc(t("settings.categories.links.desc"))
+			.addText((text) =>
+				text
+					.setPlaceholder("Links")
+					.setValue(this.plugin.settings.linksCategoryFolder)
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.linksCategoryFolder = value.trim() || "Links";
+							await this.plugin.saveSettings();
+						})();
+					}),
+			);
 	}
 
 	addHeader() {

@@ -5,6 +5,7 @@ import { extractMediaId } from "./botFileToMessageMedia";
 import { TotalList } from "telegram/Helpers";
 import { _1h, _1sec, sleep } from "src/utils/logUtils";
 import { unixTime2Date } from "src/utils/dateUtils";
+import { debugLog } from "src/utils/debugLog";
 
 const cantFindTheMessage = "Can't find the message for connected user.";
 
@@ -33,33 +34,43 @@ let cachedMessageCouples: MessageCouple[] = [];
 let cachedMessagesRequests: MessagesRequests[] = [];
 const cachedUserCouples: UserCouple[] = [];
 
-// clean every 10 minutes message request and couples if needed
-const cachedMessagesIntervalId = window.setInterval(
-	() => {
-		const now = new Date().getTime();
+let cachedMessagesIntervalId: number | undefined;
 
-		// Keep only message couples newer than 1 hour or at minimum the last 500
-		if (cachedMessageCouples.length > 500) {
-			const recentCouples = cachedMessageCouples.filter((mc) => now - mc.creationTime.getTime() <= _1h);
-			// Keep at least 500, or all recent ones
-			if (recentCouples.length < 500 && cachedMessageCouples.length >= 500) {
-				cachedMessageCouples = cachedMessageCouples.slice(-500);
-			} else {
-				cachedMessageCouples = recentCouples;
+/**
+ * Starts the cache-cleanup timer on first use rather than at import time, so importing
+ * this module has no side effects and needs no DOM.
+ */
+function ensureCleanupInterval() {
+	if (cachedMessagesIntervalId !== undefined) return;
+	cachedMessagesIntervalId = window.setInterval(
+		() => {
+			const now = new Date().getTime();
+
+			// Keep only message couples newer than 1 hour or at minimum the last 500
+			if (cachedMessageCouples.length > 500) {
+				const recentCouples = cachedMessageCouples.filter((mc) => now - mc.creationTime.getTime() <= _1h);
+				// Keep at least 500, or all recent ones
+				if (recentCouples.length < 500 && cachedMessageCouples.length >= 500) {
+					cachedMessageCouples = cachedMessageCouples.slice(-500);
+				} else {
+					cachedMessageCouples = recentCouples;
+				}
 			}
-		}
 
-		// Clean requests similarly based on time (msgDate is unix timestamp in sec, _1h is ms)
-		if (cachedMessagesRequests.length > 200) {
-			const oneHourAgoSec = (now - _1h) / 1000;
-			cachedMessagesRequests = cachedMessagesRequests.filter((rq) => rq.msgDate >= oneHourAgoSec);
-		}
-	},
-	10 * 60 * 1000,
-); // Check every 10 mins
+			// Clean requests similarly based on time (msgDate is unix timestamp in sec, _1h is ms)
+			if (cachedMessagesRequests.length > 200) {
+				const oneHourAgoSec = (now - _1h) / 1000;
+				cachedMessagesRequests = cachedMessagesRequests.filter((rq) => rq.msgDate >= oneHourAgoSec);
+			}
+		},
+		10 * 60 * 1000,
+	); // Check every 10 mins
+}
 
 export function clearCachedMessagesInterval() {
+	if (cachedMessagesIntervalId === undefined) return;
 	window.clearInterval(cachedMessagesIntervalId);
+	cachedMessagesIntervalId = undefined;
 }
 
 /** Minimal shape of a GramJS message media object that exposes document/photo IDs */
@@ -95,7 +106,10 @@ export async function getInputPeer(
 	const dialog = dialogs.find((d) => d.id?.toJSNumber() == chatId);
 	if (!dialog && limit <= 20) return await getInputPeer(client, user, botUser, botMsg, limit + 10);
 	else if (!dialog || !dialog.inputEntity) {
-		console.debug(`Telegram Sync => Dialogs:\n${dialogs.map((d) => d.name ?? d.id?.toString() ?? "").join(", ")}`);
+		debugLog(
+			"MTProto",
+			`Telegram Sync => Dialogs:\n${dialogs.map((d) => d.name ?? d.id?.toString() ?? "").join(", ")}`,
+		);
 		throw new Error(
 			`User ${user.username || user.firstName || user.id.toString()} does not have chat with ${
 				botMsg.chat.username || botMsg.chat.title || botMsg.chat.first_name || botMsg.chat.id
@@ -136,6 +150,7 @@ export async function getMessage(
 		messages = messages.filter((m) => m.fromId || m.peerId instanceof Api.PeerChannel) || [];
 		messagesRequests.push({ botChatId: botMsg.chat.id, msgDate: botMsg.date, messages, limit });
 		cachedMessagesRequests.push(messagesRequests[0]);
+		ensureCleanupInterval();
 	}
 
 	if (!botMsg.text && !mediaId) {
@@ -172,6 +187,7 @@ export async function getMessage(
 		userMsg: userMsg,
 	};
 	cachedMessageCouples.push(messageCouple);
+	ensureCleanupInterval();
 	return userMsg;
 }
 

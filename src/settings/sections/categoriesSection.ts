@@ -1,7 +1,26 @@
 import TelegramSyncPlugin from "src/main";
 import { App, Setting } from "obsidian";
 import { CategoryManagerModal } from "../modals/CategoryManagerModal";
+import { CategorySettingsModal } from "../modals/CategorySettings";
 import { t } from "src/locale/i18n";
+
+/**
+ * Whether notes get sorted into categories.
+ *
+ * Categorisation is an AI feature end to end: the classifier asks the model which
+ * category a note belongs to, and category keywords are a hint inside that prompt rather
+ * than a matcher run against message content. With AI off there is nothing to decide, so
+ * the two underlying flags move together as one switch instead of two toggles that read
+ * as duplicates.
+ */
+export function isCategorizationEnabled(plugin: TelegramSyncPlugin): boolean {
+	return plugin.settings.categoriesEnabled && plugin.settings.aiCategorizationEnabled;
+}
+
+export function setCategorizationEnabled(plugin: TelegramSyncPlugin, enabled: boolean): void {
+	plugin.settings.categoriesEnabled = enabled;
+	plugin.settings.aiCategorizationEnabled = enabled;
+}
 
 /**
  * Categories settings section UI
@@ -12,99 +31,32 @@ export function addCategoriesSettings(
 	plugin: TelegramSyncPlugin,
 	update: () => void,
 ): void {
-	// Main toggle
-	new Setting(containerEl)
+	const enabled = isCategorizationEnabled(plugin);
+	const aiAvailable = plugin.settings.aiEnabled;
+
+	const setting = new Setting(containerEl)
 		.setName(t("settings.categories.enable"))
 		.setDesc(t("settings.categories.enable.desc"))
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.categoriesEnabled).onChange((value) => {
+		.addToggle((toggle) => {
+			toggle.setValue(enabled && aiAvailable);
+			// Classification runs through the same provider as note processing.
+			toggle.setDisabled(!aiAvailable);
+			toggle.onChange((value) => {
 				void (async () => {
-					plugin.settings.categoriesEnabled = value;
+					setCategorizationEnabled(plugin, value);
 					await plugin.saveSettings();
-					update(); // Redraw settings
+					update();
 				})();
-			}),
-		);
-
-	// Links folder (URL-only messages)
-	new Setting(containerEl)
-		.setName(t("settings.categories.links"))
-		.setDesc(t("settings.categories.links.desc"))
-		.addText((text) =>
-			text
-				.setPlaceholder("Links")
-				.setValue(plugin.settings.linksCategoryFolder)
-				.onChange((value) => {
-					void (async () => {
-						plugin.settings.linksCategoryFolder = value.trim() || "Links";
-						await plugin.saveSettings();
-					})();
-				}),
-		);
-
-	if (!plugin.settings.categoriesEnabled) {
-		return;
-	}
-
-	// AI categorization (only if main AI processing is enabled)
-	if (plugin.settings.aiEnabled) {
-		new Setting(containerEl)
-			.setName(t("settings.categories.ai"))
-			.setDesc(t("settings.categories.ai.desc"))
-			.addToggle((toggle) =>
-				toggle.setValue(plugin.settings.aiCategorizationEnabled).onChange((value) => {
-					void (async () => {
-						plugin.settings.aiCategorizationEnabled = value;
-						await plugin.saveSettings();
-						update();
-					})();
-				}),
-			);
-	} else {
-		// Show information that AI processing needs to be enabled
-		new Setting(containerEl)
-			.setName(t("settings.categories.ai"))
-			.setDesc(t("settings.categories.ai.requiresAI"))
-			.addText((text) => {
-				text.setValue(t("settings.categories.ai.disabled"));
-				text.inputEl.disabled = true;
-				text.inputEl.addClass("opacity-50");
 			});
+		});
+
+	if (!aiAvailable) {
+		setting.descEl.createDiv({ text: t("settings.categories.enable.requiresAI"), cls: "tgai-api-note" });
 	}
 
-	// Display settings
-	new Setting(containerEl)
-		.setName(t("settings.categories.tags"))
-		.setDesc(t("settings.categories.tags.desc"))
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.categoryTagsEnabled).onChange((value) => {
-				void (async () => {
-					plugin.settings.categoryTagsEnabled = value;
-					await plugin.saveSettings();
-				})();
-			}),
-		);
+	if (!enabled || !aiAvailable) return;
 
-	new Setting(containerEl)
-		.setName(t("settings.categories.folders"))
-		.setDesc(t("settings.categories.folders.desc"))
-		.addToggle((toggle) =>
-			toggle.setValue(plugin.settings.categoryFoldersEnabled).onChange((value) => {
-				void (async () => {
-					plugin.settings.categoryFoldersEnabled = value;
-					await plugin.saveSettings();
-				})();
-			}),
-		);
-
-	// Default category
-	const defaultCategorySetting = new Setting(containerEl)
-		.setName(t("settings.categories.default"))
-		.setDesc(t("settings.categories.default.desc"));
-
-	addDefaultCategoryDropdown(defaultCategorySetting, plugin);
-
-	// Category management
+	// Category management — the manager also owns the default-category choice.
 	new Setting(containerEl)
 		.setName(t("settings.categories.manage"))
 		.setDesc(t("settings.categories.manage.desc"))
@@ -119,21 +71,18 @@ export function addCategoriesSettings(
 					categoryManagerModal.open();
 				});
 		});
-}
 
-function addDefaultCategoryDropdown(setting: Setting, plugin: TelegramSyncPlugin): void {
-	setting.addDropdown((dropdown) => {
-		dropdown.addOption("", t("settings.categories.default.none"));
-
-		for (const category of plugin.settings.noteCategories) {
-			dropdown.addOption(category.id, category.name);
-		}
-
-		dropdown.setValue(plugin.settings.defaultCategoryId || "").onChange((value) => {
-			void (async () => {
-				plugin.settings.defaultCategoryId = value || undefined;
-				await plugin.saveSettings();
-			})();
+	// Past the early return above, so it only shows once categorisation is actually on —
+	// the options behind it do nothing otherwise.
+	new Setting(containerEl)
+		.setName(t("settings.categories.advanced"))
+		.setDesc(t("settings.categories.advanced.desc"))
+		.addButton((button) => {
+			button
+				.setButtonText(t("settings.advanced.button"))
+				.setCta()
+				.onClick(() => {
+					new CategorySettingsModal(plugin).open();
+				});
 		});
-	});
 }
