@@ -9,12 +9,12 @@ describe("stripMarkup", () => {
 	});
 
 	it("matches end tags browsers accept with trailing space or attributes", () => {
-		expect(stripMarkup("a<script>x()</script >b")).toBe("ab");
-		expect(stripMarkup("a<SCRIPT>x()</script\n foo>b")).toBe("ab");
-		expect(stripMarkup("a<style>p{}</style >b")).toBe("ab");
+		expect(stripMarkup("a<script>x()</script >b")).toBe("a b");
+		expect(stripMarkup("a<SCRIPT>x()</script\n foo>b")).toBe("a b");
+		expect(stripMarkup("a<style>p{}</style >b")).toBe("a b");
 	});
 
-	it("does not let a removed block reassemble a tag from its leftovers", () => {
+	it("does not splice the leftovers of a removed block into a new tag", () => {
 		const text = stripMarkup("<scr<script>x</script>ipt>alert(1)</script>");
 		expect(text).not.toMatch(/<\s*script/i);
 		expect(text).not.toContain("<");

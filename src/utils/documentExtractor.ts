@@ -446,24 +446,19 @@ function extractCsvText(content: string, delimiter: string): DocumentExtractionR
 }
 
 /**
- * Drops <script>/<style> blocks and every remaining tag, leaving text. Tags become spaces
- * so adjacent words stay apart; callers normalise whitespace.
+ * Drops <script>/<style> blocks and every remaining tag, leaving text; callers normalise
+ * whitespace.
  *
- * Repeats until nothing changes: one pass over `<scr<script></script>ipt>` removes the
- * inner block and reassembles an outer `<script>` from the leftovers. End tags accept
- * anything up to `>` because browsers do (`</script >`, `</script foo>`).
+ * Everything removed becomes a space, never "": deleting `<script>…</script>` out of
+ * `<scr<script></script>ipt>` would splice the leftovers into a fresh `<script>`, while a
+ * space keeps them apart. End tags accept anything up to `>` because browsers do
+ * (`</script >`, `</script foo>`).
  */
 export function stripMarkup(markup: string): string {
-	let text = markup;
-	let previous: string;
-	do {
-		previous = text;
-		text = text
-			.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "")
-			.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "")
-			.replace(/<[^>]+>/g, " ");
-	} while (text !== previous);
-	return text;
+	return markup
+		.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ")
+		.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, " ")
+		.replace(/<[^>]+>/g, " ");
 }
 
 /**
