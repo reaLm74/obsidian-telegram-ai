@@ -159,4 +159,4 @@ For security-related inquiries:
 ---
 
 **Last Updated**: September 2026  
-**Version**: 0.3.0 (pre-release; the 0.3–0.7 stage numbers used across the docs are roadmap stages, all included in this build)
+**Version**: 0.3.0 (the 0.4–0.7 numbers used across the docs are development stage names, all shipped in 0.3.0)
