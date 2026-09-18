@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.1](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.3.0...0.3.1) (2026-09-18)
+
+
+### Bug Fixes
+
+* bump the production-dependencies group across 1 directory with 3 updates ([71926ac](https://github.com/reaLm74/obsidian-telegram-ai/commit/71926ac0d8f2d1ce1503a554b5fcb8c862ec6687))
+* load on iOS and Android ([a241dd3](https://github.com/reaLm74/obsidian-telegram-ai/commit/a241dd3f2e45760d654e86ef08953907b3da139b))
+
 ## [0.3.0](https://github.com/reaLm74/obsidian-telegram-ai/compare/0.2.1...0.3.0) (2026-09-18)
 
 
