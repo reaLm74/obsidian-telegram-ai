@@ -1,5 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { encrypt, decrypt, canDecrypt, padOrTrim } from "./crypto256";
+
+// Pure-JS scrypt takes ~0.2 s per derivation alone, but on a loaded CI runner running the
+// whole suite in parallel a wrong-password check has taken over 5 s — the default timeout.
+vi.setConfig({ testTimeout: 30_000 });
 
 describe("padOrTrim", () => {
 	it("pads short string with zeros", () => {
