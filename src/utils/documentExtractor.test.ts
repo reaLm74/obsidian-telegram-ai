@@ -1,6 +1,25 @@
 import { describe, it, expect } from "vitest";
 import JSZip from "jszip";
-import { canExtractTextLocally, extractTextFromDocument } from "./documentExtractor";
+import { canExtractTextLocally, extractTextFromDocument, stripMarkup } from "./documentExtractor";
+
+describe("stripMarkup", () => {
+	it("drops script and style blocks and every tag", () => {
+		const text = stripMarkup("<p>Hi <b>there</b></p><script>alert(1)</script><style>p{}</style>end");
+		expect(text.replace(/\s+/g, " ").trim()).toBe("Hi there end");
+	});
+
+	it("matches end tags browsers accept with trailing space or attributes", () => {
+		expect(stripMarkup("a<script>x()</script >b")).toBe("a b");
+		expect(stripMarkup("a<SCRIPT>x()</script\n foo>b")).toBe("a b");
+		expect(stripMarkup("a<style>p{}</style >b")).toBe("a b");
+	});
+
+	it("does not splice the leftovers of a removed block into a new tag", () => {
+		const text = stripMarkup("<scr<script>x</script>ipt>alert(1)</script>");
+		expect(text).not.toMatch(/<\s*script/i);
+		expect(text).not.toContain("<");
+	});
+});
 
 const enc = (s: string) => new TextEncoder().encode(s);
 

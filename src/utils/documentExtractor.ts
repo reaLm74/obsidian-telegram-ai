@@ -446,16 +446,26 @@ function extractCsvText(content: string, delimiter: string): DocumentExtractionR
 }
 
 /**
+ * Drops <script>/<style> blocks and every remaining tag, leaving text; callers normalise
+ * whitespace.
+ *
+ * Everything removed becomes a space, never "": deleting `<script>…</script>` out of
+ * `<scr<script></script>ipt>` would splice the leftovers into a fresh `<script>`, while a
+ * space keeps them apart. End tags accept anything up to `>` because browsers do
+ * (`</script >`, `</script foo>`).
+ */
+export function stripMarkup(markup: string): string {
+	return markup
+		.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, " ")
+		.replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, " ")
+		.replace(/<[^>]+>/g, " ");
+}
+
+/**
  * XML/HTML file processing
  */
 function extractXmlHtmlText(content: string): DocumentExtractionResult {
-	// Remove HTML/XML tags and extract text content
-	const textContent = content
-		.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "") // Remove scripts
-		.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "") // Remove styles
-		.replace(/<[^>]+>/g, " ") // Remove all tags
-		.replace(/\s+/g, " ") // Normalize spaces
-		.trim();
+	const textContent = stripMarkup(content).replace(/\s+/g, " ").trim();
 
 	return {
 		text: `HTML/XML Document Content:\n\n${textContent}`,

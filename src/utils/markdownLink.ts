@@ -24,9 +24,14 @@ export function isSafeLinkUrl(url: string): boolean {
 	return ALLOWED_SCHEMES.includes(scheme[1].toLowerCase() + ":");
 }
 
-/** Escapes the characters that would let a value break out of `[label](target)`. */
+/**
+ * Escapes the characters that would let a value break out of `[label](target)`.
+ *
+ * The backslash must be escaped too: left alone, `\]` in the label becomes `\\]` — an
+ * escaped backslash followed by a live `]` that closes the label early.
+ */
 export function escapeLinkLabel(label: string): string {
-	return label.replace(/([[\]])/g, "\\$1");
+	return label.replace(/([\\[\]])/g, "\\$1");
 }
 
 /**
