@@ -14,7 +14,7 @@
 
 import JSZip from "jszip";
 import { debugLog } from "./debugLog";
-import { DocumentExtractionResult, MAX_EXTRACTED_CHARS, TRUNCATION_NOTICE } from "./documentExtractor";
+import { DocumentExtractionResult, MAX_EXTRACTED_CHARS, stripMarkup, TRUNCATION_NOTICE } from "./documentExtractor";
 
 /** Decodes the five XML entities office XML actually uses. */
 function decodeXmlEntities(value: string): string {
@@ -36,12 +36,7 @@ function collectTagText(xml: string, tagName: string): string[] {
 
 /** Strips every tag and collapses whitespace — for XHTML chapter content. */
 function stripTags(xml: string): string {
-	return decodeXmlEntities(
-		xml
-			.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-			.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-			.replace(/<[^>]+>/g, " "),
-	)
+	return decodeXmlEntities(stripMarkup(xml))
 		.replace(/[ \t]+/g, " ")
 		.replace(/\s*\n\s*/g, "\n")
 		.trim();

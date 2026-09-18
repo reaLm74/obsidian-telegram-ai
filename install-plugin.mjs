@@ -25,9 +25,8 @@ filesToCopy.forEach((file) => {
 
 // install hot-reload plugin to automatically reload this plugin
 const hotReloadFilePath = path.join(thisPluginFolder, ".hotreload");
-if (!fs.existsSync(hotReloadFilePath)) {
-	fs.writeFileSync(hotReloadFilePath, "");
-}
+// Append mode creates the marker when missing and leaves an existing one alone.
+fs.writeFileSync(hotReloadFilePath, "", { flag: "a" });
 const hotReloadFolder = path.join(pluginsFolder, "hot-reload");
 
 if (!fs.existsSync(hotReloadFolder)) {

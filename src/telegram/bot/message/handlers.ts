@@ -211,7 +211,7 @@ export async function handleMessage(plugin: TelegramSyncPlugin, msg: TelegramBot
 
 	addOriginalUserMsg(msg);
 
-	let msgText = (msg.text || msg.caption || fileInfo).replace("\n", "..");
+	let msgText = (msg.text || msg.caption || fileInfo).replace(/\n/g, "..");
 
 	// userMsg is a custom property attached at runtime to forwarded messages processed by the user client
 	if ((msg as TelegramMessageExtended).userMsg) {
