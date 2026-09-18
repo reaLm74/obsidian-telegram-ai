@@ -16,13 +16,11 @@ import { Modal, App, Setting, Notice, setIcon } from "obsidian";
 import TelegramSyncPlugin from "../main";
 import { DEFAULT_SETTINGS } from "./Settings";
 import { PRESETS, PresetConfig } from "../settings/presets";
-import {
-	defaultTelegramFolder,
-	defaultNoteNameTemplate,
-	defaultFileNameTemplate,
-} from "../settings/messageDistribution";
+import { defaultTelegramFolder, getBaseFolder, setBaseFolder } from "../settings/messageDistribution";
 import { t } from "../locale/i18n";
 import { PinCodeModal } from "./modals/PinCode";
+import { isPinEstablished, SecretsLockedError } from "../utils/secretStore";
+import { redactSecrets } from "../utils/secretRedaction";
 import { debugLog } from "src/utils/debugLog";
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
@@ -45,20 +43,30 @@ export class SetupWizardModal extends Modal {
 	}
 
 	async onOpen(): Promise<void> {
+		this.modalEl.addClass("tgai-modal");
 		this.modalEl.addClass("tgai-setup-wizard-modal");
 		// Pre-fill from existing settings, decrypting if needed
 		if (this.plugin.settings.botToken) {
 			try {
 				this.botToken = await this.plugin.getBotToken();
-			} catch {
+			} catch (error) {
 				// Decryption failed (pin cancelled / wrong pin). Pre-filling with the stored
 				// ciphertext would let Finish re-encrypt it, destroying the token for good —
 				// leave the field empty and make the user paste the real token instead.
 				this.botToken = "";
-				new Notice(t("wizard.tokenDecryptFailed"));
+				// A dismissed pin prompt is not a damaged token: say it is locked and how to
+				// open it, instead of sending the user to replace a token that is intact.
+				new Notice(
+					error instanceof SecretsLockedError ? t("wizard.tokenLocked") : t("wizard.tokenDecryptFailed"),
+				);
 			}
 		}
 		this.allowedChats = this.plugin.settings.allowedChats.join(", ");
+		// Prefilled from the vault, not left at the default: on a re-run the field used to
+		// show "Telegram" whatever the notes folder actually was, and finishing then moved
+		// every future note there.
+		const rule = this.plugin.settings.messageDistributionRules?.[0];
+		this.notesFolder = (rule ? getBaseFolder(rule) : "") || defaultTelegramFolder;
 		this.renderStep();
 	}
 
@@ -135,15 +143,18 @@ export class SetupWizardModal extends Modal {
 
 		const tokenSetting = new Setting(container).setName(t("wizard.token.name")).setDesc(t("wizard.token.desc"));
 
-		tokenSetting.addText((text) =>
-			text
-				.setPlaceholder("123456:abc-def1234...")
+		tokenSetting.addText((text) => {
+			// Masked like every other secret field in the plugin. Onboarding is exactly when
+			// a screen is most likely to be shared or screenshotted, and the bot token is the
+			// one credential that grants full control of the bot.
+			text.inputEl.type = "password";
+			text.setPlaceholder("123456:abc-def1234...")
 				.setValue(this.botToken)
 				.onChange((value) => {
 					this.botToken = value.trim();
 					statusEl.empty();
-				}),
-		);
+				});
+		});
 
 		const statusEl = container.createDiv({ cls: "tgai-wizard-validation-status" });
 
@@ -165,7 +176,7 @@ export class SetupWizardModal extends Modal {
 				validateBtn.setAttr("disabled", "true");
 
 				try {
-					const TelegramBot = (await import("node-telegram-bot-api")).default;
+					const TelegramBot = (await import("src/telegram/botApi")).default;
 					const testBot = new TelegramBot(this.botToken);
 					const me = await testBot.getMe();
 
@@ -173,12 +184,16 @@ export class SetupWizardModal extends Modal {
 					const successEl = statusEl.createDiv({ cls: "tgai-wizard-status-success" });
 					setIcon(successEl.createSpan(), "check-circle");
 					successEl.createSpan({
-						text: ` Connected to @${me.username} (${me.first_name})`,
+						text: ` ${t("wizard.token.connected", { username: me.username ?? "?", name: me.first_name })}`,
 					});
 				} catch (e: unknown) {
 					statusEl.empty();
 					statusEl.createSpan({
-						text: t("wizard.token.invalid", { error: e instanceof Error ? e.message : "Unknown error" }),
+						// Redacted like every other error surface: this span is exactly what a
+						// user screenshots when asking why their token does not validate.
+						text: t("wizard.token.invalid", {
+							error: redactSecrets(e instanceof Error ? e.message : t("common.unknownError")),
+						}),
 						cls: "tgai-wizard-status-error",
 					});
 				} finally {
@@ -205,7 +220,7 @@ export class SetupWizardModal extends Modal {
 			.setDesc(t("wizard.access.desc"))
 			.addTextArea((text) =>
 				text
-					.setPlaceholder("Example: username, 1227636")
+					.setPlaceholder(t("settings.bot.allowedChats.placeholder"))
 					.setValue(this.allowedChats)
 					.onChange((value) => {
 						this.allowedChats = value;
@@ -238,16 +253,22 @@ export class SetupWizardModal extends Modal {
 					.setValue(this.notesFolder)
 					.onChange((value) => {
 						this.notesFolder = value.trim() || defaultTelegramFolder;
+						renderPreviews();
 					}),
 			);
 
 		const infoEl = container.createDiv({ cls: "tgai-wizard-info" });
-		infoEl.createEl("p", {
-			text: `📁 Notes: ${this.notesFolder}/note-name.md`,
-		});
-		infoEl.createEl("p", {
-			text: `📎 Files: ${this.notesFolder}/photos/, ${this.notesFolder}/documents/, etc.`,
-		});
+		// Re-rendered per keystroke; a full renderStep() here would steal the input focus.
+		const renderPreviews = () => {
+			infoEl.empty();
+			infoEl.createEl("p", {
+				text: t("wizard.folder.notesPreview", { folder: this.notesFolder }),
+			});
+			infoEl.createEl("p", {
+				text: t("wizard.folder.filesPreview", { folder: this.notesFolder }),
+			});
+		};
+		renderPreviews();
 	}
 
 	// ─── Step 4: AI Setup ────────────────────────────────────────────────────
@@ -273,17 +294,17 @@ export class SetupWizardModal extends Modal {
 		new Setting(keyContainer)
 			.setName(t("wizard.ai.key"))
 			.setDesc(t("wizard.ai.key.desc"))
-			.addText((text) =>
-				text
-					.setPlaceholder("Sk-...")
+			.addText((text) => {
+				text.inputEl.type = "password";
+				text.setPlaceholder("sk-...")
 					.setValue(this.openAIKey)
 					.onChange((value) => {
 						this.openAIKey = value.trim();
-					}),
-			);
+					});
+			});
 
 		const linkEl = keyContainer.createEl("a", {
-			text: "Get an API key →",
+			text: t("wizard.ai.getKey"),
 			href: "https://platform.openai.com/api-keys",
 		});
 		linkEl.setAttr("target", "_blank");
@@ -291,6 +312,28 @@ export class SetupWizardModal extends Modal {
 	}
 
 	// ─── Step 5: Preset ──────────────────────────────────────────────────────
+
+	/**
+	 * The preset's display fields in the interface language.
+	 *
+	 * The card texts live in the locale files (wizard.preset.<id>.*), keyed by preset id;
+	 * the preset's SETTINGS — prompts included — stay as authored, because prompts are
+	 * instructions to a model, not UI. A missing key falls back to the English source
+	 * (t() returns the key itself then), so an unlocalized future preset still renders.
+	 */
+	private localizePreset(preset: PresetConfig): PresetConfig {
+		const keyBase = `wizard.preset.${preset.id}`;
+		const name = t(`${keyBase}.name`);
+		const description = t(`${keyBase}.desc`);
+		const features = t(`${keyBase}.features`);
+		return {
+			...preset,
+			name: name === `${keyBase}.name` ? preset.name : name,
+			description: description === `${keyBase}.desc` ? preset.description : description,
+			features:
+				features === `${keyBase}.features` ? preset.features : features.split(",").map((item) => item.trim()),
+		};
+	}
 
 	private renderStepPreset(container: HTMLElement): void {
 		container.createEl("p", {
@@ -302,16 +345,20 @@ export class SetupWizardModal extends Modal {
 		// Add "No preset" option
 		this.renderPresetCard(presetsGrid, {
 			id: "none",
-			name: "Custom Setup",
+			name: t("wizard.preset.custom.name"),
 			icon: "⚙️",
-			description: "Start with default settings and configure manually",
-			features: ["Default prompts", "All content types enabled", "Manual configuration"],
+			description: t("wizard.preset.custom.desc"),
+			// One comma-separated string per language rather than N keys: the list is
+			// display-only and its length may differ between languages.
+			features: t("wizard.preset.custom.features")
+				.split(",")
+				.map((feature) => feature.trim()),
 			folder: this.notesFolder,
 			settings: {},
 		});
 
 		for (const preset of PRESETS) {
-			this.renderPresetCard(presetsGrid, preset);
+			this.renderPresetCard(presetsGrid, this.localizePreset(preset));
 		}
 	}
 
@@ -361,7 +408,7 @@ export class SetupWizardModal extends Modal {
 
 			nextBtn.addEventListener("click", () => {
 				if (this.currentStep === 1 && !this.botToken) {
-					new Notice("Please enter a bot token before continuing.");
+					new Notice(t("wizard.token.empty"));
 					return;
 				}
 				this.currentStep = (this.currentStep + 1) as WizardStep;
@@ -374,7 +421,12 @@ export class SetupWizardModal extends Modal {
 			});
 
 			finishBtn.addEventListener("click", () => {
-				void this.applySettings();
+				// applySettings can sit at the pin prompt for a while — a second click
+				// would open a second prompt over the first.
+				finishBtn.disabled = true;
+				void this.applySettings().finally(() => {
+					finishBtn.disabled = false;
+				});
 			});
 		}
 	}
@@ -394,15 +446,17 @@ export class SetupWizardModal extends Modal {
 
 		// Step 3: Folder
 		const folder = this.notesFolder || defaultTelegramFolder;
+		// setBaseFolder swaps only the leading folder. Rebuilding the whole template here
+		// threw away note and file NAME templates the user had written — a re-run of the
+		// wizard to change one setting silently reset how every note is named.
 		if (settings.messageDistributionRules && settings.messageDistributionRules.length > 0) {
-			settings.messageDistributionRules[0].notePathTemplate = `${folder}/${defaultNoteNameTemplate}`;
-			settings.messageDistributionRules[0].filePathTemplate = `${folder}/{{file:type}}s/${defaultFileNameTemplate}`;
+			setBaseFolder(settings.messageDistributionRules[0], folder);
 		}
 
 		// Step 4: AI
 		settings.aiEnabled = this.aiEnabled;
 		if (this.openAIKey) {
-			// Held raw here; encrypted below, once the pin code (if any) is known.
+			// Held raw here; sealed below, once the pin code (if any) is known.
 			settings.openAIApiKey = this.openAIKey;
 			settings.openAIApiKeyEncrypted = false;
 			settings.aiProvider = "openai";
@@ -424,10 +478,8 @@ export class SetupWizardModal extends Modal {
 				}
 				// Also update folder to preset folder if user didn't customize
 				if (this.notesFolder === defaultTelegramFolder) {
-					const presetFolder = preset.folder;
 					if (settings.messageDistributionRules && settings.messageDistributionRules.length > 0) {
-						settings.messageDistributionRules[0].notePathTemplate = `${presetFolder}/${defaultNoteNameTemplate}`;
-						settings.messageDistributionRules[0].filePathTemplate = `${presetFolder}/{{file:type}}s/${defaultFileNameTemplate}`;
+						setBaseFolder(settings.messageDistributionRules[0], preset.folder);
 					}
 				}
 			}
@@ -440,7 +492,11 @@ export class SetupWizardModal extends Modal {
 		// first: encrypting with an unset pin would produce a value that getBotToken() —
 		// which decrypts WITH the pin — could never read back.
 		if (settings.encryptionByPinCode && !this.plugin.pinCode) {
-			const pinCodeModal = new PinCodeModal(this.plugin, false);
+			// VERIFY against the existing pin when one already protects something (a
+			// verifier or sealed values exist) — the unverified variant here accepted any
+			// typo and sealed the just-typed token under it, unrecoverably, while the old
+			// secrets stayed under the real pin. Only a genuinely fresh pin skips the check.
+			const pinCodeModal = new PinCodeModal(this.plugin, isPinEstablished(this.plugin));
 			await new Promise((resolve) => {
 				pinCodeModal.onDone = () => resolve(undefined);
 				pinCodeModal.open();
@@ -449,14 +505,23 @@ export class SetupWizardModal extends Modal {
 			// Esc/backdrop must never become the encryption key (PinCodeModal clears it in
 			// onClose, but the belt-and-braces check keeps this path safe regardless).
 			if (!pinCodeModal.saved || !this.plugin.pinCode) {
-				// No pin entered — fall back to the unprotected default rather than
-				// locking the user out of their own token.
-				settings.encryptionByPinCode = false;
-				new Notice(t("wizard.pinSkipped"));
+				if (isPinEstablished(this.plugin)) {
+					// Secrets sealed under the real pin exist — turning encryption off here
+					// would strand them. Keep it on; the new values stay pending in plain
+					// text and getBotToken() seals them at the next unlock.
+					new Notice(t("wizard.pinDeferred"));
+				} else {
+					// No pin entered — fall back to the unprotected default rather than
+					// locking the user out of their own token.
+					settings.encryptionByPinCode = false;
+					new Notice(t("wizard.pinSkipped"));
+				}
 			}
 		}
-		this.plugin.botTokenEncrypt();
-		this.plugin.openAIApiKeyEncrypt();
+		// Seals the token, the AI key and anything else still in plain text under whichever
+		// key applies — one call rather than one per secret, so a secret added later cannot
+		// be forgotten here.
+		this.plugin.encryptSecrets();
 
 		await this.plugin.saveSettings();
 

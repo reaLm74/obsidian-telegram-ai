@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import JSZip from "jszip";
 import { canExtractTextLocally, extractTextFromDocument } from "./documentExtractor";
 
 const enc = (s: string) => new TextEncoder().encode(s);
@@ -66,6 +67,51 @@ describe("extractTextFromDocument — PDF", () => {
 	});
 });
 
+/** A minimal .docx: the three parts mammoth needs to find and read the document body. */
+async function makeDocx(bodyXml: string): Promise<Uint8Array> {
+	const zip = new JSZip();
+	zip.file(
+		"[Content_Types].xml",
+		`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+			`<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+			`<Default Extension="xml" ContentType="application/xml"/>` +
+			`<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+	);
+	zip.file(
+		"_rels/.rels",
+		`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+			`<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+	);
+	zip.file(
+		"word/document.xml",
+		`<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}</w:body></w:document>`,
+	);
+	return zip.generateAsync({ type: "uint8array" });
+}
+
+describe("extractTextFromDocument — DOCX", () => {
+	// Regression: an "@xmldom/xmldom": "^0.9" override replaced the ^0.8 mammoth depends on.
+	// 0.9 requires a mimeType and rejects the errorHandler option mammoth passes, so every
+	// DOCX failed with "Failed to parse DOCX" while the error itself only reached the debug log.
+	it("extracts text from a real DOCX", async () => {
+		const docx = await makeDocx(
+			`<w:p><w:r><w:t>Привет, docx</w:t></w:r></w:p><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Second paragraph</w:t></w:r></w:p>`,
+		);
+		const result = await extractTextFromDocument(docx, "doc.docx");
+		expect(result.error).toBeUndefined();
+		expect(result.success).toBe(true);
+		expect(result.text).toContain("Привет, docx");
+		expect(result.text).toContain("Second paragraph");
+		expect(result.metadata?.format).toBe("docx");
+	});
+
+	it("reports a readable error for a corrupt DOCX instead of throwing", async () => {
+		const result = await extractTextFromDocument(enc("not a docx"), "broken.docx");
+		expect(result.success).toBe(false);
+		expect(result.error).toMatch(/Failed to parse DOCX/);
+	});
+});
+
 describe("extractTextFromDocument — text formats", () => {
 	it("reads plain text", async () => {
 		const result = await extractTextFromDocument(enc("hello world"), "a.txt");
@@ -101,5 +147,22 @@ describe("extractTextFromDocument — text formats", () => {
 	it("counts no words in empty content", async () => {
 		const result = await extractTextFromDocument(enc("   "), "a.unknown");
 		expect(result.metadata?.wordCount).toBe(0);
+	});
+
+	// The ZIP formats capped themselves; the plain-text, PDF and DOCX branches did not, so
+	// a big log file or a scanned PDF produced an unbounded string for the note and prompt.
+	it("caps oversized extractions and says so", async () => {
+		const huge = "word ".repeat(600_000); // 3 000 000 characters
+		const result = await extractTextFromDocument(enc(huge), "a.txt");
+
+		expect(result.success).toBe(true);
+		expect(result.text.length).toBeLessThan(huge.length);
+		expect(result.text).toContain("content truncated");
+	});
+
+	it("leaves content under the ceiling untouched", async () => {
+		const small = "just a line of text";
+		const result = await extractTextFromDocument(enc(small), "a.txt");
+		expect(result.text).toBe(small);
 	});
 });

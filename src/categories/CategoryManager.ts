@@ -1,4 +1,4 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import TelegramSyncPlugin from "src/main";
 import { NoteCategory, CategoryMatch, DEFAULT_CATEGORIES } from "./types";
 import { AIClassifier } from "./AIClassifier";
@@ -12,7 +12,7 @@ export class CategoryManager {
 
 	constructor(plugin: TelegramSyncPlugin) {
 		this.plugin = plugin;
-		this.aiClassifier = new AIClassifier(plugin);
+		this.aiClassifier = new AIClassifier();
 	}
 
 	async init() {
@@ -154,7 +154,7 @@ export class CategoryManager {
 	/**
 	 * Main content categorization function
 	 */
-	async categorizeContent(content: string, msg?: TelegramBot.Message): Promise<NoteCategory | null> {
+	async categorizeContent(content: string, msg: TelegramBot.Message): Promise<NoteCategory | null> {
 		if (!this.plugin.settings.categoriesEnabled) {
 			return null;
 		}
@@ -164,16 +164,21 @@ export class CategoryManager {
 			// classification prompt, not a matcher run against message content. With AI
 			// classification off there is nothing to decide, so the note keeps the base
 			// distribution path and only the default category (if set) applies.
-			if (this.plugin.settings.aiCategorizationEnabled) {
-				// With a message in hand the answer comes from the per-message metadata
-				// request, which the {{ai:*}} template variables share — the same message
-				// asked its category up to three times before (a filter condition, the file
-				// path override, the final categorisation), each as its own request and each
-				// over different text, which is also how the filter and the note could
-				// disagree about where a message belonged.
-				const aiMatch = msg
-					? await this.classifyFromMetadata(content, msg)
-					: await this.aiClassifier.classifyContent(content, this.getEnabledCategories());
+			// Classification needs words. A photo without a caption left only its embed link
+			// ("![[photo….jpg]]") — the model was asked to classify a file name and picked a
+			// category out of nothing. Without text, only the default category applies.
+			const meaningful = content
+				.replace(/!?\[\[[^\]]*\]\]/g, "")
+				.replace(/(^|\s)#[\p{L}\p{N}_/-]+/gu, " ")
+				.trim();
+			if (this.plugin.settings.aiCategorizationEnabled && meaningful) {
+				// The answer comes from the per-message metadata request, which the {{ai:*}}
+				// template variables share — the same message asked its category up to three
+				// times before (a filter condition, the file path override, the final
+				// categorisation), each as its own request and each over different text,
+				// which is also how the filter and the note could disagree about where a
+				// message belonged.
+				const aiMatch = await this.classifyFromMetadata(content, msg);
 
 				if (aiMatch) {
 					return this.getCategory(aiMatch.categoryId) || null;
@@ -181,8 +186,11 @@ export class CategoryManager {
 			}
 
 			// Return default category
+			// A disabled category is not a fallback either: switching it off in settings
+			// used to keep filing every unclassified note into it.
 			if (this.plugin.settings.defaultCategoryId) {
-				return this.getCategory(this.plugin.settings.defaultCategoryId) || null;
+				const fallback = this.getCategory(this.plugin.settings.defaultCategoryId);
+				return fallback && fallback.enabled !== false ? fallback : null;
 			}
 
 			return null;

@@ -96,7 +96,7 @@ summary: Discussed Q3 roadmap and budget allocation`;
 		template = template.replace("{{category}}", params.category);
 
 		// Missing params get fallback values
-		expect(template).toBe("# Quick Note [category]");
+		expect(template).toBe("# Quick Note [param_category]");
 	});
 
 	it("processes content with line range after AI extraction", () => {

@@ -1,4 +1,4 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { Api, TelegramClient } from "telegram";
 import { getFileObject } from "../bot/message/getters";
 import { extractMediaId } from "./botFileToMessageMedia";
@@ -108,7 +108,7 @@ export async function getInputPeer(
 	else if (!dialog || !dialog.inputEntity) {
 		debugLog(
 			"MTProto",
-			`Telegram Sync => Dialogs:\n${dialogs.map((d) => d.name ?? d.id?.toString() ?? "").join(", ")}`,
+			`Telegram AI => Dialogs:\n${dialogs.map((d) => d.name ?? d.id?.toString() ?? "").join(", ")}`,
 		);
 		throw new Error(
 			`User ${user.username || user.firstName || user.id.toString()} does not have chat with ${
@@ -148,8 +148,12 @@ export async function getMessage(
 		let messages = await client.getMessages(inputPeer, { limit, reverse: true, offsetDate: botMsg.date - 2 });
 		// remove bot messages (fromId != undefined)
 		messages = messages.filter((m) => m.fromId || m.peerId instanceof Api.PeerChannel) || [];
-		messagesRequests.push({ botChatId: botMsg.chat.id, msgDate: botMsg.date, messages, limit });
-		cachedMessagesRequests.push(messagesRequests[0]);
+		// Cache the request just made, not messagesRequests[0]: that indexed an already
+		// cached OLD entry whenever the filter above matched anything, so the fresh
+		// request's results were never cached and getMessages ran again next time.
+		const freshRequest = { botChatId: botMsg.chat.id, msgDate: botMsg.date, messages, limit };
+		messagesRequests.push(freshRequest);
+		cachedMessagesRequests.push(freshRequest);
 		ensureCleanupInterval();
 	}
 

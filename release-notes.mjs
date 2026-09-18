@@ -1,25 +1,39 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.2.1";
+export const releaseVersion = "0.3.0";
 export const showNewFeatures = true;
 export let showBreakingChanges = false;
 
 // No version line here — the notes template above prints "Telegram AI <version>" as the
 // heading, and repeating it put the version on screen three times in a row.
-const newFeatures = `🐛 Fixes
-- Text extraction from PDF files works again
-- Old messages are no longer synced twice into duplicate notes
-- Albums are no longer lost when Obsidian closes mid-sync
-- Large files no longer fail to download
-- Edits are no longer lost when a note is appended to while open
-- Sending several links from one site at once no longer fails with "File already exists"
-- The AI timeout setting is now actually applied
-- Notes and titles are written in your interface language, not always in English
+const newFeatures = `🤖 AI providers
+- Claude and Gemini now work next to OpenAI, photos included (beta)
+- Any OpenAI-compatible endpoint: OpenRouter, Ollama, LM Studio and others
+- A "Test key" button that tells a wrong key from an empty balance or a rate limit
 
-💰 Fewer AI requests
-- Title and category for one message now cost a single request instead of up to three
-- A photo is uploaded once per message, not once per question about it
-- No more retries when the API key has no quota left`;
+📱 Mobile
+- The plugin now runs on iOS and Android (beta)
+
+🛟 Nothing gets lost
+- Messages survive an Obsidian restart or a failed AI request and are retried automatically
+- The same message never turns into two notes
+- Editing a message in Telegram updates its note; replies link to the original note
+- Excel, PowerPoint and EPUB files are read too
+
+✨ More
+- Bot commands: /status, /retry, /category, /search
+- Tokens and estimated cost for every message in the processing history
+- Settings export and import, without secrets
+- Interface in German, Spanish and Chinese
+
+🔒 Security
+- Every API key and the bot token are now stored encrypted
+- Change your pin code, or reset it if you forgot it
+- Keys never show up in logs, chat replies or diagnostic reports
+
+🧹 Cleanup
+- Categories now follow the AI classification switch: with it off, notes are not sorted into categories
+- The category "Template path (beta)" field is gone: it never affected notes`;
 
 export const breakingChanges = ``;
 

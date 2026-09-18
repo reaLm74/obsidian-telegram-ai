@@ -6,5 +6,5 @@
 	"description": "AI-powered Telegram sync with smart categorization, media grouping, and local document processing.",
 	"author": "Evgeniy Berezovskiy",
 	"authorUrl": "https://github.com/reaLm74",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }

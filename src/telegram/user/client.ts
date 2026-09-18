@@ -1,21 +1,23 @@
 import { Api, TelegramClient } from "telegram";
 import { StoreSession } from "telegram/sessions";
 import { releaseVersion } from "release-notes.mjs";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import QRCode from "qrcode";
-import os from "os";
 import { convertBotFileToMessageMedia } from "../convertors/botFileToMessageMedia";
 import { ProgressBarType, _3MB, createProgressBar, deleteProgressBar, updateProgressBar } from "../bot/progressBar";
 import { getInputPeer, getMessage } from "../convertors/botMessageToClientMessage";
-import { formatDateTime } from "src/utils/dateUtils";
 import { LogLevel, Logger } from "telegram/extensions/Logger";
 import { _1min, _5sec, sleep } from "src/utils/logUtils";
 import * as config from "./config";
+import { redactSecrets } from "src/utils/secretRedaction";
+import { t } from "src/locale/i18n";
 import { ApiCredentials } from "./apiCredentials";
 export { parseApiCredentials } from "./apiCredentials";
 import { PromisedWebSockets } from "telegram/extensions";
 
-export type SessionType = "bot" | "user";
+import { SessionType, getNewSessionId } from "./sessionTypes";
+export { getNewSessionId };
+export type { SessionType };
 
 let client: TelegramClient | undefined;
 let _botToken: string | undefined;
@@ -29,10 +31,6 @@ const NotConnected = new Error("Can't connect to the Telegram Api");
 const NotAuthorized = new Error("Not authorized");
 const NotAuthorizedAsUser = new Error("Not authorized as user. You have to connect as user");
 
-export function getNewSessionId(): number {
-	return Number(formatDateTime(new Date(), "YYYYMMDDHHmmssSSS"));
-}
-
 /** Credentials the user entered, if any. Set by setApiCredentials() before init(). */
 let _apiCredentials: ApiCredentials | undefined;
 
@@ -43,10 +41,6 @@ export const NoApiCredentials = new Error(
 
 export function setApiCredentials(credentials: ApiCredentials | undefined) {
 	_apiCredentials = credentials;
-}
-
-export function hasApiCredentials(): boolean {
-	return _apiCredentials !== undefined;
 }
 
 function getApiCredentials(): ApiCredentials {
@@ -76,7 +70,7 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 		await stop();
 		const logger = new Logger(LogLevel.ERROR);
 		logger.log = (_level, message, _color) => {
-			console.error(`Telegram Sync => User connection error: ${message}`);
+			console.error(`Telegram AI => User connection error: ${redactSecrets(message)}`);
 			// TODO in 2024: add user connection status checking and setting by controlling error and info logs
 			//if (message == "Automatic reconnection failed 2 time(s)")
 		};
@@ -86,7 +80,9 @@ export async function init(sessionId: number, sessionType: SessionType, deviceId
 		_sessionType = sessionType;
 		client = new TelegramClient(session, apiId, apiHash, {
 			connectionRetries: 10,
-			deviceModel: os.hostname() || os.type(),
+			// A fixed name instead of os.hostname(): the hostname leaked into the user's
+			// Telegram session list, and the os module does not exist on mobile.
+			deviceModel: "Obsidian Desktop",
 			appVersion: releaseVersion,
 			useWSS: true,
 			networkSocket: PromisedWebSockets,
@@ -171,15 +167,15 @@ export async function signInAsUserWithQrCode(container: HTMLDivElement, password
 				return Promise.resolve(password ? password : "");
 			},
 			onError: (error) => {
-				container.setText(`Error: ${error.message}`);
-				console.error(`Telegram Sync => ${error}`);
+				container.setText(`${t("common.error")}: ${redactSecrets(error.message)}`);
+				console.error(`Telegram AI => ${redactSecrets(String(error))}`);
 				return Promise.resolve(true);
 			},
 		});
 		clientUser = user as Api.User;
 	} catch (e: unknown) {
 		clientUser = undefined;
-		console.error(`Telegram Sync => ${String(e)}`);
+		console.error(`Telegram AI => ${redactSecrets(String(e))}`);
 	}
 }
 

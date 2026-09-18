@@ -1,8 +1,13 @@
-import TelegramBot from "node-telegram-bot-api";
-import { MessageDistributionRule, MessageFilterCondition, ConditionType } from "src/settings/messageDistribution";
-import { getForwardFromName, getTopic } from "./getters";
+import TelegramBot from "src/telegram/botApi";
+import {
+	MessageDistributionRule,
+	MessageFilterCondition,
+	ConditionType,
+	ConditionOperation,
+} from "src/settings/messageDistribution";
+import { getForwardFromName, getTopic, shortChatId } from "./getters";
 import TelegramSyncPlugin from "src/main";
-import * as Client from "src/telegram/user/client";
+import { transcribeAudioViaUser } from "src/telegram/user/userGateway";
 import { debugLog } from "src/utils/debugLog";
 
 function isUserFiltered(msg: TelegramBot.Message, userNameOrId: string): boolean {
@@ -10,7 +15,7 @@ function isUserFiltered(msg: TelegramBot.Message, userNameOrId: string): boolean
 
 	const user = msg.from;
 	const fullName = `${user.first_name} ${user.last_name || ""}`.trim();
-	const userId = user.id < 0 ? user.id.toString().slice(4) : user.id.toString();
+	const userId = shortChatId(user.id);
 
 	return [user.username, userId, fullName].includes(userNameOrId);
 }
@@ -19,7 +24,7 @@ function isChatFiltered(msg: TelegramBot.Message, chatNameOrId: string): boolean
 	if (!msg?.chat || !chatNameOrId) return false;
 
 	const chat = msg.chat;
-	const chatId = chat.id < 0 ? chat.id.toString().slice(4) : chat.id.toString();
+	const chatId = shortChatId(chat.id);
 
 	let chatName = "";
 	if (chat.type == "private") {
@@ -28,7 +33,9 @@ function isChatFiltered(msg: TelegramBot.Message, chatNameOrId: string): boolean
 		chatName = chat.title || chatId;
 	}
 
-	return [chatId, chatName].includes(chatNameOrId);
+	// The full id is accepted too: it is what the plugin itself shows for a chat in
+	// "Access denied" replies and in the allowed-chats list.
+	return [chatId, chat.id.toString(), chatName].includes(chatNameOrId);
 }
 
 function isForwardFromFiltered(msg: TelegramBot.Message, forwardFromName: string): boolean {
@@ -81,9 +88,19 @@ export async function isVoiceTranscriptFiltered(
 	msg: TelegramBot.Message,
 	substring: string,
 ): Promise<boolean> {
-	let voiceTranscript = "";
-	if (plugin.bot) voiceTranscript = await Client.transcribeAudio(plugin.bot, msg, await plugin.getBotUser());
-	return voiceTranscript.includes(substring);
+	// Transcription legitimately throws in bot-only mode (no authorized user client) and for
+	// non-premium accounts. Rule evaluation runs BEFORE the message is tracked in the ledger,
+	// so an escaped throw here doesn't fail the message — it silently drops it: the offset is
+	// already acked and nothing recorded it for retry. Treat "cannot transcribe" as "does not
+	// match", like isCategoryFiltered treats a failed categorization.
+	try {
+		let voiceTranscript = "";
+		if (plugin.bot) voiceTranscript = await transcribeAudioViaUser(plugin.bot, msg, await plugin.getBotUser());
+		return voiceTranscript.includes(substring);
+	} catch (error) {
+		debugLog("Filter", "voice transcript filtering error", error);
+		return false;
+	}
 }
 
 export async function isMessageFiltered(
@@ -91,26 +108,40 @@ export async function isMessageFiltered(
 	msg: TelegramBot.Message,
 	condition: MessageFilterCondition,
 ): Promise<boolean> {
-	switch (condition.conditionType) {
-		case ConditionType.ALL:
-			return true;
-		case ConditionType.USER:
-			return isUserFiltered(msg, condition.value);
-		case ConditionType.CHAT:
-			return isChatFiltered(msg, condition.value);
-		case ConditionType.FORWARD_FROM:
-			return isForwardFromFiltered(msg, condition.value);
-		case ConditionType.TOPIC:
-			return await isTopicFiltered(plugin, msg, condition.value);
-		case ConditionType.CONTENT:
-			return isContentFiltered(msg, condition.value);
-		case ConditionType.VOICE_TRANSCRIPT:
-			return await isVoiceTranscriptFiltered(plugin, msg, condition.value);
-		case ConditionType.CATEGORY:
-			return await isCategoryFiltered(plugin, msg, condition.value);
-		default:
-			return false;
+	const matched = await (async () => {
+		switch (condition.conditionType) {
+			case ConditionType.ALL:
+				return true;
+			case ConditionType.USER:
+				return isUserFiltered(msg, condition.value);
+			case ConditionType.CHAT:
+				return isChatFiltered(msg, condition.value);
+			case ConditionType.FORWARD_FROM:
+				return isForwardFromFiltered(msg, condition.value);
+			case ConditionType.TOPIC:
+				return await isTopicFiltered(plugin, msg, condition.value);
+			case ConditionType.CONTENT:
+				return isContentFiltered(msg, condition.value);
+			case ConditionType.VOICE_TRANSCRIPT:
+				return await isVoiceTranscriptFiltered(plugin, msg, condition.value);
+			case ConditionType.CATEGORY:
+				return await isCategoryFiltered(plugin, msg, condition.value);
+			default:
+				return false;
+		}
+	})();
+
+	// The parser accepts != and !~ since the beginning, but nothing ever read
+	// condition.operation, so {{category!=Personal}} silently behaved as {{category=Personal}}.
+	// Each evaluator above implements its type's natural positive match (exact for
+	// user/chat/topic, substring for content/transcript); the negated operations invert it.
+	if (
+		condition.operation === ConditionOperation.NOT_EQUAL ||
+		condition.operation === ConditionOperation.NOT_CONTAIN
+	) {
+		return !matched;
 	}
+	return matched;
 }
 
 export async function doesMessageMatchRule(

@@ -1,4 +1,5 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
+import { escapeLinkTarget, isSafeLinkUrl } from "src/utils/markdownLink";
 import { getInlineUrls } from "./getters";
 
 export function convertMessageTextToMarkdown(msg: TelegramBot.Message): string {
@@ -42,9 +43,16 @@ export function convertMessageTextToMarkdown(msg: TelegramBot.Message): string {
 				updateEntitiesOffset(updatedEntities, entity, index, 4, 4);
 				break;
 			case "text_link":
-				if (entity.url) {
-					entityText = `[${entityText}](${entity.url})`;
-					updateEntitiesOffset(updatedEntities, entity, index, 1, entity.url.length + 3);
+				// The URL comes straight off the update, so the scheme is checked before it
+				// becomes a clickable link and the target is escaped so a ")" inside it
+				// cannot close the link early and spill the rest into the note as markdown.
+				// An unsafe scheme falls through to plain text, exactly as a url-less entity
+				// already did — and adds no offset, keeping the arithmetic below honest.
+				if (entity.url && isSafeLinkUrl(entity.url)) {
+					const target = escapeLinkTarget(entity.url);
+					entityText = `[${entityText}](${target})`;
+					// Measured on the escaped target: escaping changes the length.
+					updateEntitiesOffset(updatedEntities, entity, index, 1, target.length + 3);
 				}
 				break;
 			default:

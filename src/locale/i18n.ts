@@ -8,16 +8,27 @@
  *   import { t, initLocale } from "src/locale/i18n";
  *   initLocale("ru"); // or auto-detect
  *   const label = t("settings.ai.enable"); // → "Включить обработку ИИ"
+ *
+ * Adding a language: create <code>.json with every key from en.json (the parity test in
+ * i18n.test.ts enforces this for every registered locale), import it and add it to
+ * LOCALES. Translations are crowdsourced — see docs/Translation Guide.md.
  */
 
+import { getLanguage } from "obsidian";
 import en from "./en.json";
 import ru from "./ru.json";
+import de from "./de.json";
+import es from "./es.json";
+import zh from "./zh.json";
 
 type LocaleStrings = Record<string, string>;
 
 const LOCALES: Record<string, LocaleStrings> = {
 	en: en as LocaleStrings,
 	ru: ru as LocaleStrings,
+	de: de as LocaleStrings,
+	es: es as LocaleStrings,
+	zh: zh as LocaleStrings,
 };
 
 let currentLocale: LocaleStrings = LOCALES.en;
@@ -68,7 +79,10 @@ export function t(key: string, replacements?: Record<string, string>): string {
 
 	if (replacements) {
 		for (const [placeholder, value] of Object.entries(replacements)) {
-			result = result.replace(new RegExp(`\\{\\{${placeholder}\\}\\}`, "g"), value);
+			// Replacer function, not a replacement string: values here carry runtime data
+			// (error messages, vault paths, names) where $&, $` or $' would otherwise be
+			// expanded as substitution patterns.
+			result = result.replace(new RegExp(`\\{\\{${placeholder}\\}\\}`, "g"), () => value);
 		}
 	}
 
@@ -82,14 +96,15 @@ export function t(key: string, replacements?: Record<string, string>): string {
 function detectObsidianLocale(): string {
 	try {
 		// Obsidian sets lang attribute on the html element
-		if (typeof activeDocument !== "undefined") {
-			const lang = activeDocument.documentElement.lang;
-			if (lang) return lang;
-		} else if (typeof document !== "undefined") {
-			// eslint-disable-next-line obsidianmd/prefer-active-doc
-			const lang = document.documentElement.lang;
-			if (lang) return lang;
-		}
+		// activeDocument is Obsidian's alias for the active window's document, which is what
+		// a plugin must read: in a popped-out window the global `document` is the wrong one.
+		// Outside Obsidian it is undefined, and the catch below covers that.
+		const lang = activeDocument.documentElement.lang;
+		if (lang) return lang;
+		// Belt and braces: Obsidian's own language API, for a build that has not stamped
+		// `lang` on the document yet at plugin-load time.
+		const apiLang = getLanguage();
+		if (apiLang) return apiLang;
 	} catch {
 		// ignore — we're in a non-browser environment (tests)
 	}

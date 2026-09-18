@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import type TelegramSyncPlugin from "src/main";
-import { initLocale } from "src/locale/i18n";
+import { getAvailableLocales, initLocale } from "src/locale/i18n";
 import {
 	AUTO_LANGUAGE,
 	CUSTOM_LANGUAGE,
@@ -50,6 +50,24 @@ describe("resolveOutputLanguage — auto", () => {
 	it("treats a missing setting as auto", () => {
 		const plugin = { settings: {} } as unknown as TelegramSyncPlugin;
 		expect(resolveOutputLanguage(plugin)).toBe("");
+	});
+
+	// Every locale the plugin ships must have a language name, or Auto silently produces
+	// English notes on that interface — exactly what happened when de/es/zh arrived in 0.6/0.7
+	// and LANGUAGE_NAMES still knew only en/ru. English is the deliberate exception (the
+	// prompts are already English; adding "write in English" would change every prompt).
+	it("resolves a language name for every shipped locale", () => {
+		for (const locale of getAvailableLocales()) {
+			initLocale(locale);
+			const resolved = resolveOutputLanguage(makePlugin());
+			if (locale === "en") {
+				expect(resolved).toBe("");
+			} else {
+				expect(resolved, `locale "${locale}" has no LANGUAGE_NAMES entry`).not.toBe("");
+				// A real language name, not the raw locale code leaking into the prompt.
+				expect(resolved.length, `locale "${locale}" resolves to "${resolved}"`).toBeGreaterThan(2);
+			}
+		}
 	});
 });
 

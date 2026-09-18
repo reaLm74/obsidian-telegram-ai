@@ -1,7 +1,9 @@
 import TelegramSyncPlugin from "src/main";
 import * as Client from "./client";
-import { StatusMessages, displayAndLogError } from "src/utils/logUtils";
+import { displayAndLogError } from "src/utils/logUtils";
+import { t } from "src/locale/i18n";
 import { enqueue } from "src/utils/queues";
+import { readSecret } from "src/utils/secretStore";
 
 export async function connect(
 	plugin: TelegramSyncPlugin,
@@ -17,7 +19,10 @@ export async function connect(
 	// MTProto needs app credentials the user supplies themselves. Without them the plugin
 	// runs bot-only: everything works through the Bot API except account login and the
 	// >20 MB file download fallback.
-	const credentials = Client.parseApiCredentials(plugin.settings.telegramApiId, plugin.settings.telegramApiHash);
+	const credentials = Client.parseApiCredentials(
+		plugin.settings.telegramApiId,
+		readSecret(plugin, "telegramApiHash"),
+	);
 	Client.setApiCredentials(credentials);
 	if (!credentials) {
 		plugin.userConnected = false;
@@ -95,8 +100,8 @@ export async function reconnect(plugin: TelegramSyncPlugin, displayError = false
 			await displayAndLogError(
 				plugin,
 				error instanceof Error ? error : new Error(String(error)),
-				StatusMessages.USER_DISCONNECTED,
-				"Try restore the connection manually by restarting Obsidian or by refresh button in the plugin settings!",
+				"",
+				t("notices.userDisconnectedRetry"),
 			);
 		}
 	} finally {

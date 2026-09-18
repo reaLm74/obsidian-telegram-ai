@@ -6,6 +6,7 @@ import {
 	unixTime2Date,
 	date2UnixTime,
 	getOffsetDate,
+	messageTimestampMs,
 } from "./dateUtils";
 
 // Fixed date for deterministic tests: 2026-03-15 14:30:45.123
@@ -100,5 +101,20 @@ describe("getOffsetDate", () => {
 		const fixedDate2 = new Date(2026, 5, 15, 12, 0, 0);
 		const oneDayAgo = getOffsetDate(1, new Date(fixedDate2));
 		expect(today - oneDayAgo).toBe(86400);
+	});
+});
+
+describe("messageTimestampMs", () => {
+	it("converts Telegram seconds to milliseconds exactly", () => {
+		// No jitter, unlike unixTime2Date: this value becomes a file's recorded ctime.
+		expect(messageTimestampMs(1700000000)).toBe(1700000000000);
+	});
+	it("falls back to now for a message without a usable date", () => {
+		const before = Date.now();
+		for (const missing of [0, undefined, null]) {
+			const result = messageTimestampMs(missing);
+			expect(result).toBeGreaterThanOrEqual(before);
+			expect(result).toBeLessThanOrEqual(Date.now());
+		}
 	});
 });

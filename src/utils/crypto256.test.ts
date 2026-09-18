@@ -100,7 +100,6 @@ describe("legacy (pre-0.2.1) payloads", () => {
 
 /** Reproduces the pre-0.2.1 encryption so the compatibility path can be tested. */
 function legacyEncryptForTest(text: string, key?: string): string {
-	// eslint-disable-next-line @typescript-eslint/no-require-imports
 	const crypto = require("crypto") as typeof import("crypto");
 	const b64 = (s: string) => Buffer.from(s, "base64").toString("utf-8");
 	const defaultKey = b64("c29iZXJoYWNrZXI=") + b64("S2V5");

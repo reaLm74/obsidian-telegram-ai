@@ -88,8 +88,9 @@ function wikiLinkerTransform(content: string, ctx: PostProcessorContext): string
 		// Skip if already wikilinked
 		if (result.includes(`[[${noteName}]]`)) continue;
 
-		// Match whole words, case-insensitive, not inside [[ ]] or code blocks
-		// Use Unicode-aware boundary (\\b doesn't work with Cyrillic)
+		// Match whole words, case-insensitive, and not inside an existing [[link]].
+		// Code fences are NOT excluded — a note name mentioned inside ``` still gets
+		// linked. Unicode-aware boundaries, because \b does not work with Cyrillic.
 		const escaped = escapeRegExpChars(noteName);
 		const wordBoundary = `(?<![\\w\\u0400-\\u04FF])`;
 		const wordBoundaryEnd = `(?![\\w\\u0400-\\u04FF])`;
@@ -98,16 +99,41 @@ function wikiLinkerTransform(content: string, ctx: PostProcessorContext): string
 			"gi",
 		);
 
-		// Replace only the first occurrence to avoid over-linking
+		// Replace only the first occurrence to avoid over-linking. URLs and markdown link
+		// targets are skipped: a note named "github" turned "www.github.com/x" into
+		// "www.[[github]].com/x" and broke the link.
 		let replaced = false;
-		result = result.replace(regex, (match) => {
-			if (replaced) return match;
-			replaced = true;
-			return `[[${match}]]`;
-		});
+		result = splitOutUrls(result)
+			.map((segment) =>
+				segment.isUrl
+					? segment.text
+					: segment.text.replace(regex, (match) => {
+							if (replaced) return match;
+							replaced = true;
+							return `[[${match}]]`;
+						}),
+			)
+			.join("");
 	}
 
 	return result;
+}
+
+/** Bare URLs, <autolinks> and the target part of [label](target), left untouched by linkers. */
+const URL_LIKE =
+	/\]\([^)\s]*\)|<[a-z][a-z\d+.-]*:\/\/[^>\s]*>|\b[a-z][a-z\d+.-]*:\/\/[^\s<>()[\]]+|\bwww\.[^\s<>()[\]]+/gi;
+
+function splitOutUrls(text: string): { text: string; isUrl: boolean }[] {
+	const segments: { text: string; isUrl: boolean }[] = [];
+	let last = 0;
+	for (const match of text.matchAll(URL_LIKE)) {
+		const start = match.index ?? 0;
+		if (start > last) segments.push({ text: text.slice(last, start), isUrl: false });
+		segments.push({ text: match[0], isUrl: true });
+		last = start + match[0].length;
+	}
+	if (last < text.length) segments.push({ text: text.slice(last), isUrl: false });
+	return segments;
 }
 
 /**
@@ -176,15 +202,20 @@ function extractKeywordTags(content: string, existingTags: Set<string>): string[
 	const contentLower = content.toLowerCase();
 	const tags: string[] = [];
 
-	// Technology / tool keywords → tag mappings
+	// Technology / tool keywords → tag mappings.
+	//
+	// "java" and "rust" used to carry a trailing space as a hand-rolled guard against
+	// "javascript" and "trust" — which only worked at the end of a word and did nothing
+	// for the other entries. The matcher below anchors every keyword on both sides
+	// instead, so the space hack is gone with the false positives it was patching.
 	const keywordMap: Record<string, string> = {
 		// Programming languages
 		javascript: "javascript",
 		typescript: "typescript",
 		python: "python",
-		"java ": "java",
+		java: "java",
 		golang: "golang",
-		"rust ": "rust",
+		rust: "rust",
 		swift: "swift",
 		kotlin: "kotlin",
 		// Frameworks / tools
@@ -222,7 +253,7 @@ function extractKeywordTags(content: string, existingTags: Set<string>): string[
 	};
 
 	for (const [keyword, tag] of Object.entries(keywordMap)) {
-		if (contentLower.includes(keyword) && !existingTags.has(tag)) {
+		if (containsKeyword(contentLower, keyword) && !existingTags.has(tag)) {
 			tags.push(tag);
 			existingTags.add(tag); // Prevent duplicates
 		}
@@ -230,6 +261,21 @@ function extractKeywordTags(content: string, existingTags: Set<string>): string[
 
 	// Limit to 5 auto-tags max to avoid tag spam
 	return tags.slice(0, 5);
+}
+
+/**
+ * Whether `content` mentions `keyword` as a word rather than as a substring.
+ *
+ * A plain `includes()` tagged "capital" as #api, "reaction" as #react, "facebook" as
+ * #book and "particle" as #article — and this plugin's own notes are full of the word
+ * "reaction". The boundaries are letter/digit classes rather than `\b`, because several
+ * keywords contain "." or "/" ("node.js", "ci/cd"), for which `\b` sits in the wrong
+ * place; `\p{L}` also keeps the check correct for Cyrillic text around a Latin keyword.
+ */
+function containsKeyword(content: string, keyword: string): boolean {
+	const boundary = "[\\p{L}\\p{N}]";
+	const pattern = new RegExp(`(?<!${boundary})${escapeRegExpChars(keyword)}(?!${boundary})`, "u");
+	return pattern.test(content);
 }
 
 registerPostProcessor({

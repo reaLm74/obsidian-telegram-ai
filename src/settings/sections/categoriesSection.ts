@@ -79,7 +79,7 @@ export function addCategoriesSettings(
 		.setDesc(t("settings.categories.advanced.desc"))
 		.addButton((button) => {
 			button
-				.setButtonText(t("settings.advanced.button"))
+				.setButtonText(t("settings.categories.advanced.button"))
 				.setCta()
 				.onClick(() => {
 					new CategorySettingsModal(plugin).open();

@@ -29,8 +29,14 @@ export const AI_DEFAULT_RETRY_DELAY_MS = 1000;
 /** Default number of retry attempts for failed AI requests */
 export const AI_DEFAULT_RETRY_ATTEMPTS = 3;
 
-/** Maximum classification cache size before eviction */
-export const AI_CLASSIFICATION_CACHE_MAX_SIZE = 100;
+/**
+ * Longest wait honoured from a provider's `Retry-After` header.
+ *
+ * A rate-limited provider may ask for minutes. Sleeping that long inside the message
+ * queue stalls every message behind it, so anything above this cap is reported instead of
+ * waited out — the message is saved unprocessed and can be retried by hand.
+ */
+export const AI_MAX_RETRY_AFTER_MS = 60000;
 
 /** Media group completion timeout in milliseconds (2 seconds of silence = group complete) */
 export const MEDIA_GROUP_TIMEOUT_MS = 2000;

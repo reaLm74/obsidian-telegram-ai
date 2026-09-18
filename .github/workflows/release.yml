@@ -10,6 +10,9 @@ on:
 permissions:
     contents: write
     pull-requests: write
+    # Required to mint a build-provenance attestation for the release assets.
+    id-token: write
+    attestations: write
 
 jobs:
     release:
@@ -37,6 +40,17 @@ jobs:
 
                   TAG_NAME=$(node -p "require('./package.json').version")
                   echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+
+            # Signs a statement that these exact files were built by this workflow from this
+            # repository, so anyone downloading a release can verify with `gh attestation
+            # verify` that the assets match the source rather than trusting the upload.
+            - name: Attest build provenance
+              uses: actions/attest-build-provenance@v2
+              with:
+                  subject-path: |
+                      main.js
+                      manifest.json
+                      styles.css
 
             - name: Create release
               uses: softprops/action-gh-release@v2

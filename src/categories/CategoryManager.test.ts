@@ -1,12 +1,29 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { NoteCategory } from "./types";
 import type TelegramSyncPlugin from "src/main";
 
 const mockProcessWithOpenAI = vi.fn<(...args: unknown[]) => Promise<string | null>>();
 
+// Categorisation goes through the provider registry, which imports the provider object.
 vi.mock("src/ai/openai", () => ({
 	processWithOpenAI: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+	openAIProvider: {
+		id: "openai",
+		name: "OpenAI",
+		description: "",
+		consoleUrl: "",
+		getApiKey: (plugin: TelegramSyncPlugin) => plugin.settings.openAIApiKey,
+		hasApiKey: (plugin: TelegramSyncPlugin) => !!plugin.settings.openAIApiKey?.trim(),
+		getModel: () => "gpt-4o-mini",
+		isVisionEnabled: (plugin: TelegramSyncPlugin) => !!plugin.settings.aiVisionEnabled,
+		process: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+		processWithVision: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+		transcribe: async () => null,
+		canTranscribe: () => true,
+		sendsReasoningEffort: true,
+		testKey: async () => ({ success: true, message: "" }),
+	},
 }));
 
 import { CategoryManager } from "./CategoryManager";
@@ -43,6 +60,7 @@ function makePlugin(overrides: Record<string, unknown> = {}) {
 
 describe("categorizeContent without AI classification", () => {
 	let manager: CategoryManager;
+	const msg = { message_id: 1, chat: { id: 42, type: "private" }, date: 1_700_000_000 } as TelegramBot.Message;
 
 	beforeEach(async () => {
 		manager = new CategoryManager(makePlugin());
@@ -52,20 +70,20 @@ describe("categorizeContent without AI classification", () => {
 	// Category keywords are a hint inside the AI prompt, deliberately NOT a matcher run
 	// against message content. Without AI the note keeps its base distribution path.
 	it("does not categorize by keywords", async () => {
-		expect(await manager.categorizeContent("Notes from today's meeting")).toBeNull();
-		expect(await manager.categorizeContent("dinner with the family")).toBeNull();
+		expect(await manager.categorizeContent("Notes from today's meeting", msg)).toBeNull();
+		expect(await manager.categorizeContent("dinner with the family", msg)).toBeNull();
 	});
 
 	it("applies the default category when one is set", async () => {
 		const manager = new CategoryManager(makePlugin({ defaultCategoryId: "personal" }));
 		await manager.init();
-		expect((await manager.categorizeContent("Notes from today's meeting"))?.name).toBe("Personal");
+		expect((await manager.categorizeContent("Notes from today's meeting", msg))?.name).toBe("Personal");
 	});
 
 	it("returns null when categorisation is switched off entirely", async () => {
 		const manager = new CategoryManager(makePlugin({ categoriesEnabled: false, defaultCategoryId: "personal" }));
 		await manager.init();
-		expect(await manager.categorizeContent("Notes from today's meeting")).toBeNull();
+		expect(await manager.categorizeContent("Notes from today's meeting", msg)).toBeNull();
 	});
 });
 
@@ -79,6 +97,10 @@ describe("categorizeContent with AI classification", () => {
 		const plugin = makePlugin({
 			aiEnabled: true,
 			aiCategorizationEnabled: true,
+			// Named explicitly: the classification gate asks the registry whether the
+			// SELECTED provider is configured. While it read settings.openAIApiKey instead,
+			// this fixture passed without ever saying which provider it meant.
+			aiProvider: "openai",
 			openAIApiKey: "sk-test",
 			aiCustomParameters: {},
 			defaultCategoryId,
@@ -174,5 +196,35 @@ describe("category storage", () => {
 		const manager = new CategoryManager(makePlugin({ noteCategories: [makeCategory("Work", []), disabled] }));
 		await manager.init();
 		expect(manager.getEnabledCategories().map((c) => c.name)).toEqual(["Work"]);
+	});
+});
+
+// VIS-004: a photo without a caption left only its embed link, and the model was asked to
+// classify a file name — it picked a category out of nothing.
+describe("categorizeContent without words to classify", () => {
+	beforeEach(() => {
+		mockProcessWithOpenAI.mockReset();
+		mockProcessWithOpenAI.mockResolvedValue("category: Work");
+		clearMessageMetadataCache();
+	});
+
+	it("does not ask the model when the content is only embeds and tags", async () => {
+		const plugin = makePlugin({
+			aiEnabled: true,
+			aiCategorizationEnabled: true,
+			aiProvider: "openai",
+			openAIApiKey: "sk-test",
+			aiCustomParameters: {},
+			defaultCategoryId: "personal",
+		});
+		const manager = new CategoryManager(plugin);
+		(plugin as unknown as { categoryManager: CategoryManager }).categoryManager = manager;
+		await manager.init();
+		const msg = { message_id: 9, chat: { id: 11, type: "private" }, date: 1_700_000_000 } as TelegramBot.Message;
+
+		const category = await manager.categorizeContent("#ideas\n\n![[photo_1 - 2026.jpg]]", msg);
+
+		expect(mockProcessWithOpenAI).not.toHaveBeenCalled();
+		expect(category?.name).toBe("Personal");
 	});
 });

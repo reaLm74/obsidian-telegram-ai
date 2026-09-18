@@ -123,6 +123,24 @@ describe("extractConditionsFromFilterQuery", () => {
 		expect(conditions).toHaveLength(1);
 		expect(conditions[0].value).toBe("My Super Group");
 	});
+
+	// A condition with nothing after the operator does not match the pattern at all, so the
+	// "Empty value" error below it is unreachable: the query simply yields no conditions,
+	// and a rule with no conditions is shown as "error: wrong filter query!".
+	it("yields no conditions for an empty value instead of throwing", () => {
+		expect(extractConditionsFromFilterQuery("{{user=}}")).toHaveLength(0);
+		expect(extractConditionsFromFilterQuery("{{content~}}")).toHaveLength(0);
+	});
+
+	it("ignores an operator it does not know", () => {
+		expect(extractConditionsFromFilterQuery("{{user>john}}")).toHaveLength(0);
+	});
+
+	it("reads the conditions it recognises and skips the rest of the line", () => {
+		const conditions = extractConditionsFromFilterQuery("noise {{user=john}} more noise");
+		expect(conditions).toHaveLength(1);
+		expect(conditions[0].value).toBe("john");
+	});
 });
 
 // ────────────────────────────────────────────────────────

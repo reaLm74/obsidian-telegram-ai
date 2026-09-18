@@ -7,7 +7,7 @@ This guide will help you get Telegram AI up and running quickly. The plugin incl
 ## Prerequisites
 
 Before starting, ensure you have:
-- **Obsidian** v1.8.7 or higher (desktop only)
+- **Obsidian** v1.8.7 or higher — desktop or mobile (mobile is beta since 0.6, see the [Mobile Guide](Mobile%20Guide.md))
 - **Telegram account** with access to create bots
 - **AI Provider account** (OpenAI) — optional but recommended
 
@@ -23,12 +23,13 @@ Before starting, ensure you have:
 
 When you enable the plugin for the first time, the **Setup Wizard** will guide you through the configuration:
 
-1. **Bot Token** — paste the token from [@BotFather](https://t.me/botfather)
-2. **Allowed Chats** — add your Telegram user ID
-3. **AI Provider** — select OpenAI and enter API key (optional)
-4. **Preset** — choose a starting configuration
+1. **Bot Token** — paste the token from [@BotFather](https://t.me/botfather) and press *Validate token*
+2. **Allowed Chats** — add your Telegram username or user ID. Leave it empty and the plugin ignores every message
+3. **Folder** — where notes and attachments are stored (a preset replaces it only if you leave the suggested folder)
+4. **AI** — optional: turn AI processing on and paste an OpenAI key. The provider itself is chosen later, in the plugin settings
+5. **Preset** — choose a starting configuration
 
-> **Tip:** You can re-run the wizard at any time from plugin settings.
+> **Tip:** You can re-run the wizard at any time: Command palette → "Run setup wizard".
 
 ### If you skip the wizard, configure manually:
 1. Open Obsidian Settings → Telegram AI
@@ -58,7 +59,7 @@ The plugin comes with 4 built-in presets to get you started:
 | 🖼️ **Media Archive** | Photos/videos with AI descriptions and tags |
 | 📚 **Knowledge Collector** | Links with auto-annotation, document extraction |
 
-Select a preset in Settings → Telegram AI → "Apply Preset".
+Presets are offered on the last step of the Setup Wizard — re-run it via Command palette → "Run setup wizard" to pick a different one.
 
 ## Step 5: Set Up AI Processing (Optional)
 
@@ -104,7 +105,7 @@ The plugin includes pre-configured categories: Work, Personal, Ideas, Learning.
 1. Go to Settings → Categories
 2. Click "Manage Categories" to open the Category Manager
 3. Add, edit, or remove categories
-4. Configure keywords, path templates, and colors
+4. Configure the description, path template, keywords and color — the description is what the AI classifies on; keywords are examples shown to it
 5. Set up Custom AI Parameters for dynamic naming (e.g., `{{ai:title}}`)
 
 ## Tips for Success
@@ -125,14 +126,14 @@ The plugin includes pre-configured categories: Work, Personal, Ideas, Learning.
 The plugin provides live monitoring:
 - **Status bar** — shows current processing progress
 - **Queue counter** — number of messages waiting to be processed
-- **History log** — last 50 processed messages with status (accessible from settings)
+- **History log** — last 50 processed messages with status (click the status bar, or run "Show processing history" from the command palette)
 
 ## Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
 | Bot not receiving messages | Verify bot token and check "Allowed Chats" |
-| Messages in wrong folder | Review category keywords and path templates |
+| Messages in wrong folder | Sharpen the category descriptions and review the path templates |
 | AI errors | Check API key validity and provider status |
 | Slow processing | Check network connection; consider `gpt-4o-mini` |
 

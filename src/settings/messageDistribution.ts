@@ -9,7 +9,7 @@ export enum ConditionType {
 	CATEGORY = "category",
 }
 
-enum ConditionOperation {
+export enum ConditionOperation {
 	EQUAL = "=",
 	NOT_EQUAL = "!=",
 	CONTAIN = "~",

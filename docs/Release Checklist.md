@@ -7,6 +7,7 @@ Checklist for releasing a new plugin version using the Release Please + develop/
 ## Before Release
 
 - [ ] **Update `release-notes.mjs`** — add new features description to `newFeatures` (shown in plugin on update)
+- [ ] **Device-matrix smoke test** (0.6+): Windows / macOS / Linux / iOS / Android — sync one text, one photo, one document on each; check paths and filenames. Mobile specifics: battery-saver resume after backgrounding, pin-code entry, DOCX degradation notice.
 - [ ] **Verify commits** — all changes committed with [Conventional Commits](https://www.conventionalcommits.org/):
   - `feat:` — new functionality (minor bump)
   - `fix:` — bug fix (patch bump)
@@ -47,10 +48,7 @@ git push origin feat/your-feature-name
 
 ### 2. Open PR develop → main
 
-When you open PR develop → main, be sure to wait for the Update version of plugin to complete.
-GitHub Action should have time to update the version and launch the manifest.json back to develop.
-If you immediately click Merge, the old version of the plugin and release will 
-get into the main.yml will compile an archive with the old version in manifest.json.
+When you open the PR develop → main, wait for the **Update version of plugin** workflow to finish: it bumps manifest.json and pushes the bump back to develop. Merging immediately would let the **Release Obsidian plugin** workflow build the release archive with the previous version still in manifest.json.
 
 - In GitHub: New Pull Request: `develop` → `main`
 - **Release Please** will automatically create a PR with version update (CHANGELOG + package.json)
@@ -68,10 +66,7 @@ get into the main.yml will compile an archive with the old version in manifest.j
 
 ### 5. Merge develop → main
 
-When you open PR develop → main, be sure to wait for the Update version of plugin to complete.
-GitHub Action should have time to update the version and launch the manifest.json back to develop.
-If you immediately click Merge, the old version of the plugin and release will 
-get into the main.yml will compile an archive with the old version in manifest.json.
+When you open the PR develop → main, wait for the **Update version of plugin** workflow to finish: it bumps manifest.json and pushes the bump back to develop. Merging immediately would let the **Release Obsidian plugin** workflow build the release archive with the previous version still in manifest.json.
 
 - Merge the main PR `develop` → `main`
 - **Release workflow** will automatically:
