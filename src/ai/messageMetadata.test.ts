@@ -105,7 +105,7 @@ function makeMessage(overrides: Partial<TelegramBot.Message> = {}): TelegramBot.
 		date: 1_700_000_000,
 		text: "some text",
 		...overrides,
-	} as TelegramBot.Message;
+	};
 }
 
 beforeEach(() => {

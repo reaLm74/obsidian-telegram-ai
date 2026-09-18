@@ -56,7 +56,7 @@ function makePlugin(overrides: Record<string, unknown> = {}): FakePlugin {
 		get saved() {
 			return state.saved;
 		},
-	} as FakePlugin;
+	};
 }
 
 /** Writes an import file the way a user (or anything else with vault write access) would. */

@@ -24,11 +24,11 @@ import zh from "./zh.json";
 type LocaleStrings = Record<string, string>;
 
 const LOCALES: Record<string, LocaleStrings> = {
-	en: en as LocaleStrings,
-	ru: ru as LocaleStrings,
-	de: de as LocaleStrings,
-	es: es as LocaleStrings,
-	zh: zh as LocaleStrings,
+	en,
+	ru,
+	de,
+	es,
+	zh,
 };
 
 let currentLocale: LocaleStrings = LOCALES.en;

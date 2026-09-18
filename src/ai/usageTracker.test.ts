@@ -44,6 +44,8 @@ describe("estimateCostUSD", () => {
 describe("recordUsage", () => {
 	it("accumulates monthly totals and persists them", () => {
 		const plugin = makePlugin();
+		const saveSettings = vi.fn().mockResolvedValue(undefined);
+		plugin.saveSettings = saveSettings;
 		recordUsage(plugin, { provider: "openai", model: "gpt-4o-mini", inputTokens: 500, outputTokens: 300 }, august);
 		recordUsage(plugin, { provider: "openai", model: "gpt-4o-mini", inputTokens: 100, outputTokens: 50 }, august);
 
@@ -53,7 +55,7 @@ describe("recordUsage", () => {
 		expect(spend.outputTokens).toBe(350);
 		expect(spend.requests).toBe(2);
 		expect(spend.totalUSD).toBeGreaterThan(0);
-		expect(plugin.saveSettings).toHaveBeenCalled();
+		expect(saveSettings).toHaveBeenCalled();
 	});
 
 	it("resets the totals when the month rolls over", () => {

@@ -105,7 +105,7 @@ export class TelegramBotClient {
 			set = new Set();
 			this.listeners.set(event, set);
 		}
-		set.add(listener as (payload: never) => void);
+		set.add(listener);
 	}
 
 	private emit<E extends keyof BotEvents>(event: E, payload: Parameters<BotEvents[E]>[0]): void {

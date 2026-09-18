@@ -117,7 +117,7 @@ describe("categorizeContent with AI classification", () => {
 			chat: { id: 11, type: "private" },
 			date: 1_700_000_000,
 			...overrides,
-		} as TelegramBot.Message;
+		};
 	}
 
 	beforeEach(() => {

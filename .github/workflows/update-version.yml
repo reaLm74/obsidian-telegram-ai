@@ -53,10 +53,9 @@ jobs:
                   RELEASE_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
               run: echo $RELEASE_OUTPUTS
 
-            - name: Get number of release PR
-              if: ${{steps.release.outputs.pr}}
-              run: echo "RELEASE_PR=$((${{ github.event.number }} + 1))" >> $GITHUB_ENV
-
+            # outputs.pr is the release-please PR as a JSON string ({"number": 56, ...}). It used
+            # to be guessed as "this PR's number + 1", which breaks as soon as anything else —
+            # a Dependabot PR, an issue — takes the next number first.
             - name: Merge release PR
               if: ${{steps.release.outputs.pr}}
               uses: pascalgn/automerge-action@v0.16.4
@@ -66,7 +65,7 @@ jobs:
                   MERGE_METHOD: squash
                   MERGE_COMMIT_MESSAGE: pull-request-title
                   MERGE_FORKS: false
-                  PULL_REQUEST: ${{ env.RELEASE_PR }}
+                  PULL_REQUEST: ${{ fromJSON(steps.release.outputs.pr).number }}
 
             - name: Update manifest.json and versions.json
               if: ${{steps.release.outputs.pr}}

@@ -3,9 +3,14 @@
 # Targeted at develop, because main only ever receives release merges — a PR opened against
 # main would be closed by the contributor-guard workflow.
 #
-# The runtime dependencies are grouped and kept to patch/minor: `telegram` (GramJS) is
-# pinned exactly on purpose and a major bump of pdf-parse or mammoth changes
-# behaviour that only a manual test against a real bot can confirm.
+# Only patch/minor updates arrive here, grouped. Major versions are upgraded by hand:
+# the first run after this file reached main opened ten PRs at once, and the majors among
+# them needed code changes (vitest 5 wants `vite` installed, typescript-eslint and eslint
+# 10 add lint errors) or would have broken the release flow (release-please-action 4
+# takes different inputs; the release-only actions are never exercised by PR checks).
+#
+# Dependabot reads this file from the DEFAULT branch (main), so an edit here takes effect
+# with the next release, not when it merges into develop.
 version: 2
 
 updates:
@@ -27,19 +32,23 @@ updates:
               update-types:
                   - minor
                   - patch
+              # esbuild is still 0.x, where every "minor" may break the build — and ours runs
+              # custom plugins (bluebird shim, script-injection stripping, pdf worker embed).
+              # It comes as its own PR so it can be checked against the bundle on its own.
+              exclude-patterns:
+                  - esbuild
           production-dependencies:
               dependency-type: production
               update-types:
                   - minor
                   - patch
       ignore:
+          - dependency-name: "*"
+            update-types:
+                - version-update:semver-major
           # Pinned to an exact version: GramJS ships breaking changes in patch releases and
           # the MTProto login flow has to be re-tested by hand after any move.
           - dependency-name: telegram
-          # Obsidian's own typings track the desktop app, not this plugin's minAppVersion.
-          - dependency-name: obsidian
-            update-types:
-                - version-update:semver-major
 
     - package-ecosystem: github-actions
       directory: "/"
@@ -48,3 +57,11 @@ updates:
           interval: monthly
       commit-message:
           prefix: chore
+      groups:
+          github-actions:
+              patterns:
+                  - "*"
+      ignore:
+          - dependency-name: "*"
+            update-types:
+                - version-update:semver-major

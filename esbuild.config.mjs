@@ -319,6 +319,54 @@ if (prod || test) {
 			);
 			process.exit(1);
 		}
+
+		// 0.3.0 shipped a bundle that died on iOS and Android before onload: release-notes.mjs,
+		// which is bundled, read `process.argv` at module scope, and mobile WebViews have no
+		// `process`. Evaluate the bundle the way a phone does — browser globals only, no Node
+		// built-ins, no `process`/`Buffer`/`global` — and refuse to ship one that throws there.
+		const vm = await import("vm");
+		const anything = () =>
+			new Proxy(function () {}, {
+				get: (target, key) =>
+					key === "prototype"
+						? target.prototype
+						: key === Symbol.toPrimitive
+							? () => ""
+							: key === "then"
+								? undefined
+								: anything(),
+				apply: () => anything(),
+				construct: () => anything(),
+			});
+		const obsidianOnMobile = new Proxy(
+			{ Platform: { isMobile: true, isMobileApp: true, isDesktop: false, isDesktopApp: false } },
+			{ get: (t, key) => (key in t ? t[key] : typeof key === "string" && /^[A-Z]/.test(key) ? class {} : anything()) },
+		);
+		const mobileRequire = (name) => {
+			if (name === "obsidian") return obsidianOnMobile;
+			throw new Error(`Cannot find module '${name}' (Node built-ins do not exist on mobile)`);
+		};
+		const mobileGlobals = {
+			console, setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask, performance,
+			TextEncoder, TextDecoder, URL, URLSearchParams, AbortController, Blob, fetch, atob, btoa,
+			structuredClone, crypto: globalThis.crypto, navigator: { userAgent: "mobile" },
+			document: anything(), localStorage: anything(),
+		};
+		mobileGlobals.window = mobileGlobals.self = mobileGlobals.globalThis = mobileGlobals;
+		try {
+			const init = vm.runInNewContext(`(function (exports, require, module) {${bundle}\n})`, mobileGlobals, {
+				filename: "main.js",
+			});
+			const module = { exports: {} };
+			init(module.exports, mobileRequire, module);
+		} catch (e) {
+			console.error(
+				`main.js fails to load on mobile: ${e && e.stack ? e.stack.split("\n").slice(0, 3).join(" | ") : e}. ` +
+					`Something runs at module scope that needs Node (process, Buffer, a built-in module) — ` +
+					`move it behind a function call or a Platform.isDesktopApp check.`,
+			);
+			process.exit(1);
+		}
 	}
 
 	const sizeBytes = statSync(mainPath).size;

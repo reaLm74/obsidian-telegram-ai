@@ -24,7 +24,7 @@ function createMessage(overrides: Partial<TelegramBot.Message> = {}): TelegramBo
 		date: Date.now(),
 		chat: { id: 1, type: "private" },
 		...overrides,
-	} as TelegramBot.Message;
+	};
 }
 
 // ────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ describe("getChatName", () => {
 
 	it("returns private chat full name", () => {
 		const msg = createMessage({
-			chat: { id: 2, type: "private", first_name: "Jane", last_name: "Doe" } as TelegramBot.Chat,
+			chat: { id: 2, type: "private", first_name: "Jane", last_name: "Doe" },
 			from: { id: 2, is_bot: false, first_name: "Jane" },
 		});
 		expect(getChatName(msg)).toBe("Jane Doe");
@@ -326,14 +326,14 @@ describe("getChatName", () => {
 
 	it("returns group title", () => {
 		const msg = createMessage({
-			chat: { id: -100, type: "group", title: "Dev Team" } as TelegramBot.Chat,
+			chat: { id: -100, type: "group", title: "Dev Team" },
 		});
 		expect(getChatName(msg)).toBe("Dev Team");
 	});
 
 	it("falls back to type+id when no title", () => {
 		const msg = createMessage({
-			chat: { id: -100, type: "supergroup" } as TelegramBot.Chat,
+			chat: { id: -100, type: "supergroup" },
 		});
 		expect(getChatName(msg)).toBe("supergroup-100");
 	});
@@ -348,7 +348,7 @@ describe("getChatId", () => {
 
 	it("returns chat ID normally", () => {
 		const msg = createMessage({
-			chat: { id: -1001234567890, type: "supergroup" } as TelegramBot.Chat,
+			chat: { id: -1001234567890, type: "supergroup" },
 		});
 		expect(getChatId(msg)).toBe("-1001234567890");
 	});
@@ -357,7 +357,7 @@ describe("getChatId", () => {
 describe("getChatLink", () => {
 	it("returns markdown link for private chat with username", () => {
 		const msg = createMessage({
-			chat: { id: 2, type: "private", username: "jane" } as TelegramBot.Chat,
+			chat: { id: 2, type: "private", username: "jane" },
 			from: { id: 2, is_bot: false, first_name: "Jane" },
 		});
 		const link = getChatLink(msg);
@@ -372,7 +372,7 @@ describe("getChatLink", () => {
 				title: "Forum",
 				is_forum: true,
 				username: "forum",
-			} as TelegramBot.Chat,
+			},
 			message_thread_id: 42,
 		});
 		const link = getChatLink(msg);
@@ -461,7 +461,7 @@ describe("getInlineUrls", () => {
 			reply_markup: {
 				inline_keyboard: [
 					[
-						{ text: "Click", callback_data: "action" } as TelegramBot.InlineKeyboardButton,
+						{ text: "Click", callback_data: "action" },
 						{ text: "Link", url: "https://test.com" },
 					],
 				],
@@ -478,13 +478,13 @@ describe("getInlineUrls", () => {
 
 describe("getTopicId", () => {
 	it("returns undefined for non-forum chats", () => {
-		const msg = createMessage({ chat: { id: 1, type: "private" } as TelegramBot.Chat });
+		const msg = createMessage({ chat: { id: 1, type: "private" } });
 		expect(getTopicId(msg)).toBeUndefined();
 	});
 
 	it("returns message_thread_id for forum chats", () => {
 		const msg = createMessage({
-			chat: { id: -100, type: "supergroup", is_forum: true } as TelegramBot.Chat,
+			chat: { id: -100, type: "supergroup", is_forum: true },
 			message_thread_id: 42,
 		});
 		expect(getTopicId(msg)).toBe(42);
@@ -492,20 +492,20 @@ describe("getTopicId", () => {
 
 	it("falls back to reply message thread_id", () => {
 		const msg = createMessage({
-			chat: { id: -100, type: "supergroup", is_forum: true } as TelegramBot.Chat,
+			chat: { id: -100, type: "supergroup", is_forum: true },
 			reply_to_message: {
 				message_id: 1,
 				date: 0,
 				chat: { id: -100, type: "supergroup" },
 				message_thread_id: 55,
-			} as TelegramBot.Message,
+			},
 		});
 		expect(getTopicId(msg)).toBe(55);
 	});
 
 	it("defaults to 1 for forum with no thread info", () => {
 		const msg = createMessage({
-			chat: { id: -100, type: "supergroup", is_forum: true } as TelegramBot.Chat,
+			chat: { id: -100, type: "supergroup", is_forum: true },
 		});
 		expect(getTopicId(msg)).toBe(1);
 	});
@@ -523,7 +523,7 @@ describe("getReplyMessageId", () => {
 				date: 0,
 				chat: { id: 1, type: "private" },
 				message_thread_id: 1,
-			} as TelegramBot.Message,
+			},
 		});
 		expect(getReplyMessageId(msg)).toBe("42");
 	});
@@ -539,7 +539,7 @@ describe("getReplyMessageId", () => {
 				date: 0,
 				chat: { id: 1, type: "private" },
 				message_thread_id: 10,
-			} as TelegramBot.Message,
+			},
 		});
 		expect(getReplyMessageId(msg)).toBe("");
 	});
@@ -558,7 +558,7 @@ describe("getFileObject", () => {
 	});
 
 	it("detects document type", () => {
-		const msg = createMessage({ document: { file_id: "doc1", file_unique_id: "u2" } as TelegramBot.Document });
+		const msg = createMessage({ document: { file_id: "doc1", file_unique_id: "u2" } });
 		expect(getFileObject(msg).fileType).toBe("document");
 	});
 
@@ -596,7 +596,7 @@ describe("getFileObject", () => {
 		// photo comes first in fileTypes array
 		const msg = createMessage({
 			photo: [{ file_id: "p1", file_unique_id: "u1", width: 100, height: 100 }],
-			document: { file_id: "d1", file_unique_id: "u2" } as TelegramBot.Document,
+			document: { file_id: "d1", file_unique_id: "u2" },
 		});
 		expect(getFileObject(msg).fileType).toBe("photo");
 	});

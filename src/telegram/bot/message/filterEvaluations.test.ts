@@ -18,7 +18,7 @@ function makeMessage(overrides: Partial<TelegramBot.Message> = {}): TelegramBot.
 		from: { id: 100, is_bot: false, first_name: "Alice", last_name: "", username: "alice" },
 		text: "hello world",
 		...overrides,
-	} as TelegramBot.Message;
+	};
 }
 
 const plugin = { settings: { categoriesEnabled: false } } as unknown as TelegramSyncPlugin;

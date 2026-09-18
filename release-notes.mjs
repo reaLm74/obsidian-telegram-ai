@@ -1,12 +1,17 @@
 import { compareVersions } from "compare-versions";
 
-export const releaseVersion = "0.3.0";
+export const releaseVersion = "0.3.1";
 export const showNewFeatures = true;
 export let showBreakingChanges = false;
 
 // No version line here — the notes template above prints "Telegram AI <version>" as the
 // heading, and repeating it put the version on screen three times in a row.
-const newFeatures = `🤖 AI providers
+const newFeatures = `🩹 Fixed in 0.3.1
+- The plugin failed to load on iOS and Android. It starts there again.
+
+What 0.3.0 brought:
+
+🤖 AI providers
 - Claude and Gemini now work next to OpenAI, photos included (beta)
 - Any OpenAI-compatible endpoint: OpenRouter, Ollama, LM Studio and others
 - A "Test key" button that tells a wrong key from an empty balance or a rate limit
@@ -72,15 +77,4 @@ export function showBreakingChangesInReleaseNotes() {
 export function versionALessThanVersionB(versionA, versionB) {
 	if (!versionA || !versionB) return undefined;
 	return compareVersions(versionA, versionB) == -1;
-}
-
-const check = process.argv[2] === "check";
-
-if (check) {
-	const packageVersion = process.env.npm_package_version;
-
-	if (packageVersion !== releaseVersion) {
-		console.error(`Failed! Release notes are outdated! ${packageVersion} !== ${releaseVersion}`);
-		process.exit(1);
-	}
 }
