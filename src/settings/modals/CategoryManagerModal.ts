@@ -16,6 +16,7 @@ export class CategoryManagerModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		this.modalEl.addClass("tgai-category-manager");
 		this.render();
 	}
@@ -101,9 +102,6 @@ export class CategoryManagerModal extends Modal {
 		if (category.keywords.length > 0) {
 			this.addDetail(details, t("settings.categories.keywordsLabel"), category.keywords.join(", "));
 		}
-		if (category.templatePath) {
-			this.addDetail(details, t("settings.categories.templateLabel"), category.templatePath);
-		}
 	}
 
 	private addDetail(container: HTMLElement, label: string, value: string) {
@@ -129,6 +127,9 @@ export class CategoryManagerModal extends Modal {
 	private confirmDelete(category: NoteCategory) {
 		const confirmModal = new Modal(this.app);
 		confirmModal.onOpen = () => {
+			// The one dialog built inline rather than as a class — it still needs the
+			// plugin's modal class, or its buttons miss the mobile touch-target sizing.
+			confirmModal.modalEl.addClass("tgai-modal");
 			confirmModal.titleEl.setText(t("settings.categories.deleteConfirm", { name: category.name }));
 			confirmModal.contentEl.createEl("p", {
 				text: t("settings.categories.deleteConfirm.desc"),

@@ -10,6 +10,7 @@ import {
 	getProcessingHistory,
 	getProcessingStats,
 	resetProcessingTracker,
+	subscribeToProcessing,
 } from "./ProcessingTracker";
 
 beforeEach(() => {
@@ -229,5 +230,43 @@ describe("ProcessingTracker", () => {
 			expect(errorRecord?.status).toBe("error");
 			expect(errorRecord?.error).toBe("whisper failed");
 		});
+	});
+});
+
+describe("subscribeToProcessing", () => {
+	it("notifies on every mutation, so a view can repaint instead of holding a snapshot", () => {
+		let calls = 0;
+		const unsubscribe = subscribeToProcessing(() => calls++);
+
+		const id = recordProcessingStart(1, 1, "text", "hello");
+		expect(calls).toBe(1);
+		recordProcessingDone(id);
+		expect(calls).toBe(2);
+
+		unsubscribe();
+	});
+
+	it("stops notifying after unsubscribe", () => {
+		let calls = 0;
+		const unsubscribe = subscribeToProcessing(() => calls++);
+		unsubscribe();
+
+		recordProcessingStart(1, 1, "text", "hello");
+		expect(calls).toBe(0);
+	});
+
+	it("keeps recording when a listener throws", () => {
+		// A modal that fails to render must not fail the message it was reporting on.
+		const unsubscribe = subscribeToProcessing(() => {
+			throw new Error("render failed");
+		});
+
+		const id = recordProcessingStart(1, 1, "text", "hello");
+		recordProcessingError(id, "boom");
+
+		expect(getProcessingStats().totalErrors).toBe(1);
+		expect(getProcessingHistory()[0].status).toBe("error");
+
+		unsubscribe();
 	});
 });

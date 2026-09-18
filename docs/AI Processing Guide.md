@@ -2,20 +2,40 @@
 
 ## Overview
 
-Telegram AI runs each message through a processing flow before saving it to Obsidian. The route through that flow depends on the content type; what you configure is the prompt used at each step, not the steps themselves. The system supports OpenAI (GPT-4, Whisper) with content-type specific prompts, post-processors, and live progress tracking.
+Telegram AI runs each message through a processing flow before saving it to Obsidian. The route through that flow depends on the content type; what you configure is the prompt used at each step, not the steps themselves. Four AI providers are supported — OpenAI, Anthropic Claude, Google Gemini and any **custom OpenAI-compatible endpoint** — with content-type specific prompts, post-processors, and live progress tracking.
 
 ## Key Features
 
-- **AI Provider**: OpenAI (GPT-4 + Whisper)
+- **AI Providers**: OpenAI (GPT-4o/4.1, GPT-5.6 + Whisper), Anthropic Claude, Google Gemini — all with Vision — plus any OpenAI-compatible endpoint (see below)
 - **Content-Aware Flow**: Whisper → GPT → post-processors, with the route chosen per content type
 - **Note Language**: Notes and titles follow your interface language, whatever the prompts are written in
 - **Content-Type Prompts**: Separate prompts for text, photo, voice, document, links
-- **Post-Processors**: WikiLinker, AutoTagger, Summarization
+- **Post-Processors**: WikiLinker, AutoTagger, Summarization — off by default, and reachable only through a Setup Wizard preset (see below)
 - **Custom AI Parameters**: Dynamic variables like `{{ai:title}}`
 - **Local Document Processing**: Extract text from PDF, DOCX without AI calls
 - **Web Link Processing**: Parse web pages via Jina Reader API
 - **URL-Only Skip**: Link-only messages bypass AI to save tokens
 - **Live Status**: Processing progress in status bar + history log
+
+## Custom (OpenAI-compatible) Provider
+
+Since 0.7 the provider dropdown includes **Custom (OpenAI-compatible)** — for OpenRouter,
+Groq, Together, vLLM, or a local server (Ollama, LM Studio) that speaks the
+`/chat/completions` dialect:
+
+- **Base URL** — the API root including the version segment: `https://openrouter.ai/api/v1`,
+  `https://api.groq.com/openai/v1`, `http://localhost:11434/v1`. The plugin appends
+  `/chat/completions` and `/models` itself.
+- **API key** — optional: a local server needs none; when set, it is stored encrypted like
+  every other secret and covered by the pin code.
+- **Model** — free-form id; the endpoint, not the plugin, decides what exists. *Test key*
+  probes `{base}/models` and says so honestly when a gateway doesn't implement that route.
+- **What differs from the hosted providers**: no transcription (Whisper falls back to an
+  OpenAI key if one is configured), no reasoning-depth field on the wire, and cost tracking
+  counts tokens but usually not dollars — the plugin cannot know arbitrary endpoints'
+  prices, so spend on an unknown model id does not grow the monthly total. One nuance: a
+  model id the plugin knows prices for (say, `gpt-4o` behind a proxy) IS priced and
+  counted.
 
 ## Supported Content Types
 
@@ -30,12 +50,13 @@ Telegram AI runs each message through a processing flow before saving it to Obsi
 - **Use Cases**: Screenshots, diagrams, documents
 
 ### 3. Voice Messages & Audio Files
-- **Flow**: Whisper transcription → GPT formatting
+- **Flow**: transcription → AI formatting
+- **Who transcribes**: OpenAI uses Whisper; Gemini transcribes with the model itself. Claude has no speech-to-text endpoint — with Claude selected, transcription falls back to OpenAI if you have an OpenAI key configured, and is skipped with an explanatory message if you do not
 - **Unified prompt**: Voice, audio, and video share one prompt
 - **Use Cases**: Voice memos, recordings, podcasts
 
 ### 4. Video
-- **Flow**: Audio track extraction → Whisper → GPT
+- **Flow**: video file → Whisper transcription → AI formatting. The whole file is uploaded to the transcription API (Whisper accepts mp4/webm and similar formats, up to its 25 MB limit) — there is no separate audio-track extraction step
 - **Use Cases**: Tutorial recordings, presentations
 
 ### 5. Documents
@@ -45,7 +66,7 @@ Telegram AI runs each message through a processing flow before saving it to Obsi
 
 ### 6. Web Links
 - **Processing**: URL → Jina Reader API → clean Markdown → GPT analysis
-- **Enable**: Settings → Prompts → "Process links with AI"
+- **Enable**: Settings → AI → Prompts → "Web links"
 - **Token protection**: Long pages are trimmed before sending to AI
 - **Use Cases**: Article bookmarks, research links
 
@@ -73,13 +94,23 @@ Template Application → Save to Vault
 
 ### Post-Processors
 
-After AI processing, content passes through configurable post-processors:
+After AI processing, content passes through three post-processors:
 
 | Post-Processor | What it does |
 |----------------|-------------|
 | **WikiLinker** | Converts note references to `[[wikilinks]]` |
 | **AutoTagger** | Extracts and adds relevant #tags |
 | **Summarization** | Long text → summary + full text under `<details>` |
+
+> **They have no settings control.** The flags behind them (`wikiLinksEnabled`,
+> `autoTagsEnabled`, `aiSummarizationMode`) exist in the stored settings but appear on no
+> settings screen, and all three default to off — WikiLinker and AutoTagger to `false`,
+> Summarization to `replace`, which means the AI output simply replaces the original text.
+> Choosing a **Setup Wizard preset** is currently the only way to switch them on: *Personal
+> Diary*, *Work Tasks*, *Media Archive* and *Knowledge Collector* all enable AutoTagger;
+> *Work Tasks* and *Knowledge Collector* additionally enable WikiLinker; *Personal Diary*
+> and *Knowledge Collector* set Summarization to summary-plus-original. Applying a preset
+> rewrites the other settings it covers as well, so pick one before you tune prompts by hand.
 
 ### Media Group Processing
 When multiple photos/videos are sent as an album:
@@ -105,8 +136,8 @@ every prompt before it is sent, which means:
 | Option | Effect |
 |--------|--------|
 | **Auto** (default) | Follows the Obsidian interface language |
-| **English** / **Русский** | Always that language, whatever the interface is |
-| **Other…** | Any language name you type, e.g. `Deutsch` — the interface has two translations, your notes are not limited to them |
+| **English** / **Русский** / **Deutsch** / **Español** / **简体中文** | Always that language, whatever the interface is |
+| **Other…** | Any language name you type, e.g. `Português` — your notes are not limited to the interface's five translations |
 
 Detected categories are exempt: their names are matched against your category list, so the
 model is told to copy them unchanged rather than translate them.
@@ -172,7 +203,9 @@ Usage: {{ai:title}} in path templates
 ```
 
 ### Creating Custom Parameters
-Settings → Categories → Custom AI Parameters → "Manage parameters"
+*Settings → Categories → **Custom AI parameters*** — the row itself opens the editor; there is
+no separate button on it. It is shown only when AI processing **and** *Categorize notes with
+AI* are both on, so if you cannot find the row, enable those two first.
 
 ```
 Parameter: topic
@@ -193,15 +226,103 @@ detection — adding parameters costs tokens, not extra requests.
 
 ## Provider Configuration
 
-### OpenAI (GPT-4)
+Settings → **AI provider settings** picks the service and everything below it. Switching services keeps your prompts — only the model, key and per-model options change.
+
+### OpenAI
+
 ```
-API Key:      Your OpenAI API key
-Model:        gpt-4o-mini (recommended) or gpt-4o
-Temperature:  0.3 (consistent) to 0.7 (creative)
-Max Tokens:   4000
-Vision:       Enabled (for image analysis)
+API Key:      Your OpenAI API key (platform.openai.com/api-keys)
+Model:        gpt-4o-mini (economical) · gpt-4o · gpt-4.1-mini · gpt-4.1
+              gpt-5.6-luna (high volume) · gpt-5.6-terra (balanced) · gpt-5.6-sol (flagship)
+Temperature:  0.3 (consistent) to 0.7 (creative) — GPT-4 line only
+Max Tokens:   2000
+Reasoning:    GPT-5.6 and the o-series only — see below
+Vision:       Every model listed above
 Whisper:      Automatic (for voice/audio/video)
 ```
+
+`gpt-5.6` on its own is an alias that follows whichever variant OpenAI points it at, so
+the model behind it — and its price — can change without you touching anything. Pick a
+named variant if you want that fixed.
+
+> **GPT-5.6 is not a drop-in replacement for GPT-4.** It renamed the reply-length
+> parameter (`max_completion_tokens` instead of `max_tokens`) and refuses `temperature`
+> outright. The plugin sends the right request shape per model, so switching is safe — the
+> temperature slider simply stops applying, and the settings screen says so.
+
+**Reasoning depth.** GPT-5.6 and the o-series think before they answer, and those thinking
+tokens are billed *and* deducted from your max-tokens budget before a single word of the
+answer is written. At 2000 tokens a model set to deliberate can consume the entire budget
+and return nothing. The plugin therefore asks for the cheapest level the model offers
+(`none` on GPT-5.6) unless you raise it — reformatting a chat message needs no
+deliberation. If an answer never arrives, the plugin says the budget ran out rather than
+reporting an empty reply. The same setting applies to Claude and Gemini; see below.
+
+Models with an announced shutdown date (GPT-4, GPT-4 Turbo, GPT-3.5 Turbo, the o-series,
+and the original GPT-5 line) are not offered in the picker. If you selected one earlier,
+the plugin keeps talking to it correctly and shows the date it stops working.
+
+### Anthropic Claude
+
+```
+API Key:      Your Anthropic key (console.anthropic.com/settings/keys)
+Model:        claude-opus-5 (flagship) · claude-sonnet-5 (balanced)
+              claude-haiku-4-5 (economical) · claude-opus-4-8 · claude-sonnet-4-6
+Temperature:  Haiku 4.5 and Sonnet 4.6 only — the Claude 5 family does not accept one
+Max Tokens:   2000
+Reasoning:    All listed models except Haiku 4.5, which rejects the parameter
+Vision:       All listed models
+Beta features: Optional anthropic-beta flags, comma-separated. Leave empty unless a
+              feature you need asks for one
+Transcription: Not available — see "Voice Messages" above
+```
+
+Claude thinks by default on the 5 family, and — as on OpenAI — those tokens come out of
+`max_tokens` before the answer is written. The plugin asks for the lowest effort the model
+accepts, which lets Claude skip thinking entirely on simple input. Claude Haiku 4.5 rejects
+the parameter outright, so nothing is sent for it.
+
+The older `budget_tokens` control is never used: Claude 4.7 and later reject it with a 400.
+
+### Google Gemini
+
+```
+API Key:      Your Google AI Studio key (aistudio.google.com/apikey)
+Model:        gemini-3.7-flash (recommended) · gemini-3.6-flash
+              gemini-3.1-pro-preview (frontier) · gemini-3.5-flash-lite (economical)
+              gemini-2.5-flash · gemini-2.5-pro (previous generation)
+Temperature:  0.0 – 2.0
+Max Tokens:   2000
+Vision:       All listed models
+Safety filter: BLOCK_ONLY_HIGH by default. A blocked message is saved without AI
+              processing and tells you which filter stopped it
+Transcription: Built in — Gemini reads the audio directly, no Whisper needed
+```
+
+Gemini also thinks by default, but unlike OpenAI and Claude its thinking tokens are
+budgeted separately and do **not** come out of `maxOutputTokens` — so a low limit cannot be
+consumed by reasoning. The thinking level is therefore a cost lever rather than a
+correctness one, and the plugin currently leaves it at the model's default; the levels are
+recorded per model and the control is planned for a later release.
+
+### Testing a key
+
+Each provider's key field has a **Test key** button. It performs a free, token-free call
+against that provider and distinguishes the cases that look alike:
+
+| Result | Meaning |
+|--------|---------|
+| ✅ API key is valid | The key works |
+| 🔑 API key is invalid or revoked | Reissue the key |
+| 💳 Quota exceeded / credit balance too low | The key is fine; the account needs topping up |
+| ⏳ Rate limited | The key is fine; the check came too fast. Try again shortly |
+| 🚫 Not permitted for this model | The key exists but the account cannot use what is selected |
+
+### Choosing a model
+
+The model dropdown shows each model's context window and approximate price per million
+tokens. Anything not in the list can be entered by hand via **Other custom model** — the
+plugin will still pick the right request shape from the model id.
 
 ## Cost Optimization
 
@@ -209,7 +330,8 @@ Whisper:      Automatic (for voice/audio/video)
 |----------|---------|
 | Local document extraction (PDF, DOCX) | No AI cost for extraction |
 | URL-only skip | Link messages bypass AI |
-| `gpt-4o-mini` instead of `gpt-4o` | ~10x cheaper |
+| `gpt-4o-mini`, `gemini-3.5-flash-lite` or `claude-haiku-4-5` instead of a flagship model | 5–20x cheaper |
+| Lowest reasoning depth on GPT-5.6 / o-series | No thinking tokens billed per message |
 | Disable unused content types | No API calls for disabled types |
 | Hierarchical prompts | Single request instead of multiple |
 | Shared message metadata | Title, custom parameters and category in one request |
@@ -222,7 +344,7 @@ The bottom status bar shows:
 - 📊 Queue count (messages waiting)
 
 ### Processing History
-Access from Settings → "Processing History":
+Open it by clicking the status-bar counter, or run **"Show processing history"** from the command palette:
 - Last 50 processed messages
 - Status (success / error) for each
 - Processing time
@@ -231,12 +353,18 @@ Access from Settings → "Processing History":
 
 | Problem | Solution |
 |---------|----------|
-| Invalid API Key | Check key format at platform.openai.com |
-| Rate limiting (429) | Plugin retries automatically; reduce request frequency |
-| Poor AI results | Make prompts more specific; adjust temperature |
-| Slow processing | Check network; switch to `gpt-4o-mini` |
-| High costs | Enable local processing; disable unneeded types |
-| Vision not working | Ensure Vision API is enabled in settings |
+| Invalid API Key | Press **Test key** — it tells you whether the key, the balance or the rate limit is at fault |
+| Rate limiting (429) | The plugin retries automatically and honours the provider's `Retry-After`. A wait longer than 60 s is reported instead of blocking the queue |
+| Quota / credit balance | Not retried — waiting cannot fix it. Top up the account |
+| Poor AI results | Make prompts more specific; adjust temperature where the model accepts one |
+| Slow processing | Check the network; switch to a smaller model |
+| High costs | Enable local document extraction; disable unneeded content types |
+| Vision not working | Enable Vision and check the warning under it — the selected model may not accept images |
+| "does not accept a temperature" | Expected on GPT-5.6, the o-series and the Claude 5 family. Nothing to fix |
+| Empty note, "budget ran out" | A reasoning model spent the whole token budget thinking. Raise max tokens or lower the reasoning depth |
+| Model marked as being switched off | The provider announced a shutdown date. Pick a current model before then |
+| Gemini blocked the content | Loosen the Safety filter in the Gemini settings |
+| Voice not transcribed with Claude | Claude has no speech endpoint. Add an OpenAI key, or switch to Gemini |
 
 ## Getting Help
 

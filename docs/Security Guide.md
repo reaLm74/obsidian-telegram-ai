@@ -18,32 +18,35 @@ for every value. What that protects depends on whether you set a PIN code.
   the key ships with the plugin. Treat `data.json` as sensitive regardless.
 
 #### With a PIN code (recommended)
-Enable it in *Bot settings → Encryption by pin code*.
+Enable it in *Telegram AI settings → Bot settings → Encrypt secrets with a pin code*.
 
 **Benefits:**
-- **User-Controlled Key**: the key is derived from your PIN via scrypt; the PIN exists only
-  in your memory and is never stored
+- **User-Controlled Key**: the key is derived from your PIN via scrypt (N = 16384, r = 8,
+  p = 1, 32-byte output) over a random per-value salt; the PIN exists only in your memory and
+  is never stored
 - **Safe to sync**: a copy of `data.json` in git, a backup or a cloud drive is useless
   without the PIN
 - **Session-Based**: PIN required each time Obsidian starts
 
 **How It Works:**
-1. Enable PIN encryption in plugin settings
-2. Set a memorable but secure PIN (6+ characters recommended)
-3. Enter PIN each time Obsidian starts
+1. Turn on *Encrypt secrets with a pin code* in Bot settings
+2. Set a memorable but secure PIN — **6 characters is the enforced minimum**, and anything
+   shorter is rejected when you set it
+3. Enter the PIN each time Obsidian starts. Dismissed the prompt? Run *Telegram AI: Unlock secrets (enter pin code)* from the command palette, or press Restart next to the bot in settings
 4. Token remains encrypted when Obsidian is closed
 
-> **The PIN cannot be recovered.** Forgetting it means re-entering the bot token and the
-> API key by hand.
+> **The PIN cannot be recovered.** Forgetting it means clearing and re-entering every
+> secret by hand — the bot token, all four AI keys and the Telegram `api_hash`. *Bot
+> settings → Reset credentials* is the supported way out; it lists what it will clear and
+> where to get each value again, and leaves notes and settings untouched.
 
 ### API Key Security
-Your OpenAI API key rides the same setting as the bot token — same algorithm, same PIN,
-so protecting one protects the other. A key saved by a version before 0.2.1 was kept as
-plain text and is upgraded to the encrypted form the next time the plugin loads.
-
-Anthropic Claude and Google Gemini are not available yet. Their key fields exist in the
-settings schema but nothing reads them, and unlike the OpenAI key they are **not**
-encrypted — do not put real keys there.
+Every AI key rides the same scheme as the bot token — same algorithm, same PIN, so
+protecting one protects all. Since 0.5 that covers the OpenAI, Claude and Gemini keys and
+the Telegram `api_hash`; 0.7 added the custom-endpoint key. A key saved by an earlier
+version in plain text is upgraded to the encrypted form the next time the plugin loads —
+but if your vault was synced somewhere you do not fully control *while* an old version
+stored it in the clear, treat that key as exposed and rotate it.
 
 #### Best Practices
 - **Rotate Keys Regularly**: Change API keys periodically
@@ -57,14 +60,21 @@ encrypted — do not put real keys there.
 The plugin prioritizes local processing to minimize data exposure:
 
 #### Supported Local Processing
-- **Text Documents**: TXT, JSON, CSV, XML, HTML, Markdown, YAML
-- **Code Files**: JavaScript, TypeScript, Python, Java, C++, C#, PHP, Ruby, Go, Rust, Swift, SQL
+- **Text Documents**: TXT, JSON, CSV/TSV, XML, HTML, Markdown, YAML, INI/CONF, SQL
+- **Code Files**: JavaScript, TypeScript, Python, Java, C++, C#, PHP, Ruby, Go, Rust, Swift
+- **Binary Documents**: PDF, DOCX, XLSX, PPTX, EPUB — parsed inside the plugin, nothing uploaded
 - **Benefits**: No external API calls, faster processing, complete privacy
+- **Bounded**: extraction stops at 2 000 000 characters, so a huge or deliberately inflated
+  document cannot produce an unbounded note (the note says where it was cut)
 
 #### AI Processing Privacy
 When AI processing is required:
 - **Encrypted Transmission**: All API requests use HTTPS encryption
-- **No Data Storage**: AI providers don't store your content (verify their policies)
+- **Provider retention is the provider's call**: what happens to the content after it arrives
+  is set by whoever you chose, not by the plugin. OpenAI may use API content for model
+  improvement depending on your account settings; Anthropic and Google each publish their own
+  retention and training terms. Read the policy of the provider you enabled, and be selective
+  about what you send through it
 - **Minimal Data**: Only necessary content sent for processing
 - **Request Optimization**: Reduced API calls through intelligent batching
 
@@ -77,6 +87,30 @@ Your processed content remains secure within Obsidian:
 - **Access Control**: Standard Obsidian file system permissions apply
 - **Backup Control**: You control all backup and sync mechanisms
 
+#### Credentials (v0.5+)
+Every secret the plugin stores in `data.json` is encrypted with AES-256-GCM: the bot token, the OpenAI, Claude, Gemini and custom-endpoint API keys, and the Telegram `api_hash`. With a pin code the key is derived from your pin; without one it is a compiled-in constant, which is obfuscation rather than protection. Values written in the clear by earlier versions are upgraded on load.
+
+- **Change pin code** (*Bot settings*) re-encrypts every secret under a new pin, asking for the current one first.
+- **Reset credentials** is the deliberate way out of a forgotten pin: it lists what will be cleared and where to obtain each value again. Notes, settings and history are untouched.
+- **Secret redaction**: the Bot API embeds the token in file download URLs, and error text is forwarded into your Telegram chat. Known secrets and anything token-shaped are replaced with `•redacted•` before reaching a log, a notice, the chat, the processing history, the delivery ledger or a diagnostic report.
+- **The Telegram account session** (user login) is *not* in `data.json` — the MTProto library keeps it in Obsidian's `localStorage`, so it does not travel with vault sync. It is also not covered by the pin; sign out to destroy it.
+
+#### Malformed updates (v0.5+)
+Incoming updates are shape-checked at the boundary and dropped with a reason if malformed.
+
+#### Note properties from message text (v0.7+)
+A message that opens with a `---` … `---` block no longer becomes the properties of the note it creates: the opening fence is escaped and shows as plain text. Without this, anyone allowed to send notes — every member of a whitelisted group — could set `aliases`, `publish` or `cssclasses` on your notes. Frontmatter written by your note template or produced by the AI prompt still works as before.
+
+#### Message Ledger (v0.4+)
+The delivery-reliability layer keeps a local state file, `message-ledger-<deviceId>.json` (per device since 0.6; older versions used a shared `message-ledger.json`), in the plugin folder (`.obsidian/plugins/telegram-ai/`). Be aware of what it contains:
+
+- **Raw pending messages**: messages whose processing has not finished yet are stored verbatim (including their text) so they can be replayed after a restart. They are removed once processing succeeds.
+- **Note mapping**: which note each recent message landed in (paths only), plus processed message IDs — no message text.
+- **Plaintext**: the file is not encrypted, same as the notes themselves. If you sync or back up your vault's `.obsidian` folder, this file travels with it.
+- **Cleanup**: deleting the file is safe — you lose only retry state and edit/reply mapping, never notes.
+
+The **diagnostic report** export (command "Export diagnostic report (no secrets)") never includes message text or secret values; settings secrets are replaced with `•set•` markers and chat lists with counts.
+
 ## Network Security
 
 ### Connection Protection
@@ -85,11 +119,13 @@ All network communications are secured:
 #### Telegram API
 - **HTTPS Only**: All Telegram API calls use encrypted connections
 - **Token Validation**: Bot tokens validated before use
-- **Rate Limiting**: Built-in protection against API abuse
 - **Timeout Protection**: Prevents hanging connections
 
 #### AI Provider APIs
-- **Secure Endpoints**: All AI API calls use HTTPS encryption
+- **Secure Endpoints**: OpenAI, Claude and Gemini are reached over HTTPS on fixed URLs
+- **Custom endpoint**: the base URL is yours, so the scheme is too — a plain `http://` address
+  sends your API key and your message content over the network in the clear. Use `https://`
+  for anything that is not on the same machine
 - **Authentication**: Secure API key authentication
 - **Request Validation**: Input validation before sending requests
 - **Error Handling**: Secure error handling without data leakage

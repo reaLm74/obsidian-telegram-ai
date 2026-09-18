@@ -32,6 +32,10 @@ function makePlugin(overrides: Record<string, unknown> = {}): TelegramSyncPlugin
 	return {
 		settings: {
 			aiEnabled: true,
+			// Held as plain text, which is what an unencrypted install looks like: the secret
+			// store reads the setting directly when its "encrypted" flag is not set.
+			openAIApiKey: "sk-test",
+			openAIApiKeyEncrypted: false,
 			openAIModel: "gpt-4o-mini",
 			openAITemperature: 0.7,
 			openAIMaxTokens: 2000,
@@ -41,7 +45,6 @@ function makePlugin(overrides: Record<string, unknown> = {}): TelegramSyncPlugin
 			aiVisionEnabled: false,
 			...overrides,
 		},
-		getOpenAIApiKey: () => "sk-test",
 		manifest: { name: "test-plugin" },
 	} as unknown as TelegramSyncPlugin;
 }
@@ -187,5 +190,111 @@ describe("processWithOpenAI — guards before any request", () => {
 	it("makes no request for empty content", async () => {
 		expect(await processWithOpenAI(makePlugin(), "   ", "prompt")).toBeNull();
 		expect(mockRequestUrlWithTimeout).not.toHaveBeenCalled();
+	});
+});
+
+// ────────────────────────────────────────────────────────
+// Request dialect
+// ────────────────────────────────────────────────────────
+
+/** The parsed body of the request that was actually sent. */
+function sentBody(): Record<string, unknown> {
+	const params = mockRequestUrlWithTimeout.mock.calls[0][0] as { body: string };
+	return JSON.parse(params.body) as Record<string, unknown>;
+}
+
+// GPT-5 and the o-series renamed max_tokens to max_completion_tokens and reject
+// temperature. Sending the GPT-4 shape to them fails every request with a 400.
+describe("processWithOpenAI — request shape follows the model", () => {
+	it("sends max_tokens and a temperature for the GPT-4 line", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(makePlugin({ openAIModel: "gpt-4o-mini" }), "content", "prompt");
+
+		expect(sentBody().max_tokens).toBe(2000);
+		expect(sentBody().temperature).toBe(0.7);
+		expect(sentBody()).not.toHaveProperty("max_completion_tokens");
+	});
+
+	it("sends max_completion_tokens and no temperature for GPT-5.6", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(makePlugin({ openAIModel: "gpt-5.6-sol" }), "content", "prompt");
+
+		expect(sentBody().max_completion_tokens).toBe(2000);
+		expect(sentBody()).not.toHaveProperty("max_tokens");
+		expect(sentBody()).not.toHaveProperty("temperature");
+	});
+
+	it("does the same for the o-series", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(makePlugin({ openAIModel: "o3-mini" }), "content", "prompt");
+
+		expect(sentBody().max_completion_tokens).toBe(2000);
+		expect(sentBody()).not.toHaveProperty("temperature");
+	});
+});
+
+// Reasoning tokens are taken out of max_completion_tokens and produced before any answer
+// text, so a reasoning model at its default effort can spend the whole budget thinking.
+describe("processWithOpenAI — reasoning effort", () => {
+	it("asks for the cheapest level a reasoning model offers", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(makePlugin({ openAIModel: "gpt-5.6-sol" }), "content", "prompt");
+
+		expect(sentBody().reasoning_effort).toBe("none");
+	});
+
+	it("honours a configured level", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(
+			makePlugin({ openAIModel: "gpt-5.6-sol", aiReasoningEffort: "high" }),
+			"content",
+			"prompt",
+		);
+
+		expect(sentBody().reasoning_effort).toBe("high");
+	});
+
+	// The parameter does not exist on the GPT-4 line; sending it would be rejected.
+	it("omits the parameter for a model with no reasoning stage", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue(successResponse("note"));
+
+		await processWithOpenAI(makePlugin({ openAIModel: "gpt-4o-mini" }), "content", "prompt");
+
+		expect(sentBody()).not.toHaveProperty("reasoning_effort");
+	});
+});
+
+describe("processWithOpenAI — an answer that never arrived", () => {
+	// "Empty content" alone sends people looking at their prompt. finish_reason says the
+	// budget ran out, which on a reasoning model means it was spent thinking.
+	it("explains a budget exhausted before any text was written", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue({
+			status: 200,
+			json: { choices: [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "length" }] },
+			text: "",
+		});
+
+		const result = await processWithOpenAI(makePlugin({ openAIModel: "gpt-5.6-sol" }), "content", "prompt");
+
+		expect(result).toBeNull();
+		expect(reportedMessage()).toContain("budget");
+		expect(mockRequestUrlWithTimeout).toHaveBeenCalledTimes(1);
+	});
+
+	it("still reports a plain empty answer as such", async () => {
+		mockRequestUrlWithTimeout.mockResolvedValue({
+			status: 200,
+			json: { choices: [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }] },
+			text: "",
+		});
+
+		await processWithOpenAI(makePlugin(), "content", "prompt");
+
+		expect(reportedMessage()).toContain("empty content");
 	});
 });

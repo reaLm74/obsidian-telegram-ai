@@ -1,0 +1,50 @@
+# Dependency updates.
+#
+# Targeted at develop, because main only ever receives release merges — a PR opened against
+# main would be closed by the contributor-guard workflow.
+#
+# The runtime dependencies are grouped and kept to patch/minor: `telegram` (GramJS) is
+# pinned exactly on purpose and a major bump of pdf-parse or mammoth changes
+# behaviour that only a manual test against a real bot can confirm.
+version: 2
+
+updates:
+    - package-ecosystem: npm
+      directory: "/"
+      target-branch: develop
+      schedule:
+          interval: weekly
+          day: monday
+      open-pull-requests-limit: 5
+      commit-message:
+          # Matches the Conventional Commits prefixes release-please parses, so a dependency
+          # bump lands in the changelog under the right heading instead of "Miscellaneous".
+          prefix: fix
+          prefix-development: chore
+      groups:
+          dev-dependencies:
+              dependency-type: development
+              update-types:
+                  - minor
+                  - patch
+          production-dependencies:
+              dependency-type: production
+              update-types:
+                  - minor
+                  - patch
+      ignore:
+          # Pinned to an exact version: GramJS ships breaking changes in patch releases and
+          # the MTProto login flow has to be re-tested by hand after any move.
+          - dependency-name: telegram
+          # Obsidian's own typings track the desktop app, not this plugin's minAppVersion.
+          - dependency-name: obsidian
+            update-types:
+                - version-update:semver-major
+
+    - package-ecosystem: github-actions
+      directory: "/"
+      target-branch: develop
+      schedule:
+          interval: monthly
+      commit-message:
+          prefix: chore

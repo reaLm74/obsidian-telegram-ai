@@ -47,7 +47,7 @@ export const PRESETS: PresetConfig[] = [
 			wikiLinksEnabled: false,
 			aiPromptGeneral:
 				"Format as a personal diary entry. Use first person, add date context, highlight emotions and key events. Use Markdown with headings and bullet points.",
-			aiPromptVoice:
+			aiPromptAudioVideo:
 				"Transcribe this voice message and format as a diary entry. Preserve the personal tone, add paragraph breaks, and highlight key thoughts.",
 		},
 	},
@@ -104,7 +104,7 @@ export const PRESETS: PresetConfig[] = [
 			wikiLinksEnabled: false,
 			aiPromptPhoto:
 				"Describe this image in detail. Include: subject, setting, mood, colors, and notable elements. Add relevant tags at the bottom.",
-			aiPromptVideo: "Describe the video content. Include: subject, action, setting, and key moments.",
+			aiPromptAudioVideo: "Describe the video content. Include: subject, action, setting, and key moments.",
 		},
 	},
 	{

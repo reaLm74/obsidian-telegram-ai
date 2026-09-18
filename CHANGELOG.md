@@ -176,7 +176,8 @@ This is the first release of **Telegram AI** - a complete rewrite and enhancemen
 
 ### Built With
 - [Obsidian Plugin API](https://docs.obsidian.md/)
-- [node-telegram-bot-api](https://github.com/yagop/node-telegram-bot-api)
+- The plugin's own Telegram Bot API client (`src/telegram/botApi/`), which replaced the
+  `node-telegram-bot-api` dependency; GramJS still handles the optional MTProto account login
 - OpenAI, Anthropic, and Google AI APIs
 - TypeScript, ESLint, Prettier
 

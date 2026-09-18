@@ -4,6 +4,7 @@ import { t } from "src/locale/i18n";
 
 import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicator";
 import { setDebugMode } from "src/utils/debugLog";
+import { enqueue } from "src/utils/queues";
 import {
 	createDefaultMessageDistributionRule,
 	defaultTelegramFolder,
@@ -14,8 +15,20 @@ import {
 export class AdvancedSettingsModal extends Modal {
 	advancedSettingsDiv!: HTMLDivElement;
 	saved = false;
-	constructor(public plugin: TelegramSyncPlugin) {
+	/** Redraws the host settings tab; without it an import leaves the tab stale. */
+	private onUpdate: () => void;
+	constructor(
+		public plugin: TelegramSyncPlugin,
+		onUpdate?: () => void,
+	) {
 		super(plugin.app);
+		this.onUpdate = onUpdate || (() => {});
+	}
+
+	onClose() {
+		// The tab behind this modal shows AI/category/folder state this modal can change
+		// (directly or via a settings import) — refresh it once on the way out.
+		this.onUpdate();
 	}
 
 	display() {
@@ -30,12 +43,179 @@ export class AdvancedSettingsModal extends Modal {
 		this.addNotesFolder();
 		this.addLocalDocumentExtraction();
 		this.addLinksFolder();
+		this.addSkipAutoForwards();
+
+		new Setting(this.advancedSettingsDiv).setName(t("settings.advanced.reliability")).setHeading();
+		this.addConcurrentAIRequests();
+		this.addMessageMaxRetries();
+		this.addFrontmatterIds();
+		this.addEditedMessageUpdates();
+		this.addReplyLinks();
+		this.addReactionSync();
 
 		// Category tags and folders are NOT here — they live in CategorySettingsModal,
 		// opened from the categories section, where the user is already thinking about them.
 
+		new Setting(this.advancedSettingsDiv).setName(t("settings.advanced.devices")).setHeading();
+		this.addMobilePauseWhenHidden();
+		this.addSettingsTransfer();
+
 		// Last on purpose: a diagnostic switch, not something to meet while configuring.
 		this.addDebugMode();
+	}
+
+	addSkipAutoForwards() {
+		this.addToggleSetting(
+			"settings.content.skipAutoForwards",
+			"settings.content.skipAutoForwards.desc",
+			() => this.plugin.settings.skipAutoForwardedChannelPosts,
+			(value) => (this.plugin.settings.skipAutoForwardedChannelPosts = value),
+		);
+	}
+
+	addMobilePauseWhenHidden() {
+		this.addToggleSetting(
+			"settings.mobile.pauseHidden",
+			"settings.mobile.pauseHidden.desc",
+			() => this.plugin.settings.mobilePauseWhenHidden,
+			(value) => (this.plugin.settings.mobilePauseWhenHidden = value),
+		);
+	}
+
+	addSettingsTransfer() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.transfer.name"))
+			.setDesc(t("settings.transfer.desc"))
+			.addButton((button) => {
+				button.setButtonText(t("settings.transfer.export")).onClick(() => {
+					void (async () => {
+						button.setDisabled(true);
+						try {
+							const { exportSettings } = await import("../settingsTransfer");
+							await exportSettings(this.plugin);
+						} finally {
+							button.setDisabled(false);
+						}
+					})();
+				});
+			})
+			.addButton((button) => {
+				button.setButtonText(t("settings.transfer.import")).onClick(() => {
+					void (async () => {
+						button.setDisabled(true);
+						try {
+							const { importSettings } = await import("../settingsTransfer");
+							if (await importSettings(this.plugin)) this.display();
+						} finally {
+							button.setDisabled(false);
+						}
+					})();
+				});
+			});
+	}
+
+	/** A toggle bound to one boolean setting — the repeating shape of this modal. */
+	private addToggleSetting(nameKey: string, descKey: string, get: () => boolean, set: (value: boolean) => void) {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t(nameKey))
+			.setDesc(t(descKey))
+			.addToggle((toggle) => {
+				toggle.setValue(get());
+				toggle.onChange((value) => {
+					void (async () => {
+						set(value);
+						await this.plugin.saveSettings();
+					})();
+				});
+			});
+	}
+
+	addConcurrentAIRequests() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.reliability.concurrent"))
+			.setDesc(t("settings.reliability.concurrent.desc"))
+			.addSlider((slider) => {
+				slider
+					.setLimits(1, 5, 1)
+					.setDynamicTooltip()
+					.setValue(this.plugin.settings.aiMaxConcurrentRequests)
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.aiMaxConcurrentRequests = value;
+							await this.plugin.saveSettings();
+						})();
+					});
+			});
+	}
+
+	addMessageMaxRetries() {
+		new Setting(this.advancedSettingsDiv)
+			.setName(t("settings.reliability.maxRetries"))
+			.setDesc(t("settings.reliability.maxRetries.desc"))
+			.addSlider((slider) => {
+				slider
+					.setLimits(1, 10, 1)
+					.setDynamicTooltip()
+					.setValue(this.plugin.settings.messageMaxRetries)
+					.onChange((value) => {
+						void (async () => {
+							this.plugin.settings.messageMaxRetries = value;
+							// Applied to the running ledger too, so the new threshold covers
+							// messages already queued rather than only those seen after a reload.
+							this.plugin.messageLedger?.setMaxAttempts(value);
+							await this.plugin.saveSettings();
+						})();
+					});
+			});
+	}
+
+	addFrontmatterIds() {
+		this.addToggleSetting(
+			"settings.reliability.frontmatterIds",
+			"settings.reliability.frontmatterIds.desc",
+			() => this.plugin.settings.noteFrontmatterIds,
+			(value) => (this.plugin.settings.noteFrontmatterIds = value),
+		);
+	}
+
+	addEditedMessageUpdates() {
+		this.addToggleSetting(
+			"settings.reliability.editedUpdates",
+			"settings.reliability.editedUpdates.desc",
+			() => this.plugin.settings.editedMessageUpdatesNote,
+			(value) => (this.plugin.settings.editedMessageUpdatesNote = value),
+		);
+		this.addToggleSetting(
+			"settings.reliability.versionHistory",
+			"settings.reliability.versionHistory.desc",
+			() => this.plugin.settings.editedNoteVersionHistory,
+			(value) => (this.plugin.settings.editedNoteVersionHistory = value),
+		);
+	}
+
+	addReplyLinks() {
+		this.addToggleSetting(
+			"settings.reliability.replyLinks",
+			"settings.reliability.replyLinks.desc",
+			() => this.plugin.settings.replyLinksEnabled,
+			(value) => (this.plugin.settings.replyLinksEnabled = value),
+		);
+	}
+
+	addReactionSync() {
+		this.addToggleSetting(
+			"settings.reliability.reactions",
+			"settings.reliability.reactions.desc",
+			() => this.plugin.settings.reactionSyncEnabled,
+			(value) => {
+				this.plugin.settings.reactionSyncEnabled = value;
+				// getUpdates remembers its allowed_updates subscription, so the change only
+				// takes effect on reconnect — same immediate reconnect as the declarative
+				// surface, instead of waiting for whenever the bot next restarts.
+				// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue binds `this` via fn.call(context)
+				void enqueue(this.plugin, this.plugin.initTelegram, "bot");
+			},
+		);
 	}
 
 	addDebugMode() {
@@ -220,6 +400,7 @@ export class AdvancedSettingsModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		this.display();
 	}
 }

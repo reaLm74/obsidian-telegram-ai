@@ -2,20 +2,27 @@
 
 Welcome to the comprehensive documentation for Telegram AI! This collection of guides will help you master all aspects of the plugin, from basic setup to advanced AI-powered workflows.
 
+> Version numbers 0.3–0.7 in these docs are roadmap stage names, not released versions — everything described is in the current build.
+
 ## 📚 Documentation Overview
 
 ### Getting Started
 - **[Quick Start Guide](Quick%20Start%20Guide.md)** - Essential setup steps to get up and running quickly
 - **[Security Guide](Security%20Guide.md)** - Important security practices and token protection
+- **[Mobile Guide](Mobile%20Guide.md)** - Running the plugin on iOS and Android: what works, battery, multi-device
 
 ### Core Features
 - **[AI Processing Guide](AI%20Processing%20Guide.md)** - Complete guide to AI-powered content processing
+- **[Reliability Guide](Reliability%20Guide.md)** - Delivery guarantees: persistent queue, retries, deduplication, cost tracking
 - **[Smart Categories Guide](Smart%20Categories%20Guide.md)** - Automatic message categorization and organization
 - **[Template Variables Reference](Template%20Variables%20Reference.md)** - All available variables for dynamic templates
 
 ### Advanced Usage
 - **[Advanced Features Guide](Advanced%20Features%20Guide.md)** - User authentication, premium features, and complex workflows
 - **[Message Format Examples](Message%20Format%20Examples.md)** - Technical reference for message structures and processing
+
+### Contributing
+- **[Translation Guide](Translation%20Guide.md)** - Improve or add a UI language — one JSON file, no build needed
 
 ## 🚀 Quick Navigation
 
@@ -34,14 +41,15 @@ Welcome to the comprehensive documentation for Telegram AI! This collection of g
 2. Check **[Template Variables Reference](Template%20Variables%20Reference.md)** for API reference
 3. Explore **[Advanced Features Guide](Advanced%20Features%20Guide.md)** for integration options
 4. **[Release Checklist](Release%20Checklist.md)** — release checklist for new features
-5. **[Roadmap 2026-2028](Roadmap%202026-2028.md)** — two-year development roadmap (Q3 2026 → Q2 2028)
+5. **[Roadmap](Roadmap.md)** — single development roadmap (Q3 2026 → Q2 2028), written in Russian
 
 ## 🎯 Feature Highlights
 
 ### 🤖 AI-Powered Processing
 - **Content-Aware Flow**: Whisper → GPT → post-processors, routed by content type
 - **Note Language**: Output follows the interface language, or any language you choose
-- **Post-Processors**: WikiLinker, AutoTagger, Summarization
+- **Post-Processors**: WikiLinker, AutoTagger, Summarization — all off by default and with no
+  settings control of their own; a Setup Wizard preset is currently the only way to turn them on
 - **Custom Parameters**: Dynamic variables like `{{ai:title}}`
 - **Web Link Parsing**: Scrape and summarize URLs via Jina Reader API
 - **Cost Optimization**: Local document extraction, URL-only skip
@@ -53,15 +61,22 @@ Welcome to the comprehensive documentation for Telegram AI! This collection of g
 - **Forward Chains**: Maintains message context and threading
 
 ### 🗂️ Smart Organization
-- **AI Categorization**: Automatic sorting with keyword + AI classification
+- **AI Categorization**: The model picks one of your categories per note; keywords are examples in its prompt, not a matcher
 - **Dynamic Templates**: Flexible naming with 30+ template variables
 - **4 Built-in Presets**: Personal Diary, Work Tasks, Media Archive, Knowledge Collector
 - **Setup Wizard**: Zero-friction onboarding for new users
 
+### 💬 Control from the Chat
+- **Bot Commands**: `/status`, `/retry`, `/category`, `/search` — queue state, replaying failures,
+  refiling a note and searching the vault without opening Obsidian
+- **Second Gate**: in group chats commands answer only senders personally on the allowed list
+
 ### 📊 Monitoring
 - **Live Status Bar**: Processing progress indicator
 - **Processing History**: Last 50 messages with status
-- **Multi-language UI**: English and Russian (auto-detected)
+- **Diagnostic Report**: One command writes a secret-scrubbed report to attach to an issue
+- **Settings Transfer**: Export/import your configuration between devices, without secrets
+- **Multi-language UI**: English, Русский, Deutsch, Español, 简体中文 (auto-detected)
 
 ## 📖 Documentation Structure
 
@@ -85,7 +100,7 @@ Each guide is designed to be:
 ### Related Resources
 - **Obsidian**: [Official Documentation](https://help.obsidian.md/)
 - **Telegram Bots**: [Bot API Documentation](https://core.telegram.org/bots/api)
-- **AI Providers**: [OpenAI](https://platform.openai.com/docs)
+- **AI Providers**: [OpenAI](https://platform.openai.com/docs) · [Anthropic Claude](https://docs.anthropic.com) · [Google Gemini](https://ai.google.dev/gemini-api/docs)
 
 ## 🆘 Getting Help
 

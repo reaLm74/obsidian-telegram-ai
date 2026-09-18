@@ -6,29 +6,35 @@ Telegram AI offers advanced features that enhance functionality beyond basic mes
 
 ## User Authentication Features
 
-### Telegram User Client
-In addition to bot functionality, the plugin supports direct Telegram user client connection, which provides enhanced capabilities:
+### Telegram User Client (desktop only)
+In addition to bot functionality, the plugin can sign in as your own Telegram account
+(MTProto), which unlocks the features a bot cannot have. **This works on desktop only** —
+on mobile the plugin runs in bot-only mode (see the [Mobile Guide](Mobile%20Guide.md)).
 
 #### Benefits of User Authentication
-✅ **Large File Downloads**: Access files larger than 50MB (beyond bot API limits)  
-✅ **Enhanced Reactions**: React with emojis instead of text replies for processed messages  
-✅ **Message History**: Process messages older than 24 hours when Obsidian wasn't running  
-✅ **Beta Access**: Easy installation of latest beta versions  
-✅ **Bidirectional Sync**: Send notes from Obsidian back to Telegram (planned feature)
+✅ **Large File Downloads**: files over the Bot API's **20 MB** download limit  
+✅ **Fallback Reactions**: reacting as *you* when the bot itself may not react in a chat  
+✅ **Message History**: process messages older than 24 hours that arrived while Obsidian wasn't running ("Process old messages")  
+✅ **Premium Transcription**: `{{voiceTranscript}}` via Telegram Premium
 
 #### Setting Up User Authentication
-1. Go to Settings → Telegram Connection
-2. Click "Switch to User Client"
-3. Follow the authentication flow:
-   - Enter phone number
-   - Receive and enter verification code
-   - Complete two-factor authentication if enabled
-4. Grant necessary permissions
+The account login needs Telegram app credentials (`api_id` / `api_hash`), which you
+create yourself — the plugin ships none of its own:
+
+1. Plugin settings → **Process old messages** → the gear icon.
+2. Sign in at [my.telegram.org](https://my.telegram.org) → *API development tools* →
+   fill in the short form → copy `api_id` and `api_hash` into the fields.
+3. Press **Save and connect**, then log in under *Telegram account* by scanning the QR
+   code with your phone (enter your two-step password first if you use one).
+4. Pick the chats to search under *Chats for message search*.
 
 ### Security Considerations
 - **Encrypted Storage**: All authentication tokens are encrypted locally
-- **Session Management**: Active sessions can be monitored and terminated
-- **Permission Control**: Granular control over what data the plugin can access
+- **Where the session lives**: the MTProto session is kept by the library in Obsidian's own
+  `localStorage` — **not** in your vault and not in `data.json`, so it does not travel with
+  vault sync or backups, and it is **not** covered by the pin code. Anything with access to
+  your Obsidian profile directory can read it. Signing out from the plugin settings destroys
+  it; to be thorough, terminate the session in the Telegram app as well
 - **Privacy Policy**: Review the security policy for data handling practices
 
 ## Premium Features
@@ -37,23 +43,16 @@ In addition to bot functionality, the plugin supports direct Telegram user clien
 For users with Telegram Premium subscriptions:
 
 #### Voice Transcription
-- **Automatic Transcription**: Voice and video messages are automatically transcribed
+- **Fetched on demand**: the transcript is requested only when a template actually contains
+  `{{voiceTranscript}}` — no template mention, no transcription call
 - **Template Variable**: Use `{{voiceTranscript}}` in note templates
 - **Language Support**: Multi-language transcription capabilities
 - **Quality**: High-accuracy transcription using Telegram's premium services
 
-#### Enhanced Performance
-- **Faster Downloads**: Increased file download speeds for premium users
-- **Priority Processing**: Premium messages processed with higher priority
-- **Extended Limits**: Higher API rate limits and file size allowances
+#### Large Files
+- **Beyond the 20 MB bot limit**: with the user client connected, files the Bot API refuses
+  (over 20 MB) are downloaded through your own account instead of failing
 
-### AI Provider Premium Features
-
-#### OpenAI GPT-4 Features
-- **Advanced Reasoning**: Better analysis and understanding of complex content
-- **Vision Pro**: Enhanced image analysis capabilities
-- **Longer Context**: Support for larger documents and conversations
-- **Custom Models**: Access to fine-tuned models (when available)
 ## Advanced Configuration
 
 ### Custom AI Parameters
@@ -75,83 +74,80 @@ Usage: Priority-based routing and notifications
 
 ### Advanced Template Variables
 
-#### Dynamic Content Extraction
-- `{{content:first_sentence}}` - Extract first complete sentence
-- `{{content:last_paragraph}}` - Extract final paragraph
-- `{{content:urls}}` - Extract all URLs from message
-- `{{content:mentions}}` - Extract all @mentions
+#### Content Selection
+- `{{content:30}}` — first 30 characters of the message
+- `{{content:[2-5]}}` — lines 2 through 5 (also `[3]`, `[-2]`, `[3-]`)
+- `{{url1}}` — the first URL in the message; `{{domain}}` — its domain
 
 #### Metadata Variables
-- `{{sender:name}}` - Message sender's display name
-- `{{sender:username}}` - Message sender's username
-- `{{chat:title}}` - Chat or channel title
-- `{{message:id}}` - Unique message identifier
+- `{{user}}` / `{{user:name}}` / `{{user:fullName}}` — the sender
+- `{{userId}}`, `{{chatId}}`, `{{messageId}}` — numeric identifiers
+- `{{chat}}` / `{{chat:name}}` — chat or channel title
+- `{{topic}}` / `{{topic:name}}` / `{{topicId}}` — forum topic
+- `{{forwardFrom}}` / `{{forwardFrom:name}}` — original author of a forward
 
-### Custom Processing Rules
+The complete list lives in the [Template Variables Reference](Template%20Variables%20Reference.md).
 
-#### Content-Based Routing
-```yaml
-Rule: Code Detection
-Condition: Message contains code blocks or programming keywords
-Action: Route to Development/{{date:YYYY}}/{{ai:title}}.md
-AI Processing: Use code-specific analysis prompt
+### Message Distribution Rules
+
+Rules filter on message properties and route matches to their own paths. A rule's filter is a
+sequence of conditions that must all hold; the supported condition types are `user`, `chat`,
+`topic`, `forwardFrom`, `content`, `voiceTranscript` and `category`, with `=`, `!=`, `~`
+(contains) and `!~` operators:
+
+```
+{{user=boss_username}}                  → messages from a specific sender
+{{content~deploy}}{{content!~test}}     → contains "deploy" but not "test"
+{{category=Work}}                       → whatever the AI classified as Work
 ```
 
-#### Sender-Based Rules
-```yaml
-Rule: Manager Messages
-Condition: Message from specific users (boss, team lead)
-Action: Route to Work/Priority/{{ai:title}}.md
-Notification: Enable desktop notifications
-```
-
-#### Time-Based Rules
-```yaml
-Rule: After Hours
-Condition: Message received outside business hours
-Action: Route to Personal/{{date:YYYY-MM}}/{{ai:title}}.md
-Processing: Delayed processing until business hours
-```
+Each rule carries its own note path, file path and template file — that is the routing. There
+are no time-based conditions, notifications or delayed processing; a message is handled when it
+arrives (or when the backlog scan finds it).
 
 ## Performance Optimization
 
-### Batch Processing
-- **Message Queuing**: Process multiple messages efficiently
-- **AI Request Batching**: Combine similar requests to reduce API calls
-- **Parallel Processing**: Handle multiple content types simultaneously
-- **Smart Caching**: Cache frequently used AI responses
+What actually exists, and where:
 
-### Resource Management
-- **Memory Optimization**: Efficient handling of large files and media
-- **Network Optimization**: Intelligent retry mechanisms and connection pooling
-- **Storage Optimization**: Compress and optimize stored content
-- **CPU Optimization**: Background processing to maintain UI responsiveness
-
-### Cost Management
-- **Local Processing**: Maximize use of local document extraction
-- **Model Selection**: Choose appropriate AI models for different tasks
-- **Request Optimization**: Minimize unnecessary AI API calls
-- **Usage Monitoring**: Track and report API usage and costs
+- **Parallel processing** (*Advanced → Parallel message processing*, off by default): messages
+  are handled concurrently instead of strictly in order. Order-sensitive vaults should keep it off.
+- **Concurrent AI request limit** (*Advanced → Delivery & reliability → Parallel AI requests*):
+  caps how many AI requests run at once
+  (default 3); everything above the cap queues.
+- **One merged metadata request**: category classification and every `{{ai:*}}` parameter share
+  a single AI request per message, memoized per message and per edit.
+- **Local extraction first**: PDF/DOCX/XLSX/PPTX/EPUB and plain-text formats are read locally
+  (capped at 2,000,000 characters) — only the extracted text is ever sent to a provider, and
+  only when AI is on.
+- **Cost tracking**: token usage and estimated cost per message appear in the processing
+  history, with a monthly total in its header.
 
 ## Integration Features
 
 ### Obsidian Plugin Integration
-- **Templater**: Enhanced template processing with AI variables
-- **Dataview**: Query and analyze AI-processed content
-- **Calendar**: Date-based organization of synced messages
-- **Graph View**: Visualize relationships between synced content
 
-### External Tool Integration
-- **Zapier/IFTTT**: Trigger external workflows based on message processing
-- **Webhook Support**: Send processed content to external services
-- **API Endpoints**: Programmatic access to plugin functionality
-- **Export Features**: Bulk export of processed content
+There is none in the sense of code: the plugin has no integration layer for Templater,
+Dataview, Calendar or Graph View, and does not detect or call any of them. What works,
+works because the output is ordinary Markdown in your vault:
 
-### Automation Workflows
-- **Smart Notifications**: Context-aware notification rules
-- **Auto-tagging**: Intelligent tag assignment based on content analysis
-- **Cross-referencing**: Automatic linking to related notes
-- **Scheduled Processing**: Time-based processing rules and schedules
+- **Graph View and backlinks** treat synced notes like any other. A note created from a reply
+  links to the note the original message became, and those links show up in the graph.
+- **Dataview** can query the frontmatter. With *Advanced → Delivery & reliability → Message
+  IDs in note frontmatter* enabled, each note carries `telegram-chat-id`,
+  `telegram-message-id` and `telegram-date`, which are enough to list, sort or group synced
+  notes from a Dataview query. Category tags and AI parameters written into frontmatter are
+  queryable the same way.
+
+### Bot Commands (v0.7)
+Drive the plugin from the chat itself — `/status`, `/retry`, `/category`, `/search` —
+in a private chat, a whitelisted channel, or (in groups) for senders personally on the
+allowed list. A public Plugin API with events and webhook-style integration points is a
+v1.0 roadmap item, not a shipped feature.
+
+### Automation Within the Plugin
+- **Auto-tagging**: AI tag assignment based on content analysis (AutoTagger post-processor)
+- **Cross-referencing**: WikiLinker turns known note names into `[[links]]`
+- **Old-message catch-up**: a daily scheduled scan re-forwards what the bot missed (user mode)
 
 ## Troubleshooting Advanced Features
 

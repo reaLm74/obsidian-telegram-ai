@@ -22,13 +22,18 @@ export const AUTO_LANGUAGE = "auto";
 export const CUSTOM_LANGUAGE = "custom";
 
 /**
- * Interface locales, named the way a model expects to be told about them. The plugin ships
- * two; the custom option exists because notes can be written in a language the interface
+ * Interface locales, named the way a model expects to be told about them. Every locale the
+ * plugin ships MUST be listed here — a missing entry makes Auto silently produce English
+ * notes on that interface (outputLanguage.test.ts walks the real locale list to enforce
+ * this). The custom option exists because notes can be written in a language the interface
  * has no translation for.
  */
 const LANGUAGE_NAMES: Record<string, string> = {
 	en: "English",
 	ru: "Russian",
+	de: "German",
+	es: "Spanish",
+	zh: "Simplified Chinese",
 };
 
 /**

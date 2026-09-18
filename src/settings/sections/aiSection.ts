@@ -3,6 +3,7 @@ import { App, Setting } from "obsidian";
 import { AIProviderModal } from "../modals/AIProviderModal";
 import { PromptsModal } from "../modals/PromptsModal";
 import { t } from "src/locale/i18n";
+import { getProvider, getProviderLabel, isProviderConfigured } from "src/ai/providers";
 
 /**
  * AI settings section UI
@@ -40,21 +41,15 @@ export function addAISettings(
 	if (!plugin.settings.aiEnabled) return;
 
 	// AI Provider Status and Configuration
-	const provider = plugin.settings.aiProvider || "openai";
-	const providerNames: Record<string, string> = {
-		openai: "OpenAI (ChatGPT)",
-		/* Coming soon in future versions:
-		claude: "Anthropic Claude",
-		gemini: "Google Gemini",
-		*/
-	};
+	const providerId = plugin.settings.aiProvider || "openai";
+	const provider = getProvider(providerId);
 
-	const hasApiKey = getApiKeyStatus(plugin, provider);
+	const hasApiKey = isProviderConfigured(plugin, providerId);
 	const statusIcon = hasApiKey ? "✓" : "⚠️";
 	const statusText = hasApiKey ? t("settings.ai.status.configured") : t("settings.ai.status.keyRequired");
 
-	new Setting(containerEl)
-		.setName(`${t("settings.ai.provider")}: ${providerNames[provider] || provider}`)
+	const providerSetting = new Setting(containerEl)
+		.setName(`${t("settings.ai.provider")}: ${getProviderLabel(provider)}`)
 		.setDesc(t("settings.ai.provider.status", { icon: statusIcon, status: statusText }))
 		.addButton((button) => {
 			button
@@ -67,6 +62,10 @@ export function addAISettings(
 					modal.open();
 				});
 		});
+
+	if (provider.beta) {
+		providerSetting.descEl.createDiv({ text: t("settings.ai.provider.beta"), cls: "tgai-api-note" });
+	}
 
 	// Prompts Configuration
 	new Setting(containerEl)
@@ -86,19 +85,4 @@ export function addAISettings(
 
 	// "Read text from documents locally" now lives in Advanced settings — it is a
 	// content-handling detail, not something to decide while setting AI up.
-}
-
-export function getApiKeyStatus(plugin: TelegramSyncPlugin, provider: string): boolean {
-	switch (provider) {
-		case "openai":
-			return !!plugin.settings.openAIApiKey?.trim();
-		/* Coming soon in future versions:
-		case "claude":
-			return !!plugin.settings.claudeApiKey?.trim();
-		case "gemini":
-			return !!plugin.settings.geminiApiKey?.trim();
-		*/
-		default:
-			return false;
-	}
 }

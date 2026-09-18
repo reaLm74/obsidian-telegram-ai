@@ -7,6 +7,8 @@
  * or a console command like `window.__telegramDebug = true`).
  */
 
+import { redactSecrets } from "./secretRedaction";
+
 let enabled = false;
 
 /** Turn debug logging on or off at runtime. */
@@ -29,5 +31,14 @@ export function isDebugMode(): boolean {
  */
 export function debugLog(context: string, ...messages: unknown[]): void {
 	if (!enabled) return;
-	console.debug(`[Telegram AI][${context}]`, ...messages);
+	// Call sites pass raw error objects, and a failed Bot API download quotes a URL with
+	// the token in it — scrub the printable args like every other log surface does. Objects
+	// other than errors stay as-is: they keep console inspectability and the known secret
+	// values are strings.
+	const scrubbed = messages.map((m) => {
+		if (typeof m === "string") return redactSecrets(m);
+		if (m instanceof Error) return redactSecrets(m.stack || String(m));
+		return m;
+	});
+	console.debug(`[Telegram AI][${context}]`, ...scrubbed);
 }

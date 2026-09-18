@@ -16,7 +16,7 @@ import {
 	getReplyMessageId,
 	getFileObject,
 } from "./getters";
-import type TelegramBot from "node-telegram-bot-api";
+import type TelegramBot from "src/telegram/botApi";
 
 function createMessage(overrides: Partial<TelegramBot.Message> = {}): TelegramBot.Message {
 	return {
@@ -192,11 +192,13 @@ describe("getForwardFromName", () => {
 		expect(getForwardFromName(msg)).toBe("Hidden User");
 	});
 
-	it("falls back to msg.from when no forward info", () => {
+	// Regression: the sender fallback put "**Forwarded from <sender>**" on every ordinary
+	// note and made {{forwardFrom=Name}} match the sender's own messages.
+	it("does not treat the sender of an ordinary message as a forward source", () => {
 		const msg = createMessage({
 			from: { id: 456, is_bot: false, first_name: "Self", last_name: "User" },
 		});
-		expect(getForwardFromName(msg)).toBe("Self User");
+		expect(getForwardFromName(msg)).toBe("");
 	});
 
 	it("returns empty string when no forward or from info", () => {
@@ -262,6 +264,13 @@ describe("getForwardFromLink", () => {
 
 	it("returns empty string when no forward info", () => {
 		expect(getForwardFromLink(createMessage({}))).toBe("");
+	});
+
+	it("returns empty string for an ordinary message that has only a sender", () => {
+		const msg = createMessage({
+			from: { id: 456, is_bot: false, first_name: "Self", username: "self" },
+		});
+		expect(getForwardFromLink(msg)).toBe("");
 	});
 });
 

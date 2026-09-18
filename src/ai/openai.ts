@@ -1,9 +1,32 @@
-import TelegramBot from "node-telegram-bot-api";
-import { displayAndLog, displayAndLogError, sleep } from "src/utils/logUtils";
+/**
+ * OpenAI provider: chat completions, Vision and Whisper transcription.
+ *
+ * Retry policy, image download and the pre-flight checks now live in retry.ts,
+ * imageInput.ts and providerCommon.ts, shared with the Claude and Gemini providers. What
+ * stays here is what is genuinely OpenAI-shaped: the request body, the response shape and
+ * the way this API words its failures.
+ */
+
+import TelegramBot from "src/telegram/botApi";
+import { displayAndLog, displayAndLogError, _15sec } from "src/utils/logUtils";
 import { requestUrlWithTimeout } from "src/utils/requestWithTimeout";
-import { markAiUsedForMessage } from "src/processing/ProcessingTracker";
+import { t } from "src/locale/i18n";
 import TelegramSyncPlugin from "src/main";
 import { debugLog } from "src/utils/debugLog";
+import { AI_DEFAULT_MAX_TOKENS, AI_DEFAULT_TEMPERATURE, AI_DEFAULT_TIMEOUT_MS } from "./constants";
+import { AIRequestError, parseRetryAfterMs, withAIRetry } from "./retry";
+import { getMessageImage, toDataUrl } from "./imageInput";
+import { isErrorStatus, prepareRequest, ProviderHttpResponse } from "./providerCommon";
+import { getMaxTokensParam, resolveReasoningEffort, supportsSampling } from "./modelCapabilities";
+import { AIKeyTestResult, AIProvider } from "./types";
+import { recordUsage } from "./usageTracker";
+import { hasSecret, readSecret } from "src/utils/secretStore";
+
+const CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions";
+const TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions";
+const MODELS_URL = "https://api.openai.com/v1/models";
+
+export const OPENAI_DEFAULT_MODEL = "gpt-4o-mini";
 
 interface AIErrorResponse {
 	error?: {
@@ -46,325 +69,234 @@ export interface OpenAIResponse {
 }
 
 /**
- * Determines message content type for prompt selection
+ * Turns a non-2xx chat-completions response into a classified error.
+ *
+ * The distinction that matters is quota versus rate limit: both arrive as 429, but only
+ * one clears on its own. Retrying an exhausted quota burns the full backoff before
+ * reporting what the first response already said.
  */
-export function getMessageContentType(msg: TelegramBot.Message): string {
-	if (msg.voice || msg.video_note) return "voice";
-	if (msg.photo) return "photo";
-	if (msg.video) return "video";
-	if (msg.audio) return "audio";
-	if (msg.document) return "document";
-	if (msg.text) return "text";
-	return "unknown";
-}
-
-/**
- * Checks if error is temporary (retryable)
- */
-function isRetryableError(error: unknown, status?: number): boolean {
-	if (status) {
-		// HTTP statuses that should be retried
-		return [429, 500, 502, 503, 504].includes(status);
-	}
-
-	if (error instanceof Error) {
-		const message = error.message.toLowerCase();
-		return (
-			message.includes("timeout") ||
-			message.includes("timed out") ||
-			message.includes("network") ||
-			message.includes("connection") ||
-			message.includes("rate limit")
-		);
-	}
-
-	return false;
-}
-
-/**
- * Delay with exponential backoff
- */
-async function exponentialDelay(attempt: number, baseDelay: number): Promise<void> {
-	const delay = baseDelay * Math.pow(2, attempt - 1);
-	const jitter = Math.random() * 0.1 * delay; // 10% jitter
-	await sleep(delay + jitter);
-}
-
-/**
- * Downloads image from Telegram and returns as base64 data URL.
- * Uses base64 instead of Telegram file URLs because:
- * - Telegram URLs are temporary (~1 hour lifetime)
- * - Telegram URLs may be inaccessible from OpenAI's servers
- * - Telegram URLs contain the bot token which is a security concern
- */
-async function getImageBase64(plugin: TelegramSyncPlugin, msg: TelegramBot.Message): Promise<string | null> {
-	if (!msg.photo || !plugin.bot) {
-		displayAndLog(plugin, `🖼️ Vision: No photo data or bot not available`, 0);
-		return null;
-	}
+function classifyOpenAIError(response: ProviderHttpResponse): AIRequestError {
+	let errorMessage = `HTTP ${response.status}`;
+	let userMessage: string | undefined;
+	let terminal = false;
 
 	try {
-		// Take largest image (last in array)
-		const photo = msg.photo[msg.photo.length - 1];
-		displayAndLog(
-			plugin,
-			`🖼️ Vision: Downloading image (file_id: ${photo.file_id}, size: ${photo.file_size || "unknown"} bytes)`,
-			0,
-		);
+		const data = response.json as AIErrorResponse;
+		const errorBody = data.error;
+		errorMessage = errorBody?.message || errorBody?.type || errorMessage;
 
-		const fileStream = plugin.bot.getFileStream(photo.file_id);
-		if (!fileStream) {
-			displayAndLog(plugin, `🖼️ Vision: Failed to get file stream`, 0);
-			return null;
-		}
+		const errorType = errorBody?.type || "";
+		const errorCode = errorBody?.code || "";
+		const lowerMessage = errorMessage.toLowerCase();
 
-		const chunks: Uint8Array[] = [];
-		for await (const chunk of fileStream) {
-			chunks.push(new Uint8Array(chunk as ArrayBuffer));
-		}
+		// A bare 429 is NOT enough to conclude an empty balance: plain rate limiting shares
+		// that status and is exactly what the retry loop is for. Only a response that names
+		// the quota is terminal.
+		const isQuotaError =
+			errorType === "insufficient_quota" ||
+			errorCode === "insufficient_quota" ||
+			response.status === 402 ||
+			lowerMessage.includes("quota");
 
-		// Buffer.concat, not push(...chunk) into a number[]: spreading a stream chunk
-		// blows the argument limit (RangeError above ~100 KB) and boxes every byte.
-		const base64Data = Buffer.concat(chunks).toString("base64");
-		const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+		// Matched on the type/code the API sends and on 401 — not on the word "invalid"
+		// anywhere in the message, which also appears in ordinary request-validation errors
+		// and mislabelled them as a bad key.
+		const isAuthError =
+			errorType === "invalid_api_key" ||
+			errorType === "access_terminated" ||
+			errorCode === "invalid_api_key" ||
+			errorCode === "access_terminated" ||
+			response.status === 401;
 
-		displayAndLog(
-			plugin,
-			`🖼️ Vision: Image downloaded and encoded (${Math.round(base64Data.length / 1024)} KB base64)`,
-			0,
-		);
+		// A model this key cannot reach never becomes reachable by waiting.
+		const isModelError =
+			errorCode === "model_not_found" || (response.status === 404 && lowerMessage.includes("model"));
 
-		return dataUrl;
-	} catch (error: unknown) {
-		const errorMsg = error instanceof Error ? error.message : String(error);
-		displayAndLog(plugin, `🖼️ Vision: Error downloading image: ${errorMsg}`, 0);
-		return null;
+		if (isQuotaError) userMessage = t("ai.test.quotaOpenai");
+		else if (isAuthError) userMessage = t("ai.test.invalidKey");
+		else if (isModelError) userMessage = t("ai.test.modelUnavailable", { error: errorMessage });
+
+		terminal = isQuotaError || isAuthError || isModelError;
+	} catch {
+		errorMessage = response.text;
 	}
+
+	return new AIRequestError(`OpenAI API error: ${errorMessage}`, {
+		status: response.status,
+		terminal,
+		userMessage,
+		retryAfterMs: parseRetryAfterMs(response.headers),
+	});
 }
 
-/**
- * Creates messages for Vision API with base64 image data
- */
-async function createVisionMessages(
+/** Builds the message array, with the photo attached when one was fetched. */
+async function buildMessages(
 	plugin: TelegramSyncPlugin,
 	content: string,
 	prompt: string,
-	msg: TelegramBot.Message,
+	msg?: TelegramBot.Message,
+	withVision = false,
 ): Promise<OpenAIMessage[]> {
-	const imageDataUrl = await getImageBase64(plugin, msg);
-
-	if (!imageDataUrl) {
+	if (withVision && msg) {
+		const image = await getMessageImage(plugin, msg);
+		if (image) {
+			displayAndLog(plugin, `🖼️ Vision: Creating Vision API request with base64 image`, 0);
+			return [
+				{ role: "system", content: prompt },
+				{
+					role: "user",
+					content: [
+						{ type: "text", text: content || "Analyze this image" },
+						{ type: "image_url", image_url: { url: toDataUrl(image), detail: "high" } },
+					],
+				},
+			];
+		}
 		displayAndLog(plugin, `🖼️ Vision: Image unavailable, falling back to text-only processing`, 0);
-		// Fallback to regular text message
-		return [
-			{ role: "system", content: prompt },
-			{ role: "user", content: content },
-		];
 	}
-
-	displayAndLog(plugin, `🖼️ Vision: Creating Vision API request with base64 image`, 0);
 
 	return [
 		{ role: "system", content: prompt },
-		{
-			role: "user",
-			content: [
-				{
-					type: "text",
-					text: content || "Analyze this image",
-				},
-				{
-					type: "image_url",
-					image_url: {
-						url: imageDataUrl,
-						detail: "high",
-					},
-				},
-			],
-		},
+		{ role: "user", content: content },
 	];
 }
 
-/**
- * Sends request to OpenAI API for content processing
- */
+async function requestCompletion(
+	plugin: TelegramSyncPlugin,
+	apiKey: string,
+	content: string,
+	prompt: string,
+	msg: TelegramBot.Message | undefined,
+	withVision: boolean,
+): Promise<string> {
+	const model = plugin.settings.openAIModel || OPENAI_DEFAULT_MODEL;
+	const messages = await buildMessages(plugin, content, prompt, msg, withVision);
+
+	// GPT-5 and the o-series are not drop-in replacements for GPT-4 at the request level:
+	// they renamed max_tokens to max_completion_tokens and refuse `temperature` outright.
+	// Sending a GPT-4-shaped body to one fails with a 400 on every message.
+	const requestBody: Record<string, unknown> = { model, messages };
+	requestBody[getMaxTokensParam(model)] = plugin.settings.openAIMaxTokens || AI_DEFAULT_MAX_TOKENS;
+	if (supportsSampling(model)) {
+		requestBody.temperature =
+			plugin.settings.openAITemperature !== undefined
+				? plugin.settings.openAITemperature
+				: AI_DEFAULT_TEMPERATURE;
+	}
+
+	// Reasoning tokens come out of the same budget as the answer and are produced first, so
+	// a reasoning model left at its default effort can spend the whole cap thinking and
+	// return nothing. Reformatting a chat message needs no deliberation, so the cheapest
+	// level the model offers is the default.
+	const effort = resolveReasoningEffort(model, plugin.settings.aiReasoningEffort);
+	if (effort) requestBody.reasoning_effort = effort;
+
+	const response = await requestUrlWithTimeout(
+		{
+			url: CHAT_COMPLETIONS_URL,
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Authorization: `Bearer ${apiKey}`,
+			},
+			body: JSON.stringify(requestBody),
+			throw: false,
+		},
+		plugin.settings.aiTimeout,
+	);
+
+	if (isErrorStatus(response.status)) throw classifyOpenAIError(response);
+
+	const data = response.json as OpenAIResponse;
+
+	// Recorded before the empty-answer checks below: an exhausted reasoning budget is
+	// billed all the same, and the point of the counter is what was spent, not what helped.
+	if (data.usage) {
+		recordUsage(plugin, {
+			provider: "openai",
+			model,
+			inputTokens: data.usage.prompt_tokens ?? 0,
+			outputTokens: data.usage.completion_tokens ?? 0,
+			chatId: msg?.chat.id,
+			messageId: msg?.message_id,
+		});
+	}
+
+	if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
+		throw new AIRequestError("OpenAI API returned empty response", { terminal: true });
+	}
+
+	const choice = data.choices[0];
+	const result =
+		typeof choice.message.content === "string" ? choice.message.content : JSON.stringify(choice.message.content);
+
+	if (result && result.trim().length > 0 && choice.finish_reason === "length") {
+		// A non-empty answer cut off by the token cap was saved as the note, silently missing its
+		// end. Treated like the empty case below: the note falls back to the message itself.
+		const budget = plugin.settings.openAIMaxTokens || AI_DEFAULT_MAX_TOKENS;
+		throw new AIRequestError("OpenAI answer was cut off by the token budget", {
+			terminal: true,
+			userMessage: `📏 ${model} used its whole ${budget}-token budget and the answer was cut off. Raise max tokens.`,
+		});
+	}
+
+	if (!result || result.trim().length === 0) {
+		// An empty answer that stopped on "length" means the budget ran out before any text
+		// was written — on a reasoning model, spent on thinking. "Empty content" alone sends
+		// people looking at their prompt, which is not where the problem is.
+		const budget = plugin.settings.openAIMaxTokens || AI_DEFAULT_MAX_TOKENS;
+		const ranOutOfBudget = choice.finish_reason === "length";
+		throw new AIRequestError(
+			ranOutOfBudget
+				? "OpenAI ran out of the token budget before writing an answer"
+				: "OpenAI API returned empty content",
+			{
+				terminal: true,
+				userMessage: ranOutOfBudget
+					? `📏 ${model} used its whole ${budget}-token budget before answering. Raise max tokens, or lower the reasoning effort.`
+					: undefined,
+			},
+		);
+	}
+
+	return result;
+}
+
+/** Sends a text-only request to OpenAI. */
 export async function processWithOpenAI(
 	plugin: TelegramSyncPlugin,
 	content: string,
 	prompt: string,
 	msg?: TelegramBot.Message,
 ): Promise<string | null> {
-	if (!plugin.settings.aiEnabled || !prompt) {
-		return null;
-	}
+	const apiKey = await prepareRequest(plugin, openAIProvider, content, prompt, msg);
+	if (!apiKey) return null;
 
-	const apiKey = plugin.getOpenAIApiKey();
-	if (!apiKey) {
-		const errorMsg = "OpenAI API key not set. " + "Specify it in plugin settings.";
-		await displayAndLogError(plugin, new Error(errorMsg), "AI Processing Error", "", msg, 0);
-		return null;
-	}
+	return withAIRetry(
+		plugin,
+		{ providerName: "OpenAI", msg, fallbackNotice: "Message will be saved without AI processing" },
+		() => requestCompletion(plugin, apiKey, content, prompt, msg, false),
+	);
+}
 
-	if (!content || content.trim().length === 0) {
-		return null;
-	}
+/** Sends the message's photo along with the text. Falls back to text-only if it cannot. */
+export async function processWithOpenAIVision(
+	plugin: TelegramSyncPlugin,
+	content: string,
+	prompt: string,
+	msg: TelegramBot.Message,
+): Promise<string | null> {
+	const apiKey = await prepareRequest(plugin, openAIProvider, content, prompt, msg);
+	if (!apiKey) return null;
 
-	if (msg) markAiUsedForMessage(msg.chat.id, msg.message_id);
-
-	const maxAttempts = plugin.settings.aiRetryAttempts || 3;
-	const baseDelay = plugin.settings.aiRetryDelay || 1000;
-
-	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-		try {
-			// Determine if Vision API should be used
-			const contentType = msg ? getMessageContentType(msg) : "text";
-			const useVision = plugin.settings.aiVisionEnabled && contentType === "photo" && msg;
-
-			if (useVision) {
-				displayAndLog(plugin, `🖼️ Vision: Starting processing (attempt ${attempt})`, 0);
-			}
-
-			let messages: OpenAIMessage[];
-			let model = plugin.settings.openAIModel || "gpt-4o-mini";
-
-			if (useVision) {
-				messages = await createVisionMessages(plugin, content, prompt, msg);
-				// If fallback to text occurred and image wasn't attached, log it
-				if (messages.length === 2 && messages[1].content === content) {
-					displayAndLog(plugin, `🖼️ Vision: Image attachment failed, proceeding with text-only in OpenAI`, 0);
-				}
-			} else {
-				messages = [
-					{ role: "system", content: prompt },
-					{ role: "user", content: content },
-				];
-			}
-
-			const requestBody = {
-				model: model,
-				messages: messages,
-				temperature: plugin.settings.openAITemperature !== undefined ? plugin.settings.openAITemperature : 0.7,
-				max_tokens: plugin.settings.openAIMaxTokens || 2000,
-			};
-
-			if (useVision) {
-				displayAndLog(plugin, `🖼️ Vision: Sending request to OpenAI API using model ${model}...`, 0);
-			}
-
-			const response = await requestUrlWithTimeout(
-				{
-					url: "https://api.openai.com/v1/chat/completions",
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${apiKey}`,
-					},
-					body: JSON.stringify(requestBody),
-					throw: false,
-				},
-				plugin.settings.aiTimeout,
-			);
-
-			if (response.status < 200 || response.status >= 300) {
-				let errorMessage = `HTTP ${response.status}`;
-				let errorData: unknown = null;
-				let userFriendlyMessage = "";
-				// Set for failures no amount of waiting will fix. Retrying those burns the
-				// full backoff — up to 7 seconds by default — before reporting what was
-				// already known on the first response.
-				let terminalError = false;
-
-				try {
-					const data = response.json as AIErrorResponse;
-					errorData = data;
-					const errorBody = data.error;
-					errorMessage = errorBody?.message || errorBody?.type || errorMessage;
-
-					// Check for specific error types
-					const errorType = errorBody?.type || "";
-					const errorCode = errorBody?.code || "";
-					const lowerMessage = errorMessage.toLowerCase();
-
-					// Quota exceeded (no money). A bare 429 is NOT enough to conclude this:
-					// plain rate limiting shares that status and is exactly what the retry
-					// loop is for. Only a response that names the quota is terminal.
-					const isQuotaError =
-						errorType === "insufficient_quota" ||
-						errorCode === "insufficient_quota" ||
-						response.status === 402 ||
-						lowerMessage.includes("quota");
-
-					// Invalid or blocked API key. Matched on the type/code the API sends and
-					// on 401 — not on the word "invalid" anywhere in the message, which also
-					// appears in ordinary request-validation errors and mislabelled them as
-					// a bad key.
-					const isAuthError =
-						errorType === "invalid_api_key" ||
-						errorType === "access_terminated" ||
-						errorCode === "invalid_api_key" ||
-						errorCode === "access_terminated" ||
-						response.status === 401;
-
-					if (isQuotaError) {
-						userFriendlyMessage = "💳 Quota exceeded. Please top up balance at platform.openai.com";
-					} else if (isAuthError) {
-						userFriendlyMessage = "🔑 API key is invalid or revoked";
-					}
-					terminalError = isQuotaError || isAuthError;
-				} catch {
-					errorMessage = response.text;
-				}
-
-				// Don't retry quota/auth errors
-				if (!terminalError && attempt < maxAttempts && isRetryableError(errorData, response.status)) {
-					await exponentialDelay(attempt, baseDelay);
-					continue;
-				}
-
-				const finalMessage = userFriendlyMessage || `OpenAI API error: ${errorMessage}`;
-				throw new Error(finalMessage);
-			}
-
-			const data = response.json as OpenAIResponse;
-
-			if (!data.choices || data.choices.length === 0 || !data.choices[0].message) {
-				throw new Error("OpenAI API returned empty response");
-			}
-
-			const result =
-				typeof data.choices[0].message.content === "string"
-					? data.choices[0].message.content
-					: JSON.stringify(data.choices[0].message.content);
-
-			if (!result || result.trim().length === 0) {
-				throw new Error("OpenAI API returned empty content");
-			}
-
-			return result;
-		} catch (error) {
-			// If this is last attempt or error is not retryable
-			if (attempt === maxAttempts || !isRetryableError(error)) {
-				const errorMessage = error instanceof Error ? error.message : String(error);
-
-				await displayAndLogError(
-					plugin,
-					new Error(
-						`Error processing with OpenAI ` + `(attempt ${attempt}/${maxAttempts}): ` + `${errorMessage}`,
-					),
-					"AI Processing Failed",
-					"Message will be saved without AI processing",
-					msg,
-					0,
-				);
-				return null;
-			}
-
-			// Wait before retry
-			await exponentialDelay(attempt, baseDelay);
-		}
-	}
-
-	return null;
+	return withAIRetry(
+		plugin,
+		{ providerName: "OpenAI", msg, fallbackNotice: "Message will be saved without AI processing" },
+		(attemptNo) => {
+			displayAndLog(plugin, `🖼️ Vision: Starting processing (attempt ${attemptNo})`, 0);
+			return requestCompletion(plugin, apiKey, content, prompt, msg, true);
+		},
+	);
 }
 
 /**
@@ -398,7 +330,7 @@ export async function transcribeOpenAI(
 	fileBuffer: ArrayBuffer,
 	fileExtension: string,
 ): Promise<string | null> {
-	const apiKey = plugin.getOpenAIApiKey();
+	const apiKey = openAIProvider.getApiKey(plugin);
 	if (!plugin.settings.aiEnabled || !apiKey) return null;
 
 	try {
@@ -422,7 +354,7 @@ export async function transcribeOpenAI(
 
 		const response = await requestUrlWithTimeout(
 			{
-				url: "https://api.openai.com/v1/audio/transcriptions",
+				url: TRANSCRIPTIONS_URL,
 				method: "POST",
 				headers: {
 					Authorization: `Bearer ${apiKey}`,
@@ -435,23 +367,25 @@ export async function transcribeOpenAI(
 			plugin.settings.aiTimeout ? plugin.settings.aiTimeout * 4 : undefined,
 		);
 
-		if (response.status < 200 || response.status >= 300) {
+		if (isErrorStatus(response.status)) {
 			const errorText = response.text;
 			throw new Error(`Whisper API error (${response.status}): ${errorText}`);
 		}
 
 		const result = response.json as { text?: string };
 
-		return (result as { text?: string }).text || null;
+		return result.text || null;
 	} catch (error) {
 		debugLog("AI", "Transcription error:", error);
+		// Shown, not console-only: the note is saved without its transcript, and nothing else says
+		// why (a .mov recording the speech API refuses, a rejected key).
 		await displayAndLogError(
 			plugin,
 			error instanceof Error ? error : new Error(String(error)),
 			"Transcription Failed",
 			"",
 			undefined,
-			0,
+			_15sec,
 		);
 		return null;
 	}
@@ -460,34 +394,29 @@ export async function transcribeOpenAI(
 /**
  * Tests OpenAI API key validity
  */
-export async function testOpenAIApiKey(
-	apiKey: string,
-	timeoutMs = 30000,
-): Promise<{ success: boolean; message: string }> {
+export async function testOpenAIApiKey(apiKey: string, timeoutMs = AI_DEFAULT_TIMEOUT_MS): Promise<AIKeyTestResult> {
 	if (!apiKey || apiKey.trim().length === 0) {
-		return { success: false, message: "API key is empty" };
+		return { success: false, message: t("ai.test.emptyKey") };
 	}
 
 	try {
 		const response = await requestUrlWithTimeout(
 			{
-				url: "https://api.openai.com/v1/models",
+				url: MODELS_URL,
 				method: "GET",
-				headers: {
-					Authorization: `Bearer ${apiKey}`,
-				},
+				headers: { Authorization: `Bearer ${apiKey}` },
 				throw: false,
 			},
 			timeoutMs,
 		);
 
-		if (response.status >= 200 && response.status < 300) {
-			return { success: true, message: "✅ API key is valid" };
+		if (!isErrorStatus(response.status)) {
+			return { success: true, message: t("ai.test.valid") };
 		}
 
 		let errorMessage = `HTTP ${response.status}`;
 		try {
-			const errorData = response.json as { error?: { type?: string; code?: string; message?: string } };
+			const errorData = response.json as AIErrorResponse;
 			const errorType = errorData.error?.type || "";
 			const errorCode = errorData.error?.code || "";
 
@@ -495,11 +424,11 @@ export async function testOpenAIApiKey(
 			// reporting it as an empty balance sends the user to the billing page over a
 			// key that is fine.
 			if (errorType === "insufficient_quota" || errorCode === "insufficient_quota" || response.status === 402) {
-				return { success: false, message: "💳 Quota exceeded. Please top up balance at platform.openai.com" };
+				return { success: false, message: t("ai.test.quotaOpenai") };
 			}
 			// Rate limited: the key itself is valid, the request just came too fast.
 			else if (response.status === 429) {
-				return { success: false, message: "⏳ Rate limited — the key works, try again in a moment" };
+				return { success: false, message: t("ai.test.rateLimited") };
 			}
 			// Invalid or blocked API key
 			else if (
@@ -509,7 +438,7 @@ export async function testOpenAIApiKey(
 				errorCode === "access_terminated" ||
 				response.status === 401
 			) {
-				return { success: false, message: "🔑 API key is invalid or revoked" };
+				return { success: false, message: t("ai.test.invalidKey") };
 			}
 
 			errorMessage = errorData.error?.message || errorType || errorMessage;
@@ -517,9 +446,33 @@ export async function testOpenAIApiKey(
 			// Ignore JSON parse errors
 		}
 
-		return { success: false, message: `❌ Error: ${errorMessage}` };
+		return { success: false, message: t("ai.test.error", { error: errorMessage }) };
 	} catch (error: unknown) {
 		const msg = error instanceof Error ? error.message : String(error);
-		return { success: false, message: `❌ Error: ${msg}` };
+		return { success: false, message: t("ai.test.error", { error: msg }) };
 	}
 }
+
+/** OpenAI as an {@link AIProvider}. */
+export const openAIProvider: AIProvider = {
+	id: "openai",
+	name: "OpenAI",
+	description: "GPT-4o and o-series with Vision and Whisper transcription",
+	consoleUrl: "https://platform.openai.com/api-keys",
+	beta: false,
+
+	getApiKey: (plugin) => readSecret(plugin, "openAIApiKey"),
+	// Deliberately does not decrypt: the stored value is ciphertext, and decrypting it just
+	// to see whether it exists costs a scrypt derivation and fails outright before the pin
+	// code has been entered.
+	hasApiKey: (plugin) => hasSecret(plugin, "openAIApiKey"),
+	getModel: (plugin) => plugin.settings.openAIModel || OPENAI_DEFAULT_MODEL,
+	isVisionEnabled: (plugin) => plugin.settings.aiVisionEnabled,
+
+	process: processWithOpenAI,
+	processWithVision: processWithOpenAIVision,
+	transcribe: transcribeOpenAI,
+	canTranscribe: () => true,
+	sendsReasoningEffort: true,
+	testKey: testOpenAIApiKey,
+};

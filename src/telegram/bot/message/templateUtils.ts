@@ -3,6 +3,14 @@
  * Extracted from processors.ts to enable direct unit testing.
  */
 
+import type TelegramBot from "src/telegram/botApi";
+import { formatDateTime, unixTime2Date } from "src/utils/dateUtils";
+
+/** Escapes regex metacharacters so a value can be embedded in a pattern literally. */
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /**
  * Extracts parameters from AI response text.
  * Looks for patterns like "paramName: value" and strips surrounding brackets.
@@ -11,8 +19,15 @@ export function extractAIParameters(aiResponse: string, paramNames: string[]): R
 	const params: Record<string, string> = {};
 
 	for (const paramName of paramNames) {
-		// Look for strings like "paramName: value"
-		const regex = new RegExp(`${paramName}:\\s*(.+)`, "i");
+		// Look for strings like "paramName: value". The name is escaped because paramNames
+		// comes from Object.keys(settings.aiCustomParameters) — user- and import-controlled,
+		// so an unescaped "(" threw and a "(a+)+" pattern backtracked.
+		//
+		// The lookbehind makes the name start a word. Without it "title:" matched inside
+		// "subtitle:", so an answer that listed the subtitle first gave the note the
+		// subtitle's text as its title — and the note's name depended on the order the model
+		// happened to print its lines in. A leading "- ", "**" or "#" still matches.
+		const regex = new RegExp(`(?<![\\p{L}\\p{N}_])${escapeRegExp(paramName)}:\\s*(.+)`, "iu");
 		const match = aiResponse.match(regex);
 
 		if (match && match[1]) {
@@ -24,8 +39,10 @@ export function extractAIParameters(aiResponse: string, paramNames: string[]): R
 					params[paramName] = "Untitled";
 					break;
 				default:
-					// For custom parameters, use parameter name
-					params[paramName] = paramName;
+					// The same fallback as an unconfigured parameter (getFallbackValue). The bare
+					// name made a path like "{{ai:topic}}/{{ai:title}}.md" file notes into a
+					// folder literally called "topic" whenever the model left the parameter out.
+					params[paramName] = getFallbackValue(paramName, aiResponse);
 			}
 		}
 	}
@@ -36,7 +53,13 @@ export function extractAIParameters(aiResponse: string, paramNames: string[]): R
 /**
  * Gets fallback value for AI parameter when AI is unavailable.
  */
-export function getFallbackValue(paramName: string, _content: string): string {
+export function getFallbackValue(paramName: string, _content: string, msg?: TelegramBot.Message): string {
+	// A title placeholder shared by every message ("param_title") filed each photo without a
+	// caption — and every message with AI off — into one ever-growing note. With the message at
+	// hand, the title is its time instead: one note per message, sortable, still readable.
+	if (paramName === "title" && msg) {
+		return `Telegram ${formatDateTime(unixTime2Date(msg.date, msg.message_id), "YYYY-MM-DD HH-mm-ss")}`;
+	}
 	// For undefined parameters, use safe value
 	return `param_${paramName}`;
 }
@@ -51,6 +74,11 @@ export function addLeadingForEveryLine(text: string, leadingChars?: string): str
 		.split("\n")
 		.map((line) => leadingChars + line)
 		.join("\n");
+}
+
+/** Whether processText understands a {{content:…}} property — "text", a length, or a line range. */
+export function isSupportedTextProperty(property: string): boolean {
+	return /^(text|\d+|\[\d+-\d+\]|\[\d+\]|\[-\d+\]|\[\d+-\])$/i.test(property.trim());
 }
 
 /**
@@ -93,10 +121,9 @@ export function processText(text: string, leadingChars?: string, property?: stri
 		startLine = Number(lowerCaseProperty.substring(1, lowerCaseProperty.length - 1)) - 1;
 		endLine = startLine + 1;
 	} else if (lastLinePattern.test(lowerCaseProperty)) {
-		startLine = Math.max(
-			0,
-			lines.length - Number(lowerCaseProperty.substring(2, lowerCaseProperty.length - 1)) - 1,
-		);
+		// [-1] is the last line: index length - 1. The extra "- 1" here returned the line
+		// before the one asked for.
+		startLine = Math.max(0, lines.length - Number(lowerCaseProperty.substring(2, lowerCaseProperty.length - 1)));
 		endLine = startLine + 1;
 	} else if (fromLineToEndPattern.test(lowerCaseProperty)) {
 		startLine = Number(lowerCaseProperty.substring(1, lowerCaseProperty.length - 2)) - 1;

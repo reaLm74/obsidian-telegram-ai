@@ -1,4 +1,4 @@
-import TelegramBot, { Message, MessageEntity, MessageEntityType } from "node-telegram-bot-api"; // Import the Message interface from node-telegram-bot-api
+import TelegramBot, { Message, MessageEntity, MessageEntityType } from "src/telegram/botApi";
 import { Api } from "telegram";
 import { Entity } from "telegram/define";
 
@@ -68,7 +68,68 @@ export function getChat(entity: Entity): TelegramBot.Chat | undefined {
 	else return undefined;
 }
 
-// Mapping function
+/**
+ * MTProto entity classes, mapped to the Bot API's entity names.
+ *
+ * The old mapping listed six classes and fell back to "bold" for everything else, so a
+ * spoiler, a strikethrough, a mention or a link came out of the converter as bold text —
+ * silently, with the right offsets, which is the hardest kind of wrong to notice.
+ * Anything genuinely unmappable is now dropped instead of being mislabelled.
+ */
+const ENTITY_TYPES: Array<[new (...args: never[]) => unknown, MessageEntityType]> = [
+	[Api.MessageEntityBold, "bold"],
+	[Api.MessageEntityItalic, "italic"],
+	[Api.MessageEntityUnderline, "underline"],
+	[Api.MessageEntityStrike, "strikethrough"],
+	[Api.MessageEntitySpoiler, "spoiler"],
+	[Api.MessageEntityCode, "code"],
+	[Api.MessageEntityPre, "pre"],
+	[Api.MessageEntityTextUrl, "text_link"],
+	[Api.MessageEntityUrl, "url"],
+	[Api.MessageEntityMention, "mention"],
+	[Api.MessageEntityMentionName, "text_mention"],
+	[Api.MessageEntityHashtag, "hashtag"],
+	[Api.MessageEntityCashtag, "cashtag"],
+	[Api.MessageEntityBotCommand, "bot_command"],
+	[Api.MessageEntityEmail, "email"],
+	[Api.MessageEntityPhone, "phone_number"],
+	[Api.MessageEntityCustomEmoji, "custom_emoji"],
+];
+
+/** Converts one MTProto entity, or undefined when there is no Bot API equivalent. */
+export function convertEntity(entity: Api.TypeMessageEntity): MessageEntity | undefined {
+	const match = ENTITY_TYPES.find(([entityClass]) => entity instanceof (entityClass as never));
+	if (!match) return undefined;
+
+	const converted: MessageEntity = { type: match[1], offset: entity.offset, length: entity.length };
+
+	// The payload fields are what make a link a link and a code block a code block; without
+	// them "text_link" renders as plain text and "pre" loses its syntax highlighting.
+	if (entity instanceof Api.MessageEntityTextUrl) converted.url = entity.url;
+	if (entity instanceof Api.MessageEntityPre) converted.language = entity.language || undefined;
+	if (entity instanceof Api.MessageEntityCustomEmoji) converted.custom_emoji_id = entity.documentId.toString();
+
+	return converted;
+}
+
+function convertEntities(entities: Api.TypeMessageEntity[] | undefined): MessageEntity[] | undefined {
+	if (!entities || entities.length === 0) return undefined;
+	const converted = entities.map(convertEntity).filter((entity): entity is MessageEntity => !!entity);
+	return converted.length > 0 ? converted : undefined;
+}
+
+/**
+ * Converts a GramJS (MTProto) message into the Bot API shape the rest of the plugin speaks.
+ *
+ * Three things it now gets right that it did not before:
+ *
+ * - **Text versus caption.** A message with a file carries a *caption*, not text. Setting
+ *   both from the same value made every media message look like it had a text body too,
+ *   and `{{content}}` templates rendered it twice.
+ * - **Forward fields.** `forward_date` was filled in unconditionally from the message date,
+ *   which marked every ordinary message as forwarded.
+ * - **Entities.** See {@link convertEntity}.
+ */
 export function convertClientMsgToBotMsg(clientMsg: Api.Message): Message {
 	const botChatType: TelegramBot.ChatType = getChatType(clientMsg.chat);
 	const botChat: TelegramBot.Chat = { id: clientMsg.chatId?.toJSNumber() || 0, type: botChatType };
@@ -76,59 +137,39 @@ export function convertClientMsgToBotMsg(clientMsg: Api.Message): Message {
 	// clientId is a custom runtime property used to track the originating GramJS message ID
 	(botMsg as unknown as Record<string, unknown>).clientId = clientMsg.id;
 
-	// Map similar fields
-	// _TODO text must be undefined if message with file
-	botMsg.text = clientMsg.message;
-	botMsg.caption = clientMsg.text;
-	// _TODO convert reply_markup
-	//botMsg.reply_markup = clientMsg.replyMarkup;
-	// Converting entities
-	// _TODO caption_entities if message with file
-	if (clientMsg.entities) {
-		botMsg.entities = clientMsg.entities.map((entity) => {
-			const entityType: MessageEntityType =
-				entity instanceof Api.MessageEntityBold
-					? "bold"
-					: entity instanceof Api.MessageEntityItalic
-						? "italic"
-						: entity instanceof Api.MessageEntityCode
-							? "code"
-							: entity instanceof Api.MessageEntityPre
-								? "pre"
-								: entity instanceof Api.MessageEntityTextUrl
-									? "text_link"
-									: entity instanceof Api.MessageEntityUnderline
-										? "underline"
-										: "bold";
-			const messageEntity: MessageEntity = {
-				type: entityType,
-				offset: entity.offset,
-				length: entity.length,
-			};
-			return messageEntity;
-		});
+	if (clientMsg.sender) botMsg.from = getUser(clientMsg.sender);
+	if (clientMsg.editDate) botMsg.edit_date = clientMsg.editDate;
+
+	// One text value, routed to the field that matches the message kind.
+	const body = clientMsg.message || undefined;
+	const entities = convertEntities(clientMsg.entities ?? undefined);
+	if (clientMsg.media) {
+		botMsg.caption = body;
+		botMsg.caption_entities = entities;
+	} else {
+		botMsg.text = body;
+		botMsg.entities = entities;
 	}
 
-	// For forum-related fields, these might not be directly mappable.
-	// Placeholder, may require more API calls
-	botMsg.forum_topic_created = undefined;
-	botMsg.forum_topic_edited = undefined;
+	// Only a genuinely forwarded message gets forward fields. The remaining ones need
+	// extra API calls to resolve the peer and are filled in by sync.ts, which has the
+	// original message in hand.
+	if (clientMsg.fwdFrom) {
+		botMsg.forward_date = clientMsg.fwdFrom.date;
+		botMsg.forward_sender_name = clientMsg.fwdFrom.fromName;
+		botMsg.forward_signature = clientMsg.fwdFrom.postAuthor;
+		botMsg.forward_from_message_id = clientMsg.fwdFrom.channelPost;
+	}
 
-	// More complex mappings
-	// _TODO finish convert of all missing fields
-	// botMsg.from = clientMsg.fromId ? { id: parseInt(clientMsg.fromId.toString(), 10) } : undefined;
-	// botMsg.document = clientMsg.document ? { file_id: clientMsg.document.id.toString() } : undefined;
-	// botMsg.reply_to_message = clientMsg.replyTo ? convertClientMsgToBotMsg(clientMsg.replyTo) : undefined;
-	botMsg.forward_date = clientMsg.date; // Assuming the date is the forward_date in gramJS
+	// Replies and forum topics share replyTo in MTProto: a reply inside a topic carries the
+	// topic's root id, which the Bot API exposes as message_thread_id.
+	if (clientMsg.replyTo) {
+		botMsg.message_thread_id = clientMsg.replyTo.forumTopic
+			? clientMsg.replyTo.replyToTopId || clientMsg.replyTo.replyToMsgId
+			: undefined;
+	}
 
-	// Forwarding fields, placeholders, might require more API calls
-	botMsg.forward_from = undefined;
-	botMsg.forward_from_chat = undefined;
-	botMsg.forward_from_message_id = undefined;
-	botMsg.forward_sender_name = clientMsg.postAuthor;
-	botMsg.forward_signature = undefined;
 	botMsg.media_group_id = clientMsg.groupedId?.toString();
-	botMsg.message_thread_id = undefined; // Not directly mappable
 
 	return botMsg;
 }

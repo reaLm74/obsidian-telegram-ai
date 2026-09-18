@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-function-type */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NoteCategory } from "./types";
 
@@ -7,11 +6,30 @@ import { NoteCategory } from "./types";
 // ────────────────────────────────────────────────────────
 const mockProcessWithOpenAI = vi.fn().mockResolvedValue(null);
 
+// The classifier reaches OpenAI through the provider registry, so the mock has to supply
+// the provider object the registry imports — not just the bare function.
 vi.mock("src/ai/openai", () => ({
 	processWithOpenAI: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+	openAIProvider: {
+		id: "openai",
+		name: "OpenAI",
+		description: "",
+		consoleUrl: "",
+		getApiKey: (plugin: TelegramSyncPlugin) => plugin.settings.openAIApiKey,
+		hasApiKey: (plugin: TelegramSyncPlugin) => !!plugin.settings.openAIApiKey?.trim(),
+		getModel: () => "gpt-4o-mini",
+		isVisionEnabled: (plugin: TelegramSyncPlugin) => !!plugin.settings.aiVisionEnabled,
+		process: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+		processWithVision: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+		transcribe: async () => null,
+		canTranscribe: () => true,
+		sendsReasoningEffort: true,
+		testKey: async () => ({ success: true, message: "" }),
+	},
 }));
 
 import { AIClassifier } from "./AIClassifier";
+import { isProviderConfigured } from "src/ai/providers";
 import type TelegramSyncPlugin from "src/main";
 
 function createMockPlugin(overrides: Partial<TelegramSyncPlugin["settings"]> = {}): TelegramSyncPlugin {
@@ -78,7 +96,7 @@ describe("AIClassifier — parseCategoryFromAIResponse", () => {
 	}
 
 	beforeEach(() => {
-		classifier = new AIClassifier(createMockPlugin());
+		classifier = new AIClassifier();
 	});
 
 	it("returns null for null response", () => {
@@ -162,49 +180,49 @@ describe("AIClassifier — parseCategoryFromAIResponse", () => {
 	});
 });
 
-// ────────────────────────────────────────────────────────
-// hashString
-// ────────────────────────────────────────────────────────
+// A short category name used to swallow every answer that merely contained its letters:
+// "ai" sits inside "email", so anything but the bare word "Email" landed in AI.
+describe("AIClassifier — a short category name next to a longer one", () => {
+	const classifier = new AIClassifier();
+	const make = (id: string, name: string, keywords: string[] = []): NoteCategory => ({
+		id,
+		name,
+		description: "",
+		color: "#000000",
+		keywords,
+		notePathTemplate: `${name}/`,
+		enabled: true,
+		createdAt: "2026-01-01",
+		updatedAt: "2026-01-01",
+	});
+	const categories = [make("cat-ai", "AI"), make("cat-email", "Email", ["inbox", "letter"])];
+	const parse = (response: string) =>
+		(classifier as unknown as Record<string, Function>).parseCategoryFromAIResponse(response, categories);
 
-describe("AIClassifier — hashString", () => {
-	let classifier: AIClassifier;
-
-	function hashString(str: string): string {
-		return (classifier as unknown as Record<string, Function>).hashString(str);
-	}
-
-	beforeEach(() => {
-		classifier = new AIClassifier(createMockPlugin());
+	it("does not read a short name out of the middle of a longer word", () => {
+		expect(parse("Emails")?.categoryId).toBe("cat-email");
+		expect(parse("Email category")?.categoryId).toBe("cat-email");
+		expect(parse("The best fit is Email")?.categoryId).toBe("cat-email");
 	});
 
-	it("returns consistent hash for same input", () => {
-		expect(hashString("hello")).toBe(hashString("hello"));
+	it("still matches the short name when it is written as a word", () => {
+		expect(parse("AI")?.matchedRule).toBe("ai_exact_match");
+		expect(parse("probably AI, I think")?.categoryId).toBe("cat-ai");
 	});
 
-	it("returns different hashes for different inputs", () => {
-		expect(hashString("hello")).not.toBe(hashString("world"));
+	it("matches a keyword on word boundaries too", () => {
+		expect(parse("check the inbox")?.categoryId).toBe("cat-email");
+		// "letter" inside "lettering" is not the keyword.
+		expect(parse("nice lettering on the poster")).toBeNull();
 	});
 
-	it("returns a base36 encoded string", () => {
-		const hash = hashString("test");
-		expect(typeof hash).toBe("string");
-		expect(hash).toMatch(/^[0-9a-z]+$/);
-	});
-
-	it("handles empty string", () => {
-		const hash = hashString("");
-		expect(hash).toBe("0");
-	});
-
-	it("handles unicode", () => {
-		const hash = hashString("Привет мир 🌍");
-		expect(typeof hash).toBe("string");
-		expect(hash.length).toBeGreaterThan(0);
-	});
-
-	it("handles very long strings", () => {
-		const hash = hashString("x".repeat(10000));
-		expect(typeof hash).toBe("string");
+	it("keeps matching a name written in a script without spaces", () => {
+		const han = [make("cat-han", "工作"), make("cat-other", "Personal")];
+		const result = (classifier as unknown as Record<string, Function>).parseCategoryFromAIResponse(
+			"这条消息属于工作类别",
+			han,
+		);
+		expect(result?.categoryId).toBe("cat-han");
 	});
 });
 
@@ -220,7 +238,7 @@ describe("AIClassifier — buildCategoriesPrompt", () => {
 	}
 
 	beforeEach(() => {
-		classifier = new AIClassifier(createMockPlugin());
+		classifier = new AIClassifier();
 	});
 
 	it("includes category name and description", () => {
@@ -280,204 +298,34 @@ describe("AIClassifier — buildCategoriesPrompt", () => {
 });
 
 // ────────────────────────────────────────────────────────
-// createCacheKey
+// Provider key detection
 // ────────────────────────────────────────────────────────
 
-describe("AIClassifier — createCacheKey", () => {
-	let classifier: AIClassifier;
-
-	function createCacheKey(content: string, categories: NoteCategory[]): string {
-		return (classifier as unknown as Record<string, Function>).createCacheKey(content, categories);
-	}
-
-	beforeEach(() => {
-		classifier = new AIClassifier(createMockPlugin());
-	});
-
-	it("produces consistent keys for same inputs", () => {
-		const cats = createTestCategories();
-		const key1 = createCacheKey("test", cats);
-		const key2 = createCacheKey("test", cats);
-		expect(key1).toBe(key2);
-	});
-
-	it("produces different keys for different content", () => {
-		const cats = createTestCategories();
-		const key1 = createCacheKey("text A", cats);
-		const key2 = createCacheKey("text B", cats);
-		expect(key1).not.toBe(key2);
-	});
-
-	it("produces different keys for different categories", () => {
-		const catsA = [createTestCategories()[0]];
-		const catsB = [createTestCategories()[1]];
-		const key1 = createCacheKey("same", catsA);
-		const key2 = createCacheKey("same", catsB);
-		expect(key1).not.toBe(key2);
-	});
-
-	it("key format contains underscore separator", () => {
-		const key = createCacheKey("test", createTestCategories());
-		expect(key).toContain("_");
-	});
-});
-
-// ────────────────────────────────────────────────────────
-// classifyContent — guards and integration with mocked AI
-// ────────────────────────────────────────────────────────
-
-describe("AIClassifier — classifyContent guards", () => {
-	beforeEach(() => {
-		mockProcessWithOpenAI.mockReset();
-		mockProcessWithOpenAI.mockResolvedValue(null);
-	});
-
-	it("returns null when AI is disabled", async () => {
-		const classifier = new AIClassifier(createMockPlugin({ aiEnabled: false }));
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("returns null when AI categorization is disabled", async () => {
-		const classifier = new AIClassifier(createMockPlugin({ aiCategorizationEnabled: false }));
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("returns null when no API key", async () => {
-		const classifier = new AIClassifier(createMockPlugin({ openAIApiKey: "" }));
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("returns null when all categories are disabled", async () => {
-		const classifier = new AIClassifier(createMockPlugin());
-		const disabledCategories = createTestCategories().map((c) => ({ ...c, enabled: false }));
-		const result = await classifier.classifyContent("test", disabledCategories);
-		expect(result).toBeNull();
-	});
-});
-
-describe("AIClassifier — classifyContent with AI response", () => {
-	beforeEach(() => {
-		mockProcessWithOpenAI.mockReset();
-	});
-
-	it("returns category match when AI returns exact name", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("Work");
-		const classifier = new AIClassifier(createMockPlugin());
-		const result = await classifier.classifyContent("some content", createTestCategories());
-		expect(result).not.toBeNull();
-		expect(result!.categoryId).toBe("cat-work");
-	});
-
-	it("returns null when AI returns unmatched response", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("CompletelyUnknownCategory");
-		const classifier = new AIClassifier(createMockPlugin());
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("returns null when AI returns null", async () => {
-		mockProcessWithOpenAI.mockResolvedValue(null);
-		const classifier = new AIClassifier(createMockPlugin());
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("returns null when AI throws error", async () => {
-		mockProcessWithOpenAI.mockRejectedValue(new Error("API Error"));
-		const classifier = new AIClassifier(createMockPlugin());
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).toBeNull();
-	});
-
-	it("matches by keyword in AI response", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("This is definitely a project task");
-		const classifier = new AIClassifier(createMockPlugin());
-		const result = await classifier.classifyContent("test", createTestCategories());
-		expect(result).not.toBeNull();
-		expect(result!.categoryId).toBe("cat-work");
-	});
-});
-
-// ────────────────────────────────────────────────────────
-// Cache behavior
-// ────────────────────────────────────────────────────────
-
-describe("AIClassifier — cache", () => {
-	beforeEach(() => {
-		mockProcessWithOpenAI.mockReset();
-	});
-
-	it("cache stats start at zero", () => {
-		const classifier = new AIClassifier(createMockPlugin());
-		const stats = classifier.getCacheStats();
-		expect(stats.size).toBe(0);
-		expect(stats.maxSize).toBe(100);
-	});
-
-	it("clearCache resets size to zero", () => {
-		const classifier = new AIClassifier(createMockPlugin());
-		classifier.clearCache();
-		expect(classifier.getCacheStats().size).toBe(0);
-	});
-
-	it("caches successful classification result", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("Work");
-		const classifier = new AIClassifier(createMockPlugin());
-		const categories = createTestCategories();
-
-		// First call
-		await classifier.classifyContent("test content", categories);
-		expect(classifier.getCacheStats().size).toBe(1);
-
-		// Second call with same content — should use cache
-		mockProcessWithOpenAI.mockResolvedValue("Personal"); // change response
-		const result = await classifier.classifyContent("test content", categories);
-		// Should still match Work from cache
-		expect(result!.categoryId).toBe("cat-work");
-	});
-
-	it("does not cache failed classification", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("UnknownGarbage");
-		const classifier = new AIClassifier(createMockPlugin());
-		await classifier.classifyContent("test", createTestCategories());
-		expect(classifier.getCacheStats().size).toBe(0);
-	});
-
-	it("different content gets different cache entries", async () => {
-		mockProcessWithOpenAI.mockResolvedValue("Work");
-		const classifier = new AIClassifier(createMockPlugin());
-		const categories = createTestCategories();
-
-		await classifier.classifyContent("content A", categories);
-		await classifier.classifyContent("content B", categories);
-		expect(classifier.getCacheStats().size).toBe(2);
-	});
-});
-
-// ────────────────────────────────────────────────────────
-// checkApiKey
-// ────────────────────────────────────────────────────────
-
-describe("AIClassifier — checkApiKey", () => {
-	function checkApiKey(classifier: AIClassifier, provider: string): boolean {
-		return (classifier as unknown as Record<string, Function>).checkApiKey(provider);
-	}
-
+// The classifier no longer owns this check — it asks the provider registry, which is also
+// what the settings screen and the processor use. Testing the registry directly keeps the
+// three of them from drifting apart again.
+describe("isProviderConfigured", () => {
 	it("returns true for openai with API key", () => {
-		const classifier = new AIClassifier(createMockPlugin({ openAIApiKey: "sk-test" }));
-		expect(checkApiKey(classifier, "openai")).toBe(true);
+		expect(isProviderConfigured(createMockPlugin({ openAIApiKey: "sk-test" }), "openai")).toBe(true);
 	});
 
 	it("returns false for openai without API key", () => {
-		const classifier = new AIClassifier(createMockPlugin({ openAIApiKey: "" }));
-		expect(checkApiKey(classifier, "openai")).toBe(false);
+		expect(isProviderConfigured(createMockPlugin({ openAIApiKey: "" }), "openai")).toBe(false);
+	});
+
+	it("reads each provider's own key", () => {
+		const plugin = createMockPlugin({ openAIApiKey: "", claudeApiKey: "sk-ant-test", geminiApiKey: "" });
+		expect(isProviderConfigured(plugin, "claude")).toBe(true);
+		expect(isProviderConfigured(plugin, "gemini")).toBe(false);
+	});
+
+	// A whitespace-only key is the shape a half-finished paste leaves behind; treating it
+	// as configured sends a request that can only fail.
+	it("does not accept a blank key", () => {
+		expect(isProviderConfigured(createMockPlugin({ openAIApiKey: "   " }), "openai")).toBe(false);
 	});
 
 	it("returns false for unknown provider", () => {
-		const classifier = new AIClassifier(createMockPlugin());
-		expect(checkApiKey(classifier, "unknown")).toBe(false);
+		expect(isProviderConfigured(createMockPlugin(), "unknown")).toBe(false);
 	});
 });

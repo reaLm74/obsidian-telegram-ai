@@ -1,10 +1,9 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
-import { _5sec, displayAndLog } from "src/utils/logUtils";
-import { PinCodeModal } from "./PinCode";
+import { ConfirmResetSecretsModal } from "./ConfirmResetSecrets";
 import { t } from "src/locale/i18n";
-
-export const mainDeviceIdSettingName = "Main device id";
+import { changePin, reportPinFlowOutcome, setPinEncryption } from "../pinEncryption";
+import { addMainDeviceIdControls, mainDeviceIdDescription } from "../mainDeviceId";
 
 export class BotSettingsModal extends Modal {
 	botSettingsDiv!: HTMLDivElement;
@@ -59,19 +58,17 @@ export class BotSettingsModal extends Modal {
 		this.botSettingsDiv = this.contentEl.createDiv();
 		this.titleEl.setText(t("settings.bot.title"));
 		const limitations = new Setting(this.botSettingsDiv).setDesc(t("settings.bot.limitations"));
-		const lim24Hours = activeDocument.createElement("div");
-		lim24Hours.setText(t("settings.bot.limitations.24h"));
-		lim24Hours.addClass("tgai-ml-10");
-		const limBlocks = activeDocument.createElement("div");
-		limBlocks.addClass("tgai-ml-10");
+		const lim24Hours = createDiv({ text: t("settings.bot.limitations.24h"), cls: "tgai-ml-10" });
+		const limBlocks = createDiv({ cls: "tgai-ml-10" });
 		limBlocks.setText(t("settings.bot.limitations.proxy"));
-		limBlocks.createSpan({
-			text: "([proxy configuration examples],",
-		});
+		// One real link. The old markup also rendered a literal "[proxy configuration
+		// examples]," span styled like a markdown link that never became one.
+		limBlocks.appendText(" (");
 		limBlocks.createEl("a", {
 			href: "https://github.com/windingblack/obsidian-global-proxy",
-			text: " [Obsidian global proxy])",
+			text: "Obsidian global proxy",
 		});
+		limBlocks.appendText(")");
 		limitations.descEl.appendChild(lim24Hours);
 		limitations.descEl.appendChild(limBlocks);
 	}
@@ -80,17 +77,31 @@ export class BotSettingsModal extends Modal {
 		new Setting(this.botSettingsDiv)
 			.setName(t("settings.bot.token"))
 			.setDesc(t("settings.bot.token.desc"))
-			.addText(async (text) => {
-				text.setPlaceholder("Example: 123456789")
-					.setValue(await this.plugin.getBotToken())
-					.onChange((value: string) => {
-						if (!value) {
-							text.inputEl.addClass("tgai-error-border");
-						} else {
-							text.inputEl.removeClass("tgai-error-border");
-						}
-						this.plugin.settings.botToken = value;
-						this.plugin.settings.botTokenEncrypted = false;
+			.addText((text) => {
+				// A credential, rendered like one — the same masking the 1.13 settings surface
+				// and every other secret field use. This modal is the pre-1.13 path, and it was
+				// the one place that put the bot token on screen in plain sight.
+				text.inputEl.type = "password";
+				text.setPlaceholder("123456:abc-def1234...").onChange((value: string) => {
+					if (!value) {
+						text.inputEl.addClass("tgai-error-border");
+					} else {
+						text.inputEl.removeClass("tgai-error-border");
+					}
+					this.plugin.settings.botToken = value;
+					this.plugin.settings.botTokenEncrypted = false;
+				});
+				// Filled asynchronously because decryption may have to ask for the pin code.
+				// addText() ignores a returned promise, so this cannot be an async callback:
+				// a wrong or cancelled pin makes getBotToken() throw, and that rejection had
+				// nothing to catch it — an unhandled rejection, and a field that silently
+				// stayed empty with no hint why.
+				void this.plugin
+					.getBotToken()
+					.then((token) => text.setValue(token))
+					.catch(() => {
+						text.inputEl.addClass("tgai-error-border");
+						text.setPlaceholder(t("settings.bot.token.locked"));
 					});
 			});
 	}
@@ -101,7 +112,7 @@ export class BotSettingsModal extends Modal {
 			.setDesc(t("settings.bot.allowedChats.desc"))
 			.addTextArea((text) => {
 				const textArea = text
-					.setPlaceholder("Example: username,1227636")
+					.setPlaceholder(t("settings.bot.allowedChats.placeholder"))
 					.setValue(this.plugin.settings.allowedChats.join(", "))
 					.onChange((value: string) => {
 						// Empty entries must never reach allowedChats: "" matches every sender
@@ -116,8 +127,7 @@ export class BotSettingsModal extends Modal {
 					});
 			});
 		// add link to Telegram FAQ about getting username
-		const howDoIGetUsername = activeDocument.createElement("div");
-		howDoIGetUsername.textContent = t("settings.bot.allowedChats.help");
+		const howDoIGetUsername = createDiv({ text: t("settings.bot.allowedChats.help") });
 		howDoIGetUsername.createEl("a", {
 			href: "https://telegram.org/faq?setln=en#q-what-are-usernames-how-do-i-get-one",
 			text: "Telegram FAQ",
@@ -128,34 +138,9 @@ export class BotSettingsModal extends Modal {
 	addDeviceId() {
 		const deviceIdSetting = new Setting(this.botSettingsDiv)
 			.setName(t("settings.bot.mainDeviceId"))
-			.setDesc(t("settings.bot.mainDeviceId.desc"))
-			.addText((text) =>
-				text
-					.setPlaceholder("Example: 98912984-c4e9-5ceb-8000-03882a0485e4")
-					.setValue(this.plugin.settings.mainDeviceId)
-					.onChange((value) => (this.plugin.settings.mainDeviceId = value)),
-			);
-
-		// current device id copy to settings
-		const deviceIdLink = deviceIdSetting.descEl.createDiv();
-		deviceIdLink.textContent = t("settings.bot.mainDeviceId.link");
-		deviceIdLink
-			.createEl("a", {
-				href: this.plugin.currentDeviceId,
-				text: this.plugin.currentDeviceId,
-			})
-			.onClickEvent((evt) => {
-				evt.preventDefault();
-				let inputDeviceId: HTMLInputElement | null = null;
-				try {
-					inputDeviceId = deviceIdSetting.controlEl.firstElementChild as HTMLInputElement;
-					inputDeviceId.value = this.plugin.currentDeviceId;
-				} catch (error: unknown) {
-					displayAndLog(this.plugin, t("settings.bot.mainDeviceId.error", { error: String(error) }), _5sec);
-				}
-				if (inputDeviceId && inputDeviceId.value)
-					this.plugin.settings.mainDeviceId = this.plugin.currentDeviceId;
-			});
+			.setDesc(mainDeviceIdDescription(this.plugin));
+		// No save and no reconnect from here: this dialog commits on ✓ and rolls back on dismiss.
+		addMainDeviceIdControls(deviceIdSetting, this.plugin);
 	}
 
 	addEncryptionByPinCode() {
@@ -166,46 +151,68 @@ export class BotSettingsModal extends Modal {
 				toggle.setValue(this.plugin.settings.encryptionByPinCode);
 				toggle.onChange((value) => {
 					void (async () => {
-						if (this.plugin.settings.botTokenEncrypted) {
-							this.plugin.settings.botToken = await this.plugin.getBotToken();
-							this.plugin.settings.botTokenEncrypted = false;
-						}
-						// The AI key rides the same pin. Decrypt it under the OLD key here so
-						// the footer button can re-encrypt it under the new one — otherwise it
-						// stays sealed with a key nothing will ask for again.
-						if (this.plugin.settings.openAIApiKeyEncrypted) {
-							this.plugin.settings.openAIApiKey = this.plugin.getOpenAIApiKey();
-							this.plugin.settings.openAIApiKeyEncrypted = false;
-						}
-						this.plugin.settings.encryptionByPinCode = value;
-						if (!value) {
-							this.plugin.pinCode = undefined;
-							return;
-						}
-						const pinCodeModal = new PinCodeModal(this.plugin, false);
-						pinCodeModal.onDone = () => {
-							if (pinCodeModal.saved && this.plugin.pinCode) return;
-							this.plugin.settings.encryptionByPinCode = false;
-						};
-						pinCodeModal.open();
+						// Left sealed whatever happens (see pinEncryption.ts); written out on ✓,
+						// rolled back from disk on dismiss like every other field here.
+						reportPinFlowOutcome(this.plugin, await setPinEncryption(this.plugin, value));
+						this.display();
 					})();
 				});
 			});
 		botTokenSetting.descEl.createSpan({
 			text: t("settings.bot.encryption.extra"),
 		});
+
+		// The two things a pin-protected install eventually needs, and neither existed
+		// before 0.5: rotating the pin, and getting out of a forgotten one.
+		if (!this.plugin.settings.encryptionByPinCode) return;
+
+		new Setting(this.botSettingsDiv)
+			.setName(t("settings.bot.pin.change"))
+			.setDesc(t("settings.bot.pin.change.desc"))
+			.addButton((button) => {
+				button.setButtonText(t("settings.bot.pin.change.button")).onClick(() => {
+					void (async () => {
+						const outcome = await changePin(this.plugin);
+						// Flushed at once rather than on ✓: the secrets are already re-sealed under
+						// the new pin, and a dismissal rolling them back to the old ciphertexts
+						// while the new pin sits in memory would lock the user out.
+						if (outcome === "done") {
+							void this.plugin.saveSettings();
+							await this.plugin.flushSettings();
+						}
+						reportPinFlowOutcome(this.plugin, outcome, "settings.bot.pin.changed");
+					})();
+				});
+			});
+
+		new Setting(this.botSettingsDiv)
+			.setName(t("settings.bot.pin.forgot"))
+			.setDesc(t("settings.bot.pin.forgot.desc"))
+			.addButton((button) => {
+				button
+					.setButtonText(t("settings.bot.pin.forgot.button"))
+					// setDestructive would need Obsidian 1.13; minAppVersion is 1.8.7.
+					.setWarning()
+					.onClick(() => {
+						new ConfirmResetSecretsModal(this.plugin, () => {
+							this.display();
+						}).open();
+					});
+			});
 	}
 
 	addFooterButtons() {
 		this.botSettingsDiv.createEl("br");
 		const footerButtons = new Setting(this.contentEl.createDiv());
 		footerButtons.addButton((b) => {
-			b.setTooltip("Connect")
+			b.setTooltip(t("settings.bot.connect"))
 				.setIcon("checkmark")
 				.onClick(async () => {
-					this.plugin.openAIApiKeyEncrypt();
-					if (!this.plugin.settings.botTokenEncrypted) this.plugin.botTokenEncrypt(true);
-					else await this.plugin.saveSettings();
+					// Seals everything still in plain text — the token the user just typed and
+					// any secret unsealed by toggling encryption above — under whichever key
+					// now applies.
+					this.plugin.encryptSecrets();
+					await this.plugin.saveSettings();
 					this.saved = true;
 					this.close();
 				});
@@ -213,7 +220,7 @@ export class BotSettingsModal extends Modal {
 		});
 		footerButtons.addExtraButton((b) => {
 			b.setIcon("cross")
-				.setTooltip("Cancel")
+				.setTooltip(t("common.cancel"))
 				.onClick(() => {
 					// The rollback itself lives in onClose(), so Esc and this button behave
 					// identically instead of only one of them undoing the edits.
@@ -225,6 +232,7 @@ export class BotSettingsModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		void this.display();
 	}
 }

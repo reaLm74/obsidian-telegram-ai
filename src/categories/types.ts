@@ -5,7 +5,6 @@ export interface NoteCategory {
 	color: string;
 	notePathTemplate: string; // Renamed from folderPath for clarity
 	filePathOverride?: string; // New field for overriding filePathTemplate
-	templatePath?: string;
 	keywords: string[];
 	enabled: boolean;
 	createdAt: string;

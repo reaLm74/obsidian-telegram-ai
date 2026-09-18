@@ -1,5 +1,6 @@
-import TelegramBot from "node-telegram-bot-api";
-import { Api } from "telegram";
+import TelegramBot from "src/telegram/botApi";
+// Type-only on purpose: a value import would evaluate GramJS, which cannot run on mobile.
+import type { Api } from "telegram";
 
 /**
  * Extended Telegram message type with custom runtime properties

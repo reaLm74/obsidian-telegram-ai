@@ -54,7 +54,6 @@ function createMockVault(options: MockVaultOptions = {}): Vault {
 			}
 			existingFolders.add(path);
 			createdFolders.push(path);
-			// eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast
 			return { path, name: path.split("/").pop() || "" } as unknown as TFolder;
 		},
 		async read(file: TFile): Promise<string> {
@@ -140,6 +139,18 @@ describe("sanitizeFileName", () => {
 	it("handles empty string", () => {
 		expect(sanitizeFileName("")).toBe("");
 	});
+
+	// Regression: a sender named "../../x" became the folder ".._.._x" — hidden from
+	// Obsidian, so the note was invisible while the message counted as processed.
+	it("replaces leading dots so the segment is not a hidden dot-folder", () => {
+		expect(sanitizeFileName("../../x")).toBe("___.._x");
+		expect(sanitizeFileName(".notes")).toBe("_notes");
+		expect(sanitizeFileName("...")).toBe("___");
+	});
+
+	it("keeps dots that are not leading", () => {
+		expect(sanitizeFileName("v1.2 notes.md")).toBe("v1.2 notes.md");
+	});
 });
 
 // ────────────────────────────────────────────────────────
@@ -201,6 +212,16 @@ describe("sanitizeFilePath", () => {
 		const result = sanitizeFilePath(`Telegram/${aiTitle}.md`);
 		expect(result.startsWith("Telegram/")).toBe(true);
 		expect(result).not.toContain("..");
+	});
+
+	// Win32 strips trailing spaces and periods from a path component, so ".. " and "..."
+	// are not the literal ".." the filter used to look for, yet can still resolve to a
+	// parent-directory step by the time they reach the desktop adapter.
+	it("strips dot-only segments that Windows would canonicalise into a traversal", () => {
+		for (const segment of ["..", "...", ".. ", ".. .", "....", ". ", "..  "]) {
+			const result = sanitizeFilePath(`telegram/${segment}/note.md`);
+			expect(result).toBe("telegram/note.md");
+		}
 	});
 
 	it("keeps dots that are part of a name", () => {
@@ -338,6 +359,67 @@ describe("appendContentToNote", () => {
 		expect(result.indexOf("New")).toBeLessThan(result.indexOf("Old"));
 	});
 
+	it("reports whether the call created the file", async () => {
+		const vault = createMockVault({ existingFiles: new Map([["existing.md", "X"]]) });
+		expect((await appendContentToNote(vault, "fresh.md", "Hello")).created).toBe(true);
+		expect((await appendContentToNote(vault, "existing.md", "Hello")).created).toBe(false);
+		expect((await appendContentToNote(vault, "", "Hello")).created).toBe(false);
+	});
+
+	it("stamps frontmatter only when creating the note", async () => {
+		const vault = createMockVault({
+			existingFiles: new Map([["shared.md", "---\ntitle: Mine\n---\nBody"]]),
+		}) as Vault & { _createdFiles: Map<string, string> };
+		const frontmatter = { "telegram-message-id": 42, "telegram-chat-id": -100 };
+
+		await appendContentToNote(vault, "new.md", "Hello", "", defaultDelimiter, false, frontmatter);
+		const created = vault._createdFiles.get("new.md") || "";
+		expect(created.startsWith("---\n")).toBe(true);
+		expect(created).toContain("telegram-message-id: 42");
+		expect(created).toContain("Hello");
+
+		await appendContentToNote(vault, "shared.md", "Appended", "", defaultDelimiter, false, frontmatter);
+		const appended = vault._createdFiles.get("shared.md") || "";
+		expect(appended).toContain("title: Mine");
+		expect(appended).not.toContain("telegram-message-id");
+	});
+
+	// Newest-first ordering used to splice at index 0 — above the frontmatter block, which
+	// Obsidian only recognises at the very top of a file. Every property of the note (the
+	// telegram-message-id stamp included) was silently lost on the second message.
+	it("keeps frontmatter at the top when prepending with reversedOrder", async () => {
+		const vault = createMockVault({
+			existingFiles: new Map([["note.md", "---\ntelegram-message-id: 1\n---\nFirst message"]]),
+		}) as Vault & { _createdFiles: Map<string, string> };
+
+		await appendContentToNote(vault, "note.md", "Second message", "", defaultDelimiter, true);
+
+		const result = vault._createdFiles.get("note.md") || "";
+		expect(result.startsWith("---\ntelegram-message-id: 1\n---\n")).toBe(true);
+		expect(result.indexOf("Second message")).toBeLessThan(result.indexOf("First message"));
+	});
+
+	it("still prepends to the very top when the note has no frontmatter", async () => {
+		const vault = createMockVault({
+			existingFiles: new Map([["note.md", "First message"]]),
+		}) as Vault & { _createdFiles: Map<string, string> };
+
+		await appendContentToNote(vault, "note.md", "Second", "", defaultDelimiter, true);
+		expect((vault._createdFiles.get("note.md") || "").startsWith("Second")).toBe(true);
+	});
+
+	it("merges stamped frontmatter into a template-provided block", async () => {
+		const vault = createMockVault() as Vault & { _createdFiles: Map<string, string> };
+		await appendContentToNote(vault, "templated.md", "---\ntags: inbox\n---\nBody", "", defaultDelimiter, false, {
+			"telegram-message-id": 7,
+		});
+		const content = vault._createdFiles.get("templated.md") || "";
+		// One frontmatter block holding both the template's keys and the stamp.
+		expect(content.match(/^---$/gm)?.length).toBe(2);
+		expect(content).toContain("tags: inbox");
+		expect(content).toContain("telegram-message-id: 7");
+	});
+
 	it("does nothing for empty content", async () => {
 		const vault = createMockVault() as Vault & { _createdFiles: Map<string, string> };
 		await appendContentToNote(vault, "note.md", "   ");
@@ -470,7 +552,6 @@ describe("appendContentToNote — concurrent creation", () => {
 				stored.set(file.path, next);
 				return next;
 			},
-			// eslint-disable-next-line obsidianmd/no-tfile-tfolder-cast -- stub; nothing reads it
 			createFolder: () => Promise.resolve({} as TFolder),
 			read: async (file: TFile) => stored.get(file.path) ?? "",
 		} as unknown as Vault;
@@ -525,7 +606,6 @@ describe("createFolderIfNotExist — concurrent creation", () => {
 		return {
 			getAbstractFileByPath: () => null,
 			// Obsidian rejects with a bare string in some versions — that is what this covers.
-			// eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
 			createFolder: () => Promise.reject(createError),
 		} as unknown as Vault;
 	}
@@ -552,5 +632,19 @@ describe("createFolderIfNotExist — concurrent creation", () => {
 		await expect(createFolderIfNotExist(createFolderVault("something went wrong"), "Links")).rejects.toThrow(
 			"something went wrong",
 		);
+	});
+});
+
+// Regression (TPL-035): a control character in the message text reached the file name and
+// every write failed with ENOENT on Windows — the message ended in quarantine.
+describe("sanitizeFileName / sanitizeFilePath — control characters", () => {
+	const c = (code: number) => String.fromCharCode(code);
+
+	it("replaces C0 controls and DEL in a file name", () => {
+		expect(sanitizeFileName(`a${c(0)}b${c(7)}c${c(31)}d${c(127)}e${c(9)}f`)).toBe("a_b_c_d_e_f");
+	});
+
+	it("replaces them in a path and keeps the separators", () => {
+		expect(sanitizeFilePath(`Inbox/${c(7)}bell${c(27)}x.md`)).toBe("Inbox/_bell_x.md");
 	});
 });

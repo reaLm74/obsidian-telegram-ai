@@ -1,5 +1,3 @@
-/* eslint-disable obsidianmd/no-global-this -- the node test environment has no window;
-   the module under test schedules through window.*, so it is stubbed onto globalThis here. */
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { requestUrlWithTimeout, RequestTimeoutError } from "./requestWithTimeout";
 

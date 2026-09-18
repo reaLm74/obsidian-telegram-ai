@@ -1,12 +1,17 @@
 /* Telegram AI — all plugin classes are prefixed `tgai-` to avoid colliding
    with themes, other plugins, and Obsidian core styles. */
 
+/* max-width, because on a phone `.setting-item` stacks into a column (see the is-phone
+   rules at the bottom of this file) and the control box goes full width — a fixed 300px
+   input then overflows a 375px viewport. */
 .tgai-ai-input-wide {
 	width: 300px;
+	max-width: 100%;
 }
 
 .tgai-ai-input-medium {
 	width: 200px;
+	max-width: 100%;
 }
 
 .tgai-ai-w-full {
@@ -19,10 +24,6 @@
 	bottom: -3px;
 	font-weight: bold;
 	color: var(--text-error);
-}
-
-.tgai-ai-modal-on-top {
-	z-index: 1001;
 }
 
 .tgai-ml-10 {
@@ -94,14 +95,6 @@
 	white-space: pre-wrap;
 }
 
-.tgai-border-red {
-	border: 2px solid var(--text-error);
-}
-
-.modal.tgai-ai-modal-on-top {
-	z-index: 1000;
-}
-
 /* ─── Setup Wizard ───────────────────────────────────────────────────── */ .tgai-setup-wizard-modal {
 	width: 520px;
 	max-width: 90vw;
@@ -113,6 +106,8 @@
 
 /* Step progress bar */ .tgai-wizard-progress {
 	display: flex;
+	/* five labels of German do not fit 520px on one line */
+	flex-wrap: wrap;
 	gap: 4px;
 	margin-bottom: 20px;
 	padding-bottom: 16px;
@@ -157,7 +152,12 @@
 }
 
 .tgai-wizard-step-indicator.active .tgai-step-number {
-	background: rgba(255, 255, 255, 0.25);
+	/* The badge sits on the accent colour, so it needs a translucent version of the text
+	   drawn on that accent — not a hardcoded white, which the Obsidian guidelines rule out
+	   and which disappears on light accents. The first declaration is the fallback for
+	   engines without color-mix(). */
+	background: var(--background-modifier-border);
+	background: color-mix(in srgb, var(--text-on-accent) 25%, transparent);
 	color: var(--text-on-accent);
 }
 
@@ -303,15 +303,15 @@
 	cursor: pointer;
 }
 
-.tgai-status-active {
+.tgai-statusbar-active {
 	color: var(--text-accent);
 }
 
-.tgai-status-error {
+.tgai-statusbar-error {
 	color: var(--text-error);
 }
 
-.tgai-status-idle {
+.tgai-statusbar-idle {
 	color: var(--text-muted);
 }
 
@@ -347,6 +347,11 @@
 	color: var(--text-error);
 }
 
+.tgai-stat-spend {
+	margin-left: auto;
+	color: var(--text-muted);
+}
+
 .tgai-processing-empty {
 	color: var(--text-muted);
 	text-align: center;
@@ -366,6 +371,12 @@
 	padding: 8px 10px;
 }
 
+/* One rule per ProcessingStatus. "queued" was the only member of the union without one,
+   so a queued record fell back to the default border and read as "no status". */
+.tgai-processing-record.tgai-status-queued {
+	border-left-color: var(--text-muted);
+}
+
 .tgai-processing-record.tgai-status-error {
 	border-left-color: var(--text-error);
 }
@@ -376,6 +387,10 @@
 
 .tgai-processing-record.tgai-status-processing {
 	border-left-color: var(--text-accent);
+}
+
+.tgai-processing-record.tgai-status-quarantined {
+	border-left-color: var(--text-warning);
 }
 
 .tgai-record-header {
@@ -418,6 +433,15 @@
 	font-size: var(--font-ui-smaller);
 	color: var(--text-error);
 	overflow-wrap: anywhere;
+}
+
+.tgai-record-actions {
+	margin-top: 6px;
+}
+
+.tgai-record-actions button {
+	font-size: var(--font-ui-smaller);
+	padding: 2px 10px;
 }
 
 /* ─── Misc containers ────────────────────────────────────────────────── */
@@ -619,5 +643,50 @@
 
 /* Generic visibility helper — replaces inline element.style.display toggling. */
 .tgai-hidden {
+	display: none;
+}
+
+/* ── Mobile / touch (0.6) ─────────────────────────────────────────────────────
+   Scoped to the plugin's own modals via .tgai-modal — never to core Obsidian UI. */
+
+.is-mobile .tgai-modal {
+	/* Settings-heavy dialogs need the full screen on a phone. */
+	width: 100%;
+	max-height: 100%;
+}
+
+.is-mobile .tgai-modal .setting-item-control button,
+.is-mobile .tgai-modal button {
+	/* Apple/Google touch-target floor is 44px; desktop-sized buttons miss it. */
+	min-height: 44px;
+}
+
+.is-mobile .tgai-modal .setting-item-control input[type="text"],
+.is-mobile .tgai-modal .setting-item-control input[type="password"],
+.is-mobile .tgai-modal .setting-item-control input[type="number"],
+.is-mobile .tgai-modal .setting-item-control select,
+.is-mobile .tgai-modal .setting-item-control textarea {
+	min-height: 44px;
+	font-size: 16px; /* below 16px iOS zooms the page in on focus */
+}
+
+.is-mobile .tgai-modal .setting-item {
+	padding-top: 10px;
+	padding-bottom: 10px;
+}
+
+.is-phone .tgai-modal .setting-item {
+	/* Name above control instead of side-by-side — labels stop truncating. */
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.is-phone .tgai-modal .setting-item-control {
+	justify-content: flex-start;
+	margin-top: 6px;
+}
+
+.is-phone .tgai-wizard-progress .tgai-step-label {
+	/* Five labelled steps do not fit a phone-width header; numbers carry the state. */
 	display: none;
 }

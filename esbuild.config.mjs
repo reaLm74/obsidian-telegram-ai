@@ -50,6 +50,64 @@ writeFileSync(
 	join(shimDir, "lie.js"),
 	`module.exports = Promise;\n`,
 );
+// Bluebird-compatible subset for mammoth. Bluebird builds method callers with
+// new Function() — the last dynamic code generation left in the bundle after the bot
+// client migration (0.6). mammoth's lib/promises.js needs only the pieces below
+// (verified against its source: resolve/all/props/reject/promisify/mapSeries/attempt,
+// instance .caught/.tap/.done, and `new bluebird.Promise`). The statics are wrapped
+// functions, not extracted references, because mammoth detaches them from the class.
+writeFileSync(
+	join(shimDir, "bluebird-promise.js"),
+	`"use strict";
+module.exports = function () {
+	class BluebirdShim extends Promise {}
+	const P = BluebirdShim;
+	P.Promise = P;
+	P.prototype.caught = P.prototype.catch;
+	P.prototype.tap = function (fn) {
+		return this.then(function (value) { return P.resolve(fn(value)).then(function () { return value; }); });
+	};
+	P.prototype.done = function (onFulfilled, onRejected) {
+		this.then(onFulfilled, onRejected).catch(function (e) {
+			setTimeout(function () { throw e; }, 0);
+		});
+	};
+	P.resolve = function (v) { return Promise.resolve.call(P, v); };
+	P.reject = function (e) { return Promise.reject.call(P, e); };
+	P.all = function (arr) { return Promise.all.call(P, arr); };
+	P.props = function (obj) {
+		const keys = Object.keys(obj);
+		return P.all(keys.map(function (k) { return obj[k]; })).then(function (vals) {
+			const out = {};
+			keys.forEach(function (k, i) { out[k] = vals[i]; });
+			return out;
+		});
+	};
+	P.attempt = function (fn) { return P.resolve().then(function () { return fn(); }); };
+	P.promisify = function (fn) {
+		return function (...args) {
+			const self = this;
+			return new P(function (res, rej) {
+				fn.call(self, ...args, function (err, val) { if (err) rej(err); else res(val); });
+			});
+		};
+	};
+	P.mapSeries = function (input, mapper) {
+		return P.resolve(input).then(function (arr) {
+			let chain = P.resolve([]);
+			for (const item of arr) {
+				chain = chain.then(function (acc) {
+					return P.resolve(item)
+						.then(mapper)
+						.then(function (mapped) { acc.push(mapped); return acc; });
+				});
+			}
+			return chain;
+		});
+	};
+	return P;
+};\n`,
+);
 
 const context = await esbuild.context({
 	banner: {
@@ -79,6 +137,31 @@ const context = await esbuild.context({
 		lie: join(shimDir, "lie.js"),
 	},
 	plugins: [
+		{
+			name: "bluebird-shim",
+			setup(build) {
+				// mammoth reaches bluebird through the deep path "bluebird/js/release/promise";
+				// the whole package (and its new Function code generation) is replaced by the
+				// shim. Not an `alias` entry: esbuild matches alias keys by package name and
+				// appends the subpath to the target, producing ".../bluebird-promise.js/js/release/promise".
+				build.onResolve({ filter: /^bluebird(\/.*)?$/ }, () => ({
+					path: join(shimDir, "bluebird-promise.js"),
+				}));
+			},
+		},
+		{
+			name: "pdf-worker-embed",
+			setup(build) {
+				// pdf.js runs its worker on the main thread when globalThis.pdfjsWorker is set, and
+				// the worker module sets it on import. A plugin ships main.js alone, so there is no
+				// separate worker file to point workerSrc at — the worker is bundled and imported
+				// lazily by documentExtractor. Resolved by path: pdf-parse's package exports do not
+				// expose it, and this copy matches the pdf.js version pdf-parse bundles.
+				build.onResolve({ filter: /^virtual:pdf-worker$/ }, () => ({
+					path: join(__dirname, "node_modules", "pdf-parse", "dist", "worker", "pdf.worker.mjs"),
+				}));
+			},
+		},
 		{
 			name: "strip-script-injection",
 			setup(build) {
@@ -111,7 +194,79 @@ const context = await esbuild.context({
 								`pattern. Inspect the file and update the replacements in esbuild.config.mjs.`,
 						);
 					}
+					// jszip's embedded setImmediate also compiles string callbacks with
+					// new Function("" + fn) — a branch nothing reaches (the plugin never passes
+					// strings) that still reads as dynamic code generation to a reviewer.
+					// A string callback now throws instead of being compiled.
+					contents = contents.replace(
+						/new Function\(\s*(['"])\1\s*\+\s*(\w+)\s*\)/g,
+						'(function(){ throw new TypeError("string callbacks are not supported"); })',
+					);
 					return { contents, loader: "js" };
+				});
+
+				// pdf-parse carries three pieces of Function-constructor code: pdf.js's
+				// eval-support probe (`new Function("")`), a webpack-runtime global
+				// detection (`Function("return this")()`), and core-js's dynamic-require
+				// fallback (`Function('return require("'+name+'")')()`). None is needed:
+				// the probe is pinned to false (the no-eval path is what mobile gets
+				// anyway), the global is globalThis, and a dynamic require must fail into
+				// its surrounding try/catch rather than be compiled.
+				build.onLoad({ filter: /[\\/]node_modules[\\/]pdf-parse[\\/].*\.(m?js|cjs)$/ }, async (args) => {
+					const { readFile } = await import("fs/promises");
+					const contents = await readFile(args.path, "utf8");
+					if (!/new Function|[^.\w$]Function\s*\(\s*['"]/.test(contents)) return null;
+					// Probe patterns for both shipped shapes: readable
+					// (`try { new Function(""); return true; } catch { return false; }`) and
+					// minified (`try{return new Function(""),!0}catch{return!1}`).
+					const probe =
+						// `return\s*` in the second shape: the minified worker writes `return!0`.
+						/try\s*\{\s*(?:return\s+new Function\(""\)\s*,\s*(?:!0|true)|new Function\(""\);\s*return\s*(?:!0|true);?)\s*\}\s*catch\s*(?:\(\w*\)\s*)?\{\s*return\s*(?:!1|false);?\s*\}/g;
+					const replaced = contents
+						.replace(probe, "return false;")
+						.replace(/Function\((['"])return this\1\)\(\)/g, "globalThis")
+						.replace(
+							/Function\('return require\("'\s*\+\s*\w+\s*\+\s*'"\)'\)\(\)/g,
+							'(function(){ throw new Error("dynamic require is disabled in this bundle"); })()',
+						)
+						// The embedded worker (pdf.worker.mjs) compiles PostScript functions with
+						// new Function behind `isEvalSupported`, which the probe above pins to
+						// false. Returning null takes pdf.js's own interpreter path instead.
+						.replace(/new Function\("src","srcOffset","dest","destOffset",\w+\)/g, "null");
+					// Quote-anchored on purpose: it matches real Function-constructor calls
+					// (their first argument is a string) without tripping on prose in comments.
+					if (/new Function|[^.\w$]Function\s*\(\s*['"]/.test(replaced)) {
+						throw new Error(
+							`strip-script-injection: ${args.path} still contains Function-constructor code ` +
+								`after the known patterns were applied. Update the patterns in esbuild.config.mjs.`,
+						);
+					}
+					return { contents: replaced, loader: "js" };
+				});
+
+				// underscore (a mammoth dependency) compiles _.template with new Function at
+				// call time, and detects the global root with Function('return this')().
+				// Nothing in the bundle calls _.template — mammoth uses extend/map and
+				// friends — so the compile throws instead, and the root is globalThis.
+				build.onLoad({ filter: /[\\/]node_modules[\\/]underscore[\\/].*\.c?js$/ }, async (args) => {
+					const { readFile } = await import("fs/promises");
+					const contents = await readFile(args.path, "utf8");
+					if (!/new Function|[^.\w$]Function\s*\(\s*['"]/.test(contents)) return null;
+					const replaced = contents
+						.replace(
+							/new Function\(([^;]*?)\)/g,
+							'(function(){ throw new Error("_.template is disabled in this bundle"); })()',
+						)
+						.replace(/Function\((['"])return this\1\)\(\)/g, "globalThis");
+					// Quote-anchored on purpose: it matches real Function-constructor calls
+					// (their first argument is a string) without tripping on prose in comments.
+					if (/new Function|[^.\w$]Function\s*\(\s*['"]/.test(replaced)) {
+						throw new Error(
+							`strip-script-injection: ${args.path} still contains Function-constructor code ` +
+								`after the known patterns were applied. Update the patterns in esbuild.config.mjs.`,
+						);
+					}
+					return { contents: replaced, loader: "js" };
 				});
 			},
 		},
@@ -130,6 +285,52 @@ const context = await esbuild.context({
 
 if (prod || test) {
 	await context.rebuild();
+
+	// v0.4 performance budget: the production bundle must not silently grow. Measured at
+	// 2.38 MB after the 0.6 bot-client migration removed node-telegram-bot-api and its
+	// request/bluebird chain (was 3.06 MB); the remaining weight is GramJS, bundled but
+	// desktop-only at runtime (see telegram/user/userGateway.ts). The ceiling catches
+	// accidental regressions — a new heavyweight dependency, an import that defeats tree
+	// shaking.
+	const { statSync, readFileSync: readBundle } = await import("fs");
+	// Raised 3.0 → 3.5 MB (2026-09-14): the pdf.js worker (~1 MB) is now embedded so PDF text
+	// extraction works inside Obsidian at all. It is imported lazily, so onload is unaffected.
+	const BUNDLE_BUDGET_BYTES = 3.5 * 1024 * 1024;
+
+	// v0.6 review invariant: no dynamic code generation ships, at all. The shims above
+	// remove every known source; this assertion is what keeps the claim true when a
+	// dependency update introduces a new one. (`[^.\w$]Function\s*\(` matches bare
+	// Function-constructor calls without matching `x.Function(` member calls.)
+	if (prod) {
+		const bundle = readBundle(mainPath, "utf8");
+		const dynamicCode = [
+			[/[^.\w$]eval\s*\(/g, "eval("],
+			[/new Function/g, "new Function"],
+			[/[^.\w$]Function\s*\(/g, "bare Function("],
+			[/createElement\(\s*["']script["']\s*\)/g, 'createElement("script")'],
+		]
+			.map(([re, label]) => ({ label, count: (bundle.match(re) || []).length }))
+			.filter(({ count }) => count > 0);
+		if (dynamicCode.length > 0) {
+			console.error(
+				`Dynamic code generation found in main.js: ` +
+					dynamicCode.map(({ label, count }) => `${count}× ${label}`).join(", ") +
+					`. A dependency changed — extend the strip-script-injection patterns in esbuild.config.mjs.`,
+			);
+			process.exit(1);
+		}
+	}
+
+	const sizeBytes = statSync(mainPath).size;
+	const asMB = (bytes) => (bytes / (1024 * 1024)).toFixed(2);
+	console.log(`main.js: ${asMB(sizeBytes)} MB (budget ${asMB(BUNDLE_BUDGET_BYTES)} MB)`);
+	if (prod && sizeBytes > BUNDLE_BUDGET_BYTES) {
+		console.error(
+			`Bundle size budget exceeded: main.js is ${asMB(sizeBytes)} MB, budget is ${asMB(BUNDLE_BUDGET_BYTES)} MB. ` +
+				`Check what got bundled (npx esbuild --analyze) before raising the budget.`,
+		);
+		process.exit(1);
+	}
 	process.exit(0);
 } else {
 	await context.watch();

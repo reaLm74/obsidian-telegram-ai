@@ -4,21 +4,60 @@
  */
 
 import TelegramSyncPlugin from "../../../main";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { createFolderIfNotExist, sanitizeFileName, sanitizeFilePath } from "src/utils/fsUtils";
-import path from "path";
+import * as path from "src/utils/pathUtils";
 import { applyNoteContentTemplate, processBasicVariables } from "./processors";
-import { getMessageContentType } from "src/ai/openai";
-import { processWithAI, processWithAIMixed } from "src/ai/processor";
+import { getMessageContentType } from "src/ai/contentType";
+import { processExtractedText, processWithAI, processWithAIMixed } from "src/ai/processor";
 import { TelegramMessageExtended } from "../../types";
 import { NoteCategory } from "src/categories/types";
 import { canExtractTextLocally, extractTextFromDocument } from "src/utils/documentExtractor";
+import { redactSecrets } from "src/utils/secretRedaction";
 import { displayAndLog, displayAndLogError } from "src/utils/logUtils";
 import { debugLog } from "src/utils/debugLog";
 import { TFile } from "obsidian";
-import { isTextOnlyUrl } from "./getters";
+import { getChatName, isTextOnlyUrl } from "./getters";
 import { MessageDistributionRule } from "src/settings/messageDistribution";
-import { getOffsetDate, unixTime2Date } from "src/utils/dateUtils";
+import { unixTime2Date } from "src/utils/dateUtils";
+import { MessageLedger } from "src/processing/MessageLedger";
+
+/**
+ * Frontmatter stamped into notes this message creates: its Telegram identity, which makes
+ * the note traceable to its message and keeps deduplication meaningful even if the ledger
+ * file is ever lost. Notes that are appended to keep their frontmatter untouched.
+ */
+export function messageFrontmatter(
+	plugin: TelegramSyncPlugin,
+	msg: TelegramBot.Message,
+): Record<string, string | number> | undefined {
+	if (!plugin.settings.noteFrontmatterIds) return undefined;
+	return {
+		"telegram-chat-id": msg.chat.id,
+		"telegram-message-id": msg.message_id,
+		"telegram-date": unixTime2Date(msg.date).toISOString(),
+	};
+}
+
+/** Records which note a message landed in — what edits and reply links navigate by. */
+export function registerNoteForMessage(
+	plugin: TelegramSyncPlugin,
+	msg: TelegramBot.Message,
+	notePath: string,
+	created: boolean,
+): void {
+	if (!notePath) return;
+	plugin.messageLedger?.registerNote(MessageLedger.key(msg.chat.id, msg.message_id), notePath, created);
+}
+
+/** "Reply to [[note]]" prefix when the replied-to message's note is known, else "". */
+export function buildReplyLink(plugin: TelegramSyncPlugin, msg: TelegramBot.Message): string {
+	if (!plugin.settings.replyLinksEnabled || !msg.reply_to_message) return "";
+	const ref = plugin.messageLedger?.getNoteRef(msg.chat.id, msg.reply_to_message.message_id);
+	if (!ref) return "";
+	const linkTarget = ref.path.replace(/\.md$/, "");
+	return `**↩️ Reply to:** [[${linkTarget}]]\n\n`;
+}
 
 /**
  * Attempts to extract text from document locally
@@ -84,6 +123,9 @@ export async function createNoteContent(
 	error?: Error,
 	combinedContent?: string,
 	extractedTextOverride?: string,
+	/** AI output already produced for this message — a photo's Vision description made for
+	 *  its note path. Used as the note's AI content instead of asking the model again. */
+	preparedAIContent?: string,
 ) {
 	const filesLinks: string[] = [];
 
@@ -101,7 +143,10 @@ export async function createNoteContent(
 		});
 		debugLog("Note", `created ${filesLinks.length} file link(s)`);
 	} else {
-		filesLinks.push(`[❌ error while handling file](${error})`);
+		// Plain text, not a pseudo-link (a ")" in the error broke the markdown), and
+		// redacted like every other renderer of this error: a failed Bot API download
+		// quotes a URL with the token in it, and notes travel further than consoles.
+		filesLinks.push(`❌ error while handling file: ${redactSecrets(String(error))}`);
 	}
 
 	const contentType = getMessageContentType(msg);
@@ -121,8 +166,12 @@ export async function createNoteContent(
 
 		let aiProcessedContent: string | null = null;
 
+		if (preparedAIContent) {
+			// Re-sending it as text would restructure an answer the final prompt already shaped.
+			aiProcessedContent = preparedAIContent;
+		}
 		// For media groups use combined content
-		if (combinedContent) {
+		else if (combinedContent) {
 			// Check if media group has photos for Vision API processing
 			const extMsg = msg as TelegramMessageExtended;
 			const mediaMessages = extMsg.mediaMessages || [];
@@ -139,16 +188,17 @@ export async function createNoteContent(
 		}
 		// For documents use extracted text
 		else if (extractedText) {
-			// Document successfully processed locally - use as text message
-			displayAndLog(plugin, `Document text extracted locally, processing as text`, 0);
+			// Transcript or extracted document text: the prompt and the processing switch follow
+			// the file it came from (processExtractedText), not the text message settings.
+			const sourceType = ["document", "voice", "audio", "video"].includes(contentType) ? contentType : "text";
+			displayAndLog(plugin, `Text extracted from the ${sourceType} file, processing it with AI`, 0);
 
 			if (messageText) {
-				// Document + message caption
+				// File text + message caption
 				const combinedDocumentContent = `${extractedText}\n\n**Document caption:**\n${messageText}`;
-				aiProcessedContent = await processWithAI(plugin, combinedDocumentContent, "text", msg);
+				aiProcessedContent = await processExtractedText(plugin, combinedDocumentContent, sourceType, msg);
 			} else {
-				// Document only
-				aiProcessedContent = await processWithAI(plugin, extractedText, "text", msg);
+				aiProcessedContent = await processExtractedText(plugin, extractedText, sourceType, msg);
 			}
 		}
 		// For other files try to process based on type
@@ -245,7 +295,9 @@ export async function applyCategorization(
 
 		// Check forced category from rule
 		if (distributionRule?.forceCategoryId) {
-			category = plugin.categoryManager.getCategory(distributionRule.forceCategoryId) || null;
+			const forced = plugin.categoryManager.getCategory(distributionRule.forceCategoryId);
+			// A disabled category is off everywhere, a rule that forces it included.
+			category = forced && forced.enabled !== false ? forced : null;
 		}
 
 		// If no forced category, determine automatically
@@ -257,7 +309,8 @@ export async function applyCategorization(
 				(!plugin.settings.aiEnabled || !plugin.settings.aiProcessLinks) &&
 				plugin.settings.defaultCategoryId
 			) {
-				category = plugin.categoryManager.getCategory(plugin.settings.defaultCategoryId) || null;
+				const fallback = plugin.categoryManager.getCategory(plugin.settings.defaultCategoryId);
+				category = fallback && fallback.enabled !== false ? fallback : null;
 				displayAndLog(plugin, "Using default category for URL-only message", 0);
 			} else {
 				category = await plugin.categoryManager.categorizeContent(content, msg);
@@ -300,10 +353,10 @@ export async function applyCategorization(
 
 		// Add category tags
 		if (plugin.settings.categoryTagsEnabled) {
-			const categoryTag = `#${category.name.toLowerCase().replace(/\s+/g, "-")}`;
+			const categoryTag = categoryTagFor(category.name);
 
 			// Check if tag already exists in content
-			if (!finalContent.includes(categoryTag)) {
+			if (categoryTag && !contentHasTag(finalContent, categoryTag)) {
 				// Add tag at the beginning of note
 				finalContent = `${categoryTag}\n\n${finalContent}`;
 			}
@@ -333,6 +386,27 @@ export async function applyCategorization(
 	}
 }
 
+/** The tag a category adds to its notes: "Работа/Проекты: 2026" → "#работа/проекты-2026". */
+export function categoryTagFor(name: string): string {
+	const body = name
+		.toLowerCase()
+		.replace(/\s+/g, "-")
+		// Obsidian tags take letters, digits, "_", "-" and "/" (nesting); ":" and the like cut
+		// the tag short or broke it.
+		.replace(/[^\p{L}\p{N}_\-/]/gu, "")
+		.replace(/\/{2,}/g, "/")
+		.replace(/-{2,}/g, "-")
+		.replace(/^[-/]+|[-/]+$/g, "");
+	// Digits alone are not a tag in Obsidian.
+	return body && !/^[\d/-]+$/.test(body) ? `#${body}` : "";
+}
+
+/** Whether the content already carries exactly this tag — "#work" is not in "#workshop". */
+export function contentHasTag(content: string, tag: string): boolean {
+	const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	return new RegExp(`(^|[^\\p{L}\\p{N}_/#-])${escaped}(?![\\p{L}\\p{N}_/-])`, "u").test(content);
+}
+
 /**
  * Applies full note path template for category
  */
@@ -354,29 +428,16 @@ export async function applyCategoryNotePathTemplate(
 	// than a replacement string so that "$&" in a name is not treated as a backreference.
 	notePath = notePath.replace(/\{\{category\}\}/g, () => sanitizeFileName(category.name));
 
-	// Replace date variables
-	const msgDate = unixTime2Date(msg.date);
-	const offsetDate = new Date(getOffsetDate(0, msgDate) * 1000);
+	// {{date:…}} is left to processBasicVariables below: the current date, as documented and as
+	// in a distribution rule. This used to format the MESSAGE date here, so the same template
+	// filed a backlog message into different folders depending on whether a rule or a category
+	// resolved it.
 
-	notePath = notePath.replace(/\{\{date:([^}]+)\}\}/g, (match, format: string) => {
-		try {
-			return window.moment(offsetDate).format(format);
-		} catch (error) {
-			debugLog("Category", "date formatting error", error);
-			return match;
-		}
-	});
-
-	// Replace other variables from message
-	if (msg.chat.title) {
-		const chatTitle = msg.chat.title;
-		notePath = notePath.replace(/\{\{chat\}\}/g, () => sanitizeFileName(chatTitle));
-	}
-
-	if (msg.from?.first_name) {
-		const firstName = msg.from.first_name;
-		notePath = notePath.replace(/\{\{user\}\}/g, () => sanitizeFileName(firstName));
-	}
+	// {{chat}} and {{user}} are names in a path, never the markdown links processBasicVariables
+	// renders for a note body. A chat without a title fell through to that link, and the "/"
+	// inside it created stray folders.
+	notePath = notePath.replace(/\{\{chat\}\}/g, () => sanitizeFileName(getChatName(msg, plugin.botUser)));
+	notePath = notePath.replace(/\{\{user\}\}/g, () => sanitizeFileName(msg.from?.first_name || ""));
 
 	// Process basic variables (including content and AI)
 	// Use extracted file content if available for better AI title generation
