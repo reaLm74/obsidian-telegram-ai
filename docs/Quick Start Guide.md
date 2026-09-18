@@ -7,13 +7,16 @@ This guide will help you get Telegram AI up and running quickly. The plugin incl
 ## Prerequisites
 
 Before starting, ensure you have:
-- **Obsidian** v1.8.7 or higher — desktop or mobile (mobile is beta since 0.6, see the [Mobile Guide](Mobile%20Guide.md))
+- **Obsidian** v1.8.7 or higher — desktop or mobile (mobile is in beta, see the [Mobile Guide](Mobile%20Guide.md))
 - **Telegram account** with access to create bots
-- **AI Provider account** (OpenAI) — optional but recommended
+- **AI provider API key** (OpenAI, Anthropic, Google or an OpenAI-compatible endpoint) — optional
 
 ## Step 1: Install the Plugin
 
+Open *Settings → Community plugins → Browse*, search for "Telegram AI", install it and enable it.
+
 ### Manual Installation
+Only needed for a build that is not in the plugin directory yet:
 1. Download `main.js`, `manifest.json`, and `styles.css` from [GitHub Releases](https://github.com/reaLm74/obsidian-telegram-ai/releases)
 2. Create folder `.obsidian/plugins/telegram-ai/` in your vault
 3. Copy the downloaded files into the folder

@@ -2,7 +2,7 @@
 
 Welcome to the comprehensive documentation for Telegram AI! This collection of guides will help you master all aspects of the plugin, from basic setup to advanced AI-powered workflows.
 
-> Version numbers 0.3–0.7 in these docs are roadmap stage names, not released versions — everything described is in the current build.
+> Version numbers 0.4–0.7 in these docs are development stage names, not releases — all of it shipped in release 0.3.0.
 
 ## 📚 Documentation Overview
 
