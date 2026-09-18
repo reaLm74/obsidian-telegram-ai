@@ -93,6 +93,6 @@ export async function enqueueByCondition<C, A extends unknown[], R>(
 			fn = fnOrArgs as AsyncInstanceFunction<C, A, R>;
 		}
 
-		return (context ? fn.call(context, ...args) : (fn as AsyncStaticFunction<A, R>)(...args)) as Promise<R>;
+		return context ? fn.call(context, ...args) : (fn as AsyncStaticFunction<A, R>)(...args);
 	}
 }

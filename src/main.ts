@@ -493,7 +493,7 @@ export default class TelegramSyncPlugin extends Plugin {
 		const stored = loaded || {};
 		// Migrations must see the raw data: once DEFAULT_SETTINGS is merged in, an absent
 		// key is indistinguishable from one explicitly set to its default value.
-		applyMigrations(stored as unknown as Record<string, unknown>, this.manifest.version);
+		applyMigrations(stored, this.manifest.version);
 		// DEFAULT_SETTINGS is cloned so absent keys get their own array/object instances —
 		// otherwise in-session mutation of e.g. topicNames writes through into the shared
 		// defaults, which validation and settings import later treat as pristine.

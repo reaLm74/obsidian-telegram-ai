@@ -8,11 +8,12 @@ echo "🔍 Running pre-commit checks..."
 # 1. ESLint (includes obsidianmd plugin rules)
 #
 # The SAME command CI runs (`npm run lint`), deliberately without --max-warnings 0. The
-# tree carries 12 accepted warnings that cannot be cleared without breaking the design:
-# `fetch` in the Bot API client is what makes a long poll abortable, the Node built-ins
-# are in test files only, `setWarning` is used because `setDestructive` needs Obsidian 1.13
-# while minAppVersion is 1.8.7, and the two sentence-case hits are API-key placeholders
-# ("sk-...", an OpenRouter URL) that must be shown verbatim. With the strict flag this step
+# tree carries 15 accepted warnings that cannot be cleared without breaking the design:
+# `fetch` in the Bot API client is what makes a long poll abortable; the Node built-ins
+# are in test files, except `buffer` in the GramJS converter (the npm polyfill, and GramJS
+# wants a Buffer); `setWarning` and `setDynamicTooltip` stay because their replacements
+# need Obsidian 1.13 while minAppVersion is 1.8.7; and the sentence-case hits are API-key
+# placeholders ("sk-...", an OpenRouter URL) that must be shown verbatim. With the strict flag this step
 # failed on a clean checkout, so the hook rejected every commit — including the ones fixing
 # things. A gate stricter than CI, that nothing in the repo can satisfy, only teaches
 # --no-verify.

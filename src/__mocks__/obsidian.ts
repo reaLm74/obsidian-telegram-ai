@@ -136,7 +136,7 @@ export async function requestUrl(_options: unknown): Promise<{ status: number; j
  * Minimal moment mock — wraps Date and supports .format()
  */
 function momentMock(date?: Date | string | number) {
-	const d = date ? new Date(date as string | number) : new Date();
+	const d = date ? new Date(date) : new Date();
 	return {
 		format(fmt: string): string {
 			// Simple format implementation for common patterns used in templates
