@@ -1,7 +1,9 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { Notice } from "obsidian";
 import TelegramSyncPlugin from "src/main";
-import { stopUpdatingProcessingDate } from "src/telegram/user/sync";
+import { stopUpdatingProcessingDate } from "src/telegram/user/processingState";
+import { redactSecrets } from "./secretRedaction";
+import { t } from "src/locale/i18n";
 
 export const _1sec = 1000;
 export const _2sec = 2 * _1sec;
@@ -31,7 +33,11 @@ interface PersistentNotice {
 let persistentNotices: PersistentNotice[] = [];
 
 // Show notification and log message into console.
-export function displayAndLog(plugin: TelegramSyncPlugin, message: string, timeout?: number) {
+export function displayAndLog(plugin: TelegramSyncPlugin, rawMessage: string, timeout?: number) {
+	// Scrubbed before anything else touches it: this text goes to the console, to an
+	// on-screen notice and — through displayAndLogError — into the Telegram chat, and Bot
+	// API file URLs embed the bot token verbatim.
+	const message = redactSecrets(rawMessage);
 	console.debug(`${plugin.manifest.name} => ${message}`);
 
 	if (timeout == 0) return;
@@ -50,9 +56,13 @@ export function displayAndLog(plugin: TelegramSyncPlugin, message: string, timeo
 
 	if (!timeout) {
 		persistentNotices.push({ notice, message });
-		// Prevent unbounded growth: remove oldest notices beyond limit
+		// Prevent unbounded growth: remove oldest notices beyond limit.
+		// Hidden, not merely forgotten: a notice created here has no timeout of its own
+		// (it was given `_day`), so dropping the reference left it on screen for the rest
+		// of the day with nothing able to dismiss it — the array stayed bounded while the
+		// stack of notices covering the workspace did not.
 		while (persistentNotices.length > 50) {
-			persistentNotices.shift();
+			persistentNotices.shift()?.notice.hide();
 		}
 	}
 }
@@ -68,16 +78,30 @@ export async function displayAndLogError(
 	addToCache?: boolean,
 ) {
 	let beautyError = `${error.name}: ${error.message.replace(/Error: /g, "")}\n${status || ""}\n${action || ""}`;
-	beautyError = beautyError.trim();
+	beautyError = redactSecrets(beautyError.trim());
 	displayAndLog(plugin, beautyError, timeout);
-	if (error.stack) console.debug(error.stack);
+	// The stack can quote the failing URL, which for Bot API downloads contains the token.
+	if (error.stack) console.debug(redactSecrets(error.stack));
 	if (msg) {
-		await plugin.bot?.sendMessage(msg.chat.id, `...❌...\n\n${beautyError}`, {
-			reply_to_message_id: msg.message_id,
-		});
+		// Reporting a failure must not itself fail the caller: the situations that break
+		// message processing (offline, blocked bot) usually break this send too, and the
+		// rejection would escape through every void-async listener as unhandled.
+		try {
+			await plugin.bot?.sendMessage(msg.chat.id, `...❌...\n\n${beautyError}`, {
+				reply_to_message_id: msg.message_id,
+			});
+		} catch (e) {
+			console.debug(`Telegram AI => could not report the error to the chat: ${redactSecrets(String(e))}`);
+		}
 	}
 	if (addToCache)
-		errorCache = `${errorCache || ""}\n\n${status || ""}\n${error.name}: ${error.message.replace(/Error: /g, "")}`;
+		// Redacted like every other copy of this text. The cache is not an internal log: the
+		// old-message scan mails the whole of it into the user's Telegram chat when the run
+		// finishes with errors, and it was the one path that appended the RAW message while
+		// the notice, the console line and the chat reply next to it were all scrubbed.
+		errorCache = redactSecrets(
+			`${errorCache || ""}\n\n${status || ""}\n${error.name}: ${error.message.replace(/Error: /g, "")}`,
+		);
 	if (msg && plugin.settings.retryFailedMessagesProcessing) stopUpdatingProcessingDate();
 }
 
@@ -104,10 +128,7 @@ export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
 			void (async () => {
 				await plugin.saveSettings();
 			})();
-			displayAndLog(
-				plugin,
-				"Telegram AI got errors during cache cleanup from the previous plugin version.\n\nPlease close all instances of Obsidian and restart it. You may need to repeat it twice.\n\nApologize for the inconvenience",
-			);
+			displayAndLog(plugin, t("notices.mtprotoCacheCleanup"));
 			return;
 		}
 		originalAlert?.(message);

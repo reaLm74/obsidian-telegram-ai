@@ -45,6 +45,16 @@ export function compareVersions(a: string, b: string): number {
  * Registry of all settings migrations, ordered by version.
  * Add new migrations at the end of this array.
  */
+/**
+ * The built-in instruction the removed OCR mode fell back to. Kept here, not in the AI
+ * layer, because only the 0.7.3 migration still needs it: an install that had OCR on with no
+ * prompt of its own must keep getting exactly this behaviour.
+ */
+const RETIRED_OCR_PROMPT =
+	"Extract ALL text visible in this image verbatim, preserving the original language, line breaks and reading order. " +
+	"Format the result as Markdown (headings, lists, tables where the layout implies them). " +
+	"Do not describe the image, do not translate, do not paraphrase. If no text is visible, say so briefly.";
+
 export const MIGRATIONS: SettingsMigration[] = [
 	{
 		fromVersion: "0.0.0",
@@ -144,6 +154,100 @@ export const MIGRATIONS: SettingsMigration[] = [
 			if (settings.categoriesEnabled === true && settings.aiCategorizationEnabled !== true) {
 				settings.categoriesEnabled = false;
 			}
+		},
+	},
+	{
+		fromVersion: "0.6.0",
+		toVersion: "0.7.0",
+		description: "Retire dated Claude/Gemini model ids and unify the Vision toggle",
+		migrate: (settings) => {
+			// Claude and Gemini shipped as dead code, so these defaults were never exercised
+			// against a live API and now name retired models. Only the untouched defaults are
+			// replaced — a model the user typed themselves is left alone.
+			if (
+				settings.claudeModel === "claude-3-5-sonnet-20241022" ||
+				settings.claudeModel === "claude-3-haiku-20240307"
+			) {
+				settings.claudeModel = "claude-opus-5";
+			}
+			if (settings.geminiModel === "gemini-1.5-pro" || settings.geminiModel === "gemini-1.5-flash") {
+				settings.geminiModel = "gemini-3.7-flash";
+			}
+
+			// One Vision toggle for every provider. geminiVisionEnabled stays in the settings
+			// type so an install that had it on keeps Vision on after the switch.
+			if (settings.geminiVisionEnabled === true && settings.aiVisionEnabled !== true) {
+				settings.aiVisionEnabled = true;
+			}
+		},
+	},
+	{
+		fromVersion: "0.7.0",
+		toVersion: "0.7.1",
+		description: "Drop the category templatePath field, which was never applied to notes",
+		migrate: (settings) => {
+			// The category editor collected a "Template path (beta)" and stored it, but no
+			// code ever read it back — notes always used the distribution rule's template.
+			// The field is gone from the UI and the type; this clears what installs already
+			// wrote, so a stale path cannot reappear if the idea is ever built for real.
+			const categories = settings.noteCategories as Array<Record<string, unknown>> | undefined;
+			if (!Array.isArray(categories)) return;
+			for (const category of categories) {
+				if (category && typeof category === "object") delete category.templatePath;
+			}
+		},
+	},
+	{
+		fromVersion: "0.7.1",
+		toVersion: "0.7.2",
+		description: "Drop the monthly AI budget ceiling",
+		migrate: (settings) => {
+			// The spend ceiling is gone from the UI, the type and the request path. A stored
+			// value would otherwise ride along in data.json, the diagnostic report and settings
+			// exports as a limit that no longer limits anything. The monthly spend TOTAL
+			// (aiMonthlySpend) is cost tracking, not the ceiling, and stays.
+			delete settings.aiMonthlyBudgetUSD;
+		},
+	},
+	{
+		fromVersion: "0.7.2",
+		toVersion: "0.7.3",
+		description: "Fold OCR mode into the photo prompt",
+		migrate: (settings) => {
+			// OCR mode only swapped the photo prompt for a text-extraction one, which a custom
+			// photo prompt does just as well. An install that had it ON keeps extracting text:
+			// its OCR prompt (or the built-in one it defaulted to) moves into the photo prompt —
+			// but only when that prompt is empty, so a prompt the user wrote is never overwritten.
+			if (settings.aiOcrEnabled === true) {
+				const photoPrompt = typeof settings.aiPromptPhoto === "string" ? settings.aiPromptPhoto.trim() : "";
+				const ocrPrompt = typeof settings.aiPromptOcr === "string" ? settings.aiPromptOcr.trim() : "";
+				if (!photoPrompt) settings.aiPromptPhoto = ocrPrompt || RETIRED_OCR_PROMPT;
+			}
+			delete settings.aiOcrEnabled;
+			delete settings.aiPromptOcr;
+		},
+	},
+	{
+		fromVersion: "0.7.3",
+		toVersion: "0.7.4",
+		description: "Drop Privacy Mode and the per-chat message limit",
+		migrate: (settings) => {
+			// Both features are gone from the UI, the type and the message path. Stored values
+			// would otherwise linger in data.json and exports as switches that switch nothing.
+			delete settings.privacyMode;
+			delete settings.rateLimitEnabled;
+			delete settings.rateLimitPerMinute;
+		},
+	},
+	{
+		fromVersion: "0.7.4",
+		toVersion: "0.7.5",
+		description: "Drop the processOtherBotsMessages switch, which nothing ever read",
+		migrate: (settings) => {
+			// Declared, defaulted and validated since the early versions, but no code path ever
+			// consulted it: messages were handled the same whatever it held. A stored value would
+			// otherwise ride along in data.json and settings exports as a switch with no effect.
+			delete settings.processOtherBotsMessages;
 		},
 	},
 ];

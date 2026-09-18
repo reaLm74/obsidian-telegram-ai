@@ -1,6 +1,7 @@
 import { Modal, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import * as User from "src/telegram/user/user";
+import { t } from "src/locale/i18n";
 
 export class UserLogInModal extends Modal {
 	userLoginDiv!: HTMLDivElement;
@@ -22,16 +23,17 @@ export class UserLogInModal extends Modal {
 	addHeader() {
 		this.contentEl.empty();
 		this.userLoginDiv = this.contentEl.createDiv();
-		this.titleEl.setText("User authorization");
+		this.titleEl.setText(t("modal.userAuth"));
 	}
 
 	addPassword() {
 		new Setting(this.userLoginDiv)
-			.setName("Enter password (optional)")
-			.setDesc(
-				"Enter your password before scanning the code only if you use two-step authorization. Password will not be stored",
-			)
+			.setName(t("settings.user.password"))
+			.setDesc(t("settings.user.password.desc"))
 			.addText((text) => {
+				// The user's real Telegram 2FA password: masked like every other credential
+				// field in the plugin.
+				text.inputEl.type = "password";
 				text.setPlaceholder("*************")
 					.setValue("")
 					.onChange((value: string) => {
@@ -41,20 +43,18 @@ export class UserLogInModal extends Modal {
 	}
 
 	addScanner() {
-		new Setting(this.userLoginDiv)
-			.setName("Prepare code scanner")
-			.setDesc("Open the Telegram app and link your device");
+		new Setting(this.userLoginDiv).setName(t("settings.user.scanner")).setDesc(t("settings.user.scanner.desc"));
 	}
 
 	addQrCode() {
 		new Setting(this.userLoginDiv)
-			.setName("Generate and scan code")
-			.setDesc(`Generate code and point your phone at it to confirm login`)
+			.setName(t("settings.user.qrCode"))
+			.setDesc(t("settings.user.qrCode.desc"))
 			.addButton((b) => {
-				b.setButtonText("Generate qr code");
+				b.setButtonText(t("settings.user.qrCode.generate"));
 				b.onClick(() => {
 					void (async () => {
-						this.showQrCodeGeneratingState("🔵 QR code generating...\n", "tgai-text-blue");
+						this.showQrCodeGeneratingState(t("settings.user.qrCode.generating"), "tgai-text-blue");
 						const error = await User.connect(
 							this.plugin,
 							"user",
@@ -63,7 +63,7 @@ export class UserLogInModal extends Modal {
 							this.password,
 						);
 						if (error) this.showQrCodeGeneratingState(`🔴 ${error}\n`, "tgai-text-error");
-						else this.showQrCodeGeneratingState("🟢 Successfully logged in!\n", "tgai-text-success");
+						else this.showQrCodeGeneratingState(t("settings.user.qrCode.success"), "tgai-text-success");
 					})();
 				});
 			});
@@ -73,22 +73,30 @@ export class UserLogInModal extends Modal {
 	}
 
 	addCheck() {
-		new Setting(this.userLoginDiv)
-			.setName("Check active sessions")
-			.setDesc("The session will appear in the list of active sessions");
+		new Setting(this.userLoginDiv).setName(t("settings.user.sessions")).setDesc(t("settings.user.sessions.desc"));
 	}
 	addFooterButtons() {
 		this.userLoginDiv.createEl("br");
 		const footerButtons = new Setting(this.contentEl.createDiv());
 		footerButtons.addButton((b) => {
 			b.setIcon("checkmark");
-			b.setButtonText("OK");
+			b.setButtonText(t("common.ok"));
 			b.onClick(() => this.close());
 		});
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		this.display();
+	}
+
+	onClose() {
+		// The one field in this plugin that holds a credential the user typed and that
+		// nothing encrypts: their real Telegram 2FA password. It was kept alive for the
+		// lifetime of the modal instance, which Obsidian holds after close. Emptying
+		// contentEl also releases the generated QR canvas.
+		this.password = "";
+		this.contentEl.empty();
 	}
 
 	cleanQrContainer() {

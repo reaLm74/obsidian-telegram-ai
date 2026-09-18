@@ -1,0 +1,43 @@
+name: 🌍 Translation
+description: Report a wrong or awkward translation, or offer a new language
+title: "[i18n]: "
+labels: ["translation", "good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping translate the plugin! Every UI string lives in one JSON file —
+        see the [Translation Guide](../blob/develop/docs/Translation%20Guide.md). A pull
+        request editing `src/locale/<code>.json` is the fastest path; this issue form is
+        for suggestions without a PR.
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - Deutsch (de)
+        - Español (es)
+        - Русский (ru)
+        - 简体中文 (zh)
+        - English (en) — source-string wording
+        - A new language (name it below)
+    validations:
+      required: true
+  - type: input
+    id: key
+    attributes:
+      label: String key
+      description: The key from src/locale/en.json, if you know it (e.g. settings.ai.enable)
+      placeholder: settings.ai.enable
+  - type: textarea
+    id: current
+    attributes:
+      label: Current text
+      description: What the plugin shows now
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested text
+      description: Your improved wording — keep {{placeholders}} exactly as they are
+    validations:
+      required: true

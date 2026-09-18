@@ -54,6 +54,7 @@ export class CategorySettingsModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		this.display();
 	}
 

@@ -5,7 +5,7 @@ import TelegramSyncPlugin from "src/main";
 import { Dialog } from "telegram/tl/custom/dialog";
 import { _5sec, cleanErrorCache, displayAndLog, displayAndLogError, _day, errorCache } from "src/utils/logUtils";
 import { Notice } from "obsidian";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { extractMediaId } from "../convertors/botFileToMessageMedia";
 import { getFileObject } from "../bot/message/getters";
 import { findUserMsg } from "../convertors/botMessageToClientMessage";
@@ -13,9 +13,6 @@ import bigInt from "big-integer";
 import { getChat, getUser } from "../convertors/clientMessageToBotMessage";
 import { emoticonProcessed, emoticonProcessedEdited } from "./config";
 
-const defaultDaysLimit = 14;
-const defaultDialogsLimit = 100;
-const defaultMessagesLimit = 1000;
 const _24hours = 24 * 60 * 60;
 
 interface ForwardedMessage {
@@ -23,34 +20,12 @@ interface ForwardedMessage {
 	forwarded: Api.Message;
 }
 
-interface ChatForSearch {
-	name: string;
-	peer: Api.TypeInputPeer;
-}
-
-export interface ProcessOldMessagesSettings {
-	lastProcessingDate: number;
-	daysLimit: number;
-	dialogsLimit: number;
-	messagesLimit: number;
-	chatsForSearch: ChatForSearch[];
-}
+// Types, defaults and the processing-date flag moved to ./processingState.ts in 0.6 —
+// they are read on every platform, while this module is desktop-only.
+import { allowUpdatingProcessingDate, stopUpdatingProcessingDate } from "./processingState";
+import type { ChatForSearch } from "./processingState";
 
 export let cachedUnprocessedMessages: ForwardedMessage[] = [];
-// Starts false: until the old-message scan has run (or is known to be unnecessary),
-// a freshly processed bot message must NOT stamp lastProcessingDate — the stamp would
-// move the scan window past the still-unfetched backlog, silently losing it.
-export let canUpdateProcessingDate = false;
-
-export function getDefaultProcessOldMessagesSettings(): ProcessOldMessagesSettings {
-	return {
-		lastProcessingDate: getOffsetDate(),
-		daysLimit: defaultDaysLimit,
-		dialogsLimit: defaultDialogsLimit,
-		messagesLimit: defaultMessagesLimit,
-		chatsForSearch: [],
-	};
-}
 
 /**
  * Reactions that mark a message as already synced, so the old-message scan skips it.
@@ -203,14 +178,14 @@ export async function forwardUnprocessedMessages(plugin: TelegramSyncPlugin) {
 	if (processOldMessagesSettings.chatsForSearch.length == 0) {
 		displayAndLog(plugin, "Processing old messages is skipped because chats for search are not listed", 0);
 		// Nothing can ever be recovered without chats to search — stamps are harmless.
-		canUpdateProcessingDate = true;
+		allowUpdatingProcessingDate();
 		return;
 	}
 	const nowDate = getOffsetDate();
 	const lastProcessingDate = processOldMessagesSettings.lastProcessingDate;
 	if (Math.abs(nowDate - lastProcessingDate) < _24hours) {
 		// No backlog to recover — regular processing may keep the date fresh.
-		canUpdateProcessingDate = true;
+		allowUpdatingProcessingDate();
 		return;
 	}
 
@@ -248,7 +223,7 @@ export async function forwardUnprocessedMessages(plugin: TelegramSyncPlugin) {
 
 		if (!errorCache) {
 			processOldMessagesSettings.lastProcessingDate = nowDate;
-			canUpdateProcessingDate = true;
+			allowUpdatingProcessingDate();
 		} else if (plugin.bot) {
 			const { checkedUser } = await checkUserService();
 			await plugin.bot.sendMessage(
@@ -309,15 +284,6 @@ export function addOriginalUserMsg(botMsg: TelegramBot.Message) {
 	} finally {
 		cachedUnprocessedMessages.remove(unprocessedMessage);
 	}
-}
-
-export function stopUpdatingProcessingDate() {
-	canUpdateProcessingDate = false;
-}
-
-/** Call once it is known no old-message backlog is pending (feature off, or scan done). */
-export function allowUpdatingProcessingDate() {
-	canUpdateProcessingDate = true;
 }
 
 export function clearCachedUnprocessedMessages() {

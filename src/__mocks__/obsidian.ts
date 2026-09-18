@@ -17,6 +17,10 @@ export class Plugin {
 		return {};
 	}
 	async saveData(_data: unknown) {}
+	/** Obsidian clears these on unload; here it only has to hand the id straight back. */
+	registerInterval(id: number): number {
+		return id;
+	}
 }
 
 export class PluginSettingTab {
@@ -25,6 +29,21 @@ export class PluginSettingTab {
 	display() {}
 	hide() {}
 	update() {}
+	refreshDomState() {}
+	getControlValue(_key: string): unknown {
+		return undefined;
+	}
+	setControlValue(_key: string, _value: unknown) {}
+}
+
+/** Tests act as the newest Obsidian; override per test to simulate older hosts. */
+export function requireApiVersion(_version: string): boolean {
+	return true;
+}
+
+/** i18n's fallback locale probe; tests drive locale via initLocale() explicitly. */
+export function getLanguage(): string {
+	return "en";
 }
 
 export class Setting {
@@ -53,6 +72,12 @@ export class Setting {
 		return this;
 	}
 	addExtraButton(_cb: unknown) {
+		return this;
+	}
+	addSlider(_cb: unknown) {
+		return this;
+	}
+	addTextArea(_cb: unknown) {
 		return this;
 	}
 }
@@ -153,4 +178,43 @@ export class TFile {
 	name = "";
 	basename = "";
 	extension = "";
+}
+
+/**
+ * Platform flags: tests run as "desktop" so the desktop-only gates (userGateway,
+ * bot.ts's battery-saver guard) take their production desktop path by default.
+ * A test simulating mobile can overwrite the flags directly.
+ */
+export const Platform = {
+	isDesktopApp: true,
+	isMobileApp: false,
+	isMacOS: false,
+	isMobile: false,
+	isPhone: false,
+	isTablet: false,
+};
+
+export function setIcon(_el: unknown, _icon: string): void {}
+
+/** Obsidian's fuzzy-ish search: the mock matches a simple case-insensitive substring. */
+export function prepareSimpleSearch(query: string): (text: string) => { score: number } | null {
+	const needle = query.toLowerCase();
+	return (text: string) => (text.toLowerCase().includes(needle) ? { score: 0 } : null);
+}
+
+export class TextAreaComponent {
+	inputEl = { value: "", addClass: (_c: string) => undefined };
+	setValue(value: string) {
+		this.inputEl.value = value;
+		return this;
+	}
+	getValue(): string {
+		return this.inputEl.value;
+	}
+	setPlaceholder(_p: string) {
+		return this;
+	}
+	onChange(_cb: (value: string) => void) {
+		return this;
+	}
 }

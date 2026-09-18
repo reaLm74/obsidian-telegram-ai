@@ -7,12 +7,22 @@
  * counter above zero forever, since every album waited on it.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import type TelegramSyncPlugin from "src/main";
 import { MessageDistributionRule } from "src/settings/messageDistribution";
 
 const mockAppendContentToNote = vi.fn<(...args: unknown[]) => unknown>();
 const mockFinalizeMessageProcessing = vi.fn<(...args: unknown[]) => unknown>();
+const mockMarkProcessed = vi.fn<(key: string) => Promise<void>>();
+const mockRecordFailure = vi.fn<(key: string, error: string) => unknown>();
+const mockRecordDone = vi.fn<(...args: unknown[]) => unknown>();
+const mockRecordError = vi.fn<(...args: unknown[]) => unknown>();
+const mockDisplayAndLog = vi.fn<(...args: unknown[]) => unknown>();
+
+vi.mock("src/processing/ProcessingTracker", () => ({
+	recordProcessingDone: (...args: unknown[]) => mockRecordDone(...args),
+	recordProcessingError: (...args: unknown[]) => mockRecordError(...args),
+}));
 
 vi.mock("src/utils/fsUtils", () => ({
 	appendContentToNote: (...args: unknown[]) => mockAppendContentToNote(...args),
@@ -36,12 +46,16 @@ vi.mock("./contentHandler", () => ({
 			Promise.resolve({ finalNotePath: notePath, finalContent: content }),
 		),
 	tryExtractDocumentText: vi.fn().mockResolvedValue(null),
+	buildReplyLink: vi.fn().mockReturnValue(""),
+	messageFrontmatter: vi.fn().mockReturnValue(undefined),
+	registerNoteForMessage: vi.fn(),
 }));
 
 vi.mock("src/ai/processor", () => ({ processWithAI: vi.fn().mockResolvedValue(null) }));
-vi.mock("src/ai/openai", () => ({ getMessageContentType: () => "photo" }));
+vi.mock("src/ai/contentType", () => ({ getMessageContentType: () => "photo" }));
 vi.mock("src/utils/logUtils", () => ({
-	displayAndLog: vi.fn(),
+	_15sec: 15_000,
+	displayAndLog: (...args: unknown[]) => mockDisplayAndLog(...args),
 	displayAndLogError: vi.fn(),
 }));
 
@@ -58,6 +72,7 @@ function makePlugin(messagesLeftCnt = 0): TelegramSyncPlugin {
 		messagesLeftCnt,
 		settings: { defaultMessageDelimiter: true, aiEnabled: false, categoriesEnabled: false },
 		app: { vault: {} },
+		messageLedger: { markProcessed: mockMarkProcessed, recordFailure: mockRecordFailure },
 	} as unknown as TelegramSyncPlugin;
 }
 
@@ -88,6 +103,7 @@ function pushGroup(id: string, ageMs: number): MediaGroup {
 		distributionRule: makeRule(),
 		initialMsg: msg,
 		mediaMessages: [msg],
+		members: [{ ledgerKey: `42:${id}`, trackingId: `track-${id}` }],
 		filesPaths: [`Telegram/photos/${id}.jpg`],
 		lastMessageTime: Date.now() - ageMs,
 		isComplete: false,
@@ -193,5 +209,66 @@ describe("handleMediaGroup — stall ceiling", () => {
 		await handleMediaGroup(makePlugin(1));
 
 		expect(mockAppendContentToNote).not.toHaveBeenCalled();
+	});
+});
+
+describe("handleMediaGroup — ledger sealing", () => {
+	// Members used to be sealed as soon as their file was downloaded. A crash before the
+	// album's note was written then left the files in the vault with no note, and the ledger
+	// no longer held the messages that could have been replayed.
+	it("seals every member only after the album's note is written", async () => {
+		const group = pushGroup("album-1", MEDIA_GROUP_TIMEOUT_MS + 100);
+		group.members.push({ ledgerKey: "42:2", trackingId: "track-2" });
+		let sealedBeforeWrite = -1;
+		mockAppendContentToNote.mockImplementationOnce(() => {
+			sealedBeforeWrite = mockMarkProcessed.mock.calls.length + mockRecordDone.mock.calls.length;
+			return Promise.resolve({ created: true });
+		});
+
+		await handleMediaGroup(makePlugin());
+
+		expect(sealedBeforeWrite).toBe(0);
+		expect(mockMarkProcessed.mock.calls.map((call) => call[0])).toEqual(["42:album-1", "42:2"]);
+		expect(mockRecordDone.mock.calls).toEqual([["track-album-1"], ["track-2"]]);
+		expect(mockRecordFailure).not.toHaveBeenCalled();
+	});
+
+	it("gives every member a failed attempt when the note cannot be written", async () => {
+		const group = pushGroup("album-1", MEDIA_GROUP_TIMEOUT_MS + 100);
+		group.members.push({ ledgerKey: "42:2", trackingId: "track-2" });
+		mockAppendContentToNote.mockRejectedValueOnce(new Error("disk full"));
+
+		await handleMediaGroup(makePlugin());
+
+		expect(mockMarkProcessed).not.toHaveBeenCalled();
+		expect(mockRecordFailure.mock.calls).toEqual([
+			["42:album-1", "disk full"],
+			["42:2", "disk full"],
+		]);
+		// The history must not keep saying ✅ for an album that never landed.
+		expect(mockRecordError.mock.calls).toEqual([
+			["track-album-1", "disk full", false],
+			["track-2", "disk full", false],
+		]);
+		expect(mockRecordDone).not.toHaveBeenCalled();
+		expect(mediaGroups).toHaveLength(0);
+	});
+
+	it("marks quarantined members in the history and says so once", async () => {
+		const group = pushGroup("album-1", MEDIA_GROUP_TIMEOUT_MS + 100);
+		group.members.push({ ledgerKey: "42:2", trackingId: "track-2" });
+		mockAppendContentToNote.mockRejectedValueOnce(new Error("disk full"));
+		mockRecordFailure
+			.mockReturnValueOnce({ status: "quarantined", attempts: 5 })
+			.mockReturnValueOnce({ status: "quarantined", attempts: 5 });
+
+		await handleMediaGroup(makePlugin());
+
+		expect(mockRecordError.mock.calls).toEqual([
+			["track-album-1", "disk full", true],
+			["track-2", "disk full", true],
+		]);
+		expect(mockDisplayAndLog).toHaveBeenCalledTimes(1);
+		expect(mockDisplayAndLog.mock.calls[0][2]).toBe(15_000);
 	});
 });

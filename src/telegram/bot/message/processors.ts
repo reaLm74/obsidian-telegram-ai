@@ -1,4 +1,4 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import TelegramSyncPlugin from "../../../main";
 import {
 	getChatId,
@@ -19,19 +19,21 @@ import { TFile, normalizePath } from "obsidian";
 import { formatDateTime, unixTime2Date } from "../../../utils/dateUtils";
 import { _15sec, _1h, _5sec, displayAndLog, displayAndLogError } from "src/utils/logUtils";
 import { convertMessageTextToMarkdown, escapeRegExp } from "./convertToMarkdown";
-import * as Client from "../../user/client";
+import { sendReactionViaUser, transcribeAudioViaUser } from "../../user/userGateway";
 import { enqueue } from "src/utils/queues";
 import { sanitizeFileName, sanitizeFilePath } from "src/utils/fsUtils";
-import path from "path";
+import { neutralizeLeadingFrontmatter } from "src/utils/frontmatterUtils";
+import * as path from "src/utils/pathUtils";
 import { defaultFileNameTemplate, defaultNoteNameTemplate } from "src/settings/messageDistribution";
-import { Api } from "telegram";
+import type { Api } from "telegram";
 import { setReaction } from "../bot";
 import { emoticonProcessedEdited } from "src/telegram/user/config";
 import { debugLog } from "src/utils/debugLog";
+import { t } from "src/locale/i18n";
 // These lived here as private copies while templateUtils.ts held identical, unit-tested
 // ones — so the tested implementation was not the one that ran. Importing them makes the
 // existing templateUtils tests cover the code path that actually processes templates.
-import { getFallbackValue, processText } from "./templateUtils";
+import { getFallbackValue, isSupportedTextProperty, processText } from "./templateUtils";
 import { resolveMessageMetadata } from "src/ai/messageMetadata";
 
 // Delete a message or send a confirmation reply based on settings and message age
@@ -40,6 +42,19 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 	if (error || !plugin.bot) {
 		return;
 	}
+	try {
+		await finalizeInTelegram(plugin, msg);
+	} catch (e: unknown) {
+		// Finalization is Telegram-side cosmetics — a reaction, a confirmation, a delete.
+		// By this point the note is already written, so a failure here must not propagate:
+		// the message ledger would count it as a failed message and replay the whole
+		// pipeline, appending the same content a second time.
+		await displayAndLogError(plugin, e instanceof Error ? e : new Error(String(e)), "", "", msg, 0);
+	}
+}
+
+async function finalizeInTelegram(plugin: TelegramSyncPlugin, msg: TelegramBot.Message) {
+	if (!plugin.bot) return;
 	// originalUserMsg is a runtime property attached by sync.ts to forwarded messages from the user client
 	const originalMsg: Api.Message | undefined = (msg as unknown as Record<string, unknown>).originalUserMsg as
 		| Api.Message
@@ -80,7 +95,7 @@ export async function finalizeMessageProcessing(plugin: TelegramSyncPlugin, msg:
 		// reacting by user
 		try {
 			if (needReply && plugin.settings.telegramSessionType == "user" && plugin.botUser) {
-				await enqueue(Client.sendReaction, plugin.botUser, msg, emoticon);
+				await enqueue(sendReactionViaUser, plugin.botUser, msg, emoticon);
 				needReply = false;
 			}
 		} catch {
@@ -125,17 +140,18 @@ export async function applyNoteContentTemplate(
 	}
 
 	const allEmbeddedFilesLinks = filesLinks.length > 0 ? filesLinks.join("\n") : "";
-	const allFilesLinks = allEmbeddedFilesLinks.replace("![", "[");
-	let textContentMd = textContentOverride || "";
+	// Global replace: a media group renders one embed per file, and the old single
+	// `.replace("![", "[")` un-embedded only the first of them for {{files:links}}.
+	const allFilesLinks = allEmbeddedFilesLinks.replace(/!\[/g, "[");
+	// Neutralized like the message text below: the override is extracted document text, a
+	// transcript or a photo description — sender-controlled, and a document starting with a
+	// YAML block became the note's properties.
+	let textContentMd = textContentOverride ? neutralizeLeadingFrontmatter(textContentOverride) : "";
 	if (!textContentMd && (!templateContent || templateContent.includes("{{content"))) {
-		// For images with enabled Vision API use AI processing
-		if (msg.photo && plugin.settings.aiEnabled && plugin.settings.aiVisionEnabled) {
-			const { processWithAI } = await import("../../../ai/processor");
-			const aiProcessedContent = await processWithAI(plugin, msg.caption || "", "photo", msg);
-			textContentMd = aiProcessedContent || convertMessageTextToMarkdown(msg);
-		} else {
-			textContentMd = convertMessageTextToMarkdown(msg);
-		}
+		// Message text only — no AI here. This used to run a Vision request for photos, but
+		// every caller that wants AI output sends the photo itself right afterwards, so each
+		// photo paid for a description whose only use was extra input to the next request.
+		textContentMd = neutralizeLeadingFrontmatter(convertMessageTextToMarkdown(msg));
 	}
 	// Check if the message is forwarded and extract the required information
 	const forwardFromLink = getForwardFromLink(msg);
@@ -148,14 +164,28 @@ export async function applyNoteContentTemplate(
 		return fullContent;
 	}
 
+	// {{content}} carries the file embeds too, so a template that also places {{files}} embedded
+	// every file twice. With {{files}} in the template, {{content}} is the text alone.
+	const contentForTemplate = /{{files(:links)?}}/.test(templateContent)
+		? (forwardFromLink ? `**Forwarded from ${forwardFromLink}**\n\n` : "") + textContentMd
+		: fullContent;
+
 	const itemsForReplacing: [string, string][] = [];
 
 	let processedContent = (
-		await processBasicVariables(plugin, msg, templateContent, textContentMd, fullContent, false, skipAIVariables)
+		await processBasicVariables(
+			plugin,
+			msg,
+			templateContent,
+			textContentMd,
+			contentForTemplate,
+			false,
+			skipAIVariables,
+		)
 	)
-		.replace(/{{files}}/g, allEmbeddedFilesLinks)
-		.replace(/{{files:links}}/g, allFilesLinks)
-		.replace(/{{url1}}/g, getUrl(msg)) // first url from the message
+		.replace(/{{files}}/g, () => allEmbeddedFilesLinks)
+		.replace(/{{files:links}}/g, () => allFilesLinks)
+		.replace(/{{url1}}/g, () => getUrl(msg)) // first url from the message
 		.replace(/{{url1:preview(.*?)}}/g, (_, height: string) => {
 			let linkPreview = "";
 			const url1 = getUrl(msg);
@@ -165,7 +195,11 @@ export async function applyNoteContentTemplate(
 					// the src attribute and inject arbitrary markup into the rendered note.
 					linkPreview = `<iframe width="100%" height="${height || 250}" src="${escapeHtmlAttribute(url1)}"></iframe>`;
 				} else {
-					displayAndLog(plugin, `Template variable {{url1:preview${height}}} isn't supported!`, _15sec);
+					displayAndLog(
+						plugin,
+						t("notices.templateVariableUnsupported", { name: `{{url1:preview${height}}}` }),
+						_15sec,
+					);
 				}
 			}
 			return linkPreview;
@@ -198,7 +232,9 @@ export async function applyNotePathTemplate(
 
 	let processedPath = notePathTemplate.endsWith("/") ? notePathTemplate + defaultNoteNameTemplate : notePathTemplate;
 	let textContentMd = "";
-	if (processedPath.includes("{{content")) {
+	// {{ai:*}} needs the content too: the metadata request is made from it, and a path such as
+	// "Inbox/{{ai:title}}.md" (no {{content}}) got an empty text, no request, and param_title.
+	if (processedPath.includes("{{content") || processedPath.includes("{{ai:")) {
 		// Use extracted file content if available, otherwise fall back to message text/caption
 		textContentMd = extractedFileContent || msg.text || msg.caption || "";
 	}
@@ -211,6 +247,9 @@ export async function applyNotePathTemplate(
 		true,
 		skipAIVariables,
 	);
+	// {{url1}} is a note-body variable: in a path it expands to nothing, as documented, instead of
+	// staying in the file name literally.
+	processedPath = processedPath.replace(/{{url1(:[^}]*)?}}/g, "");
 	if (processedPath.endsWith("/.md")) processedPath = processedPath.replace("/.md", "/_.md");
 	if (!path.extname(processedPath)) processedPath = processedPath + ".md";
 	if (processedPath.endsWith(".")) processedPath = processedPath + "md";
@@ -229,10 +268,14 @@ export async function applyFilesPathTemplate(
 
 	let processedPath = filePathTemplate.endsWith("/") ? filePathTemplate + defaultFileNameTemplate : filePathTemplate;
 	processedPath = await processBasicVariables(plugin, msg, processedPath, msg.caption);
+	// Replacer functions, not replacement strings: fileName comes from msg.document.file_name,
+	// so a name containing "$&", "$`" or "$'" would splice surrounding template text into the
+	// path. Same reason as the callbacks in processBasicVariables and contentHandler.
 	processedPath = processedPath
-		.replace(/{{file:type}}/g, fileType)
-		.replace(/{{file:name}}/g, fileName)
-		.replace(/{{file:extension}}/g, fileExtension);
+		.replace(/{{file:type}}/g, () => fileType)
+		.replace(/{{file:name}}/g, () => fileName)
+		.replace(/{{file:extension}}/g, () => fileExtension)
+		.replace(/{{url1(:[^}]*)?}}/g, "");
 	if (!path.extname(processedPath)) processedPath = processedPath + "." + fileExtension;
 	if (processedPath.endsWith(".")) processedPath = processedPath + fileExtension;
 	return sanitizeFilePath(processedPath);
@@ -254,7 +297,7 @@ export async function processBasicVariables(
 
 	let voiceTranscript = "";
 	if (processThis.includes("{{voiceTranscript") && plugin.bot) {
-		voiceTranscript = await Client.transcribeAudio(plugin.bot, msg, await plugin.getBotUser());
+		voiceTranscript = await transcribeAudioViaUser(plugin.bot, msg, await plugin.getBotUser());
 	}
 
 	const lines = processThis.split("\n");
@@ -279,29 +322,42 @@ export async function processBasicVariables(
 	}
 	let processedContent = lines.join("\n");
 
+	// Awaited outside the chain: a replacer callback cannot be async. Resolved only when the
+	// template asks for the topic: getTopic throws for a forum topic whose name the bot cannot
+	// know (the General topic, one created before the bot joined), and resolving it
+	// unconditionally failed every message in such a topic — even with the default path
+	// template, which has no topic variable at all.
+	const needsTopic = processedContent.includes("{{topic}}") || processedContent.includes("{{topic:name}}");
+	const topicLink = needsTopic ? await getTopicLink(plugin, msg) : "";
+	const topicName = needsTopic ? (await getTopic(plugin, msg))?.name || "" : "";
+
+	// Every non-literal value is substituted through a replacer FUNCTION: names, chat
+	// titles and URLs come from the message, and as replacement strings $&, $` or $'
+	// inside them would splice template text into the note (or the path).
 	processedContent = processedContent
 		.replace(/{{messageDate:(.*?)}}/g, (_, format: string) => formatDateTime(messageDateTime, format))
 		.replace(/{{messageTime:(.*?)}}/g, (_, format: string) => formatDateTime(messageDateTime, format))
 		.replace(/{{date:(.*?)}}/g, (_, format: string) => formatDateTime(dateTimeNow, format))
 		.replace(/{{time:(.*?)}}/g, (_, format: string) => formatDateTime(dateTimeNow, format))
-		.replace(/{{forwardFrom}}/g, getForwardFromLink(msg))
-		.replace(/{{forwardFrom:name}}/g, prepareIfPath(isPath, getForwardFromName(msg))) // name of forwarded message creator
-		.replace(/{{user}}/g, getUserLink(msg)) // link to the user who sent the message
-		.replace(/{{user:name}}/g, prepareIfPath(isPath, msg.from?.username || ""))
-		.replace(
-			/{{user:fullName}}/g,
-			prepareIfPath(isPath, `${msg.from?.first_name} ${msg.from?.last_name || ""}`.trim()),
+		.replace(/{{forwardFrom}}/g, () => getForwardFromLink(msg))
+		.replace(/{{forwardFrom:name}}/g, () => prepareIfPath(isPath, getForwardFromName(msg))) // name of forwarded message creator
+		.replace(/{{user}}/g, () => getUserLink(msg)) // link to the user who sent the message
+		.replace(/{{user:name}}/g, () => prepareIfPath(isPath, msg.from?.username || ""))
+		.replace(/{{user:fullName}}/g, () =>
+			// `|| ""` on first_name too: a channel post has no `from`, and `undefined` must
+			// not be stringified into the note.
+			prepareIfPath(isPath, `${msg.from?.first_name || ""} ${msg.from?.last_name || ""}`.trim()),
 		)
-		.replace(/{{userId}}/g, msg.from?.id.toString() || msg.message_id.toString()) // id of the user who sent the message
-		.replace(/{{chat}}/g, getChatLink(msg, plugin.botUser)) // link to the chat with the message
-		.replace(/{{chatId}}/g, getChatId(msg, plugin.botUser)) // id of the chat with the message
-		.replace(/{{chat:name}}/g, prepareIfPath(isPath, getChatName(msg, plugin.botUser))) // name of the chat (bot / group / channel)
-		.replace(/{{topic}}/g, await getTopicLink(plugin, msg)) // link to the topic with the message
-		.replace(/{{topic:name}}/g, prepareIfPath(isPath, (await getTopic(plugin, msg))?.name || "")) // link to the topic with the message
-		.replace(/{{topicId}}/g, getTopicId(msg)?.toString() || "") // head message id representing the topic
-		.replace(/{{messageId}}/g, msg.message_id.toString())
-		.replace(/{{replyMessageId}}/g, getReplyMessageId(msg))
-		.replace(/{{domain}}/g, prepareIfPath(isPath, getDomainFromUrl(getUrl(msg))))
+		.replace(/{{userId}}/g, () => msg.from?.id.toString() || msg.message_id.toString()) // id of the user who sent the message
+		.replace(/{{chat}}/g, () => getChatLink(msg, plugin.botUser)) // link to the chat with the message
+		.replace(/{{chatId}}/g, () => getChatId(msg, plugin.botUser)) // id of the chat with the message
+		.replace(/{{chat:name}}/g, () => prepareIfPath(isPath, getChatName(msg, plugin.botUser))) // name of the chat (bot / group / channel)
+		.replace(/{{topic}}/g, () => topicLink) // link to the topic with the message
+		.replace(/{{topic:name}}/g, () => prepareIfPath(isPath, topicName)) // link to the topic with the message
+		.replace(/{{topicId}}/g, () => getTopicId(msg)?.toString() || "") // head message id representing the topic
+		.replace(/{{messageId}}/g, () => msg.message_id.toString())
+		.replace(/{{replyMessageId}}/g, () => getReplyMessageId(msg))
+		.replace(/{{domain}}/g, () => prepareIfPath(isPath, getDomainFromUrl(getUrl(msg))))
 		.replace(/{{hashtag:\[(\d+)\]}}/g, (_, num: string) => getHashtag(msg, parseInt(num)))
 		.replace(/{{creationDate:(.*?)}}/g, (_, format: string) => formatDateTime(creationDateTime, format)) // date, when the message was created
 		.replace(/{{creationTime:(.*?)}}/g, (_, format: string) => formatDateTime(creationDateTime, format)); // time, when the message was created
@@ -315,6 +371,7 @@ export async function processBasicVariables(
 			processedContent,
 			messageContent || messageText || "",
 			skipAIVariables,
+			isPath,
 		);
 		debugLog("Template", "AI variables processed result:", processedContent);
 	}
@@ -340,6 +397,7 @@ async function processAIVariables(
 	template: string,
 	content: string,
 	skipAIVariables = false,
+	isPath = false,
 ): Promise<string> {
 	debugLog("Template", "processAIVariables called with:", {
 		template,
@@ -352,7 +410,7 @@ async function processAIVariables(
 	if (!plugin.settings.aiEnabled || skipAIVariables) {
 		debugLog("Template", "AI disabled, using fallback values");
 		return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
-			const fallbackValue = getFallbackValue(paramName, content);
+			const fallbackValue = getFallbackValue(paramName, content, msg);
 			debugLog("Template", `Replacing {{ai:${paramName}}} with fallback:`, fallbackValue);
 			return fallbackValue;
 		});
@@ -369,11 +427,23 @@ async function processAIVariables(
 	const definedParams = allParamNames.filter((paramName) => plugin.settings.aiCustomParameters[paramName]);
 	const undefinedParams = allParamNames.filter((paramName) => !plugin.settings.aiCustomParameters[paramName]);
 
-	// First replace undefined parameters with fallback values
+	// First replace undefined parameters with fallback values. Replacer functions
+	// throughout this file: fallback and AI-produced values are message-derived text, and
+	// as replacement strings $&, $` or $' inside them would be expanded as patterns.
+	//
+	// prepareIfPath for the same reason every other variable gets it: in a path template
+	// these values become the note's filename and folder. The fallbacks are message text,
+	// and the AI-produced ones are steerable by a sender in a whitelisted chat, so a "/"
+	// in either would silently create sub-folders. sanitizeFilePath at the end of
+	// applyNotePathTemplate strips "..", but it cannot tell an intended separator from
+	// an injected one — only the per-variable pass can.
 	let processedTemplate = template;
 	for (const paramName of undefinedParams) {
-		const fallbackValue = getFallbackValue(paramName, content);
-		processedTemplate = processedTemplate.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
+		const fallbackValue = prepareIfPath(isPath, getFallbackValue(paramName, content, msg));
+		processedTemplate = processedTemplate.replace(
+			new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"),
+			() => fallbackValue,
+		);
 		debugLog("Template", `Undefined parameter {{ai:${paramName}}} replaced with fallback:`, fallbackValue);
 	}
 
@@ -392,7 +462,7 @@ async function processAIVariables(
 			debugLog("Template", "No AI response, using fallback values");
 			// If AI didn't respond, use default values
 			return template.replace(/\{\{ai:(\w+)\}\}/g, (match, paramName: string) => {
-				const fallbackValue = getFallbackValue(paramName, content);
+				const fallbackValue = prepareIfPath(isPath, getFallbackValue(paramName, content, msg));
 				debugLog("Template", `Fallback for ${paramName}:`, fallbackValue);
 				return fallbackValue;
 			});
@@ -402,9 +472,11 @@ async function processAIVariables(
 		// parameter, so only the ones this template actually uses are substituted here.
 		let result = processedTemplate;
 		for (const paramName of definedParams) {
-			const value = metadata.params[paramName];
-			if (value === undefined) continue;
-			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), value);
+			// A configured parameter the model left out gets the same fallback as an unconfigured one;
+			// skipping it left "{{ai:topic}}" in the note and a stray "topic" folder in the path.
+			const raw = metadata.params[paramName] ?? getFallbackValue(paramName, content, msg);
+			const value = prepareIfPath(isPath, raw);
+			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), () => value);
 			debugLog("Template", `Replaced {{ai:${paramName}}} with:`, value);
 		}
 
@@ -414,8 +486,8 @@ async function processAIVariables(
 		// On error, use default values for defined parameters
 		let result = processedTemplate;
 		for (const paramName of definedParams) {
-			const fallbackValue = getFallbackValue(paramName, content);
-			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), fallbackValue);
+			const fallbackValue = prepareIfPath(isPath, getFallbackValue(paramName, content, msg));
+			result = result.replace(new RegExp(`\\{\\{ai:${paramName}\\}\\}`, "g"), () => fallbackValue);
 			debugLog("Template", `Error fallback for ${paramName}:`, fallbackValue);
 		}
 		return result;
@@ -439,10 +511,25 @@ function pasteText(
 		.replace(leadingAndPropertyRE, (_, leadingChars: string, property: string) => {
 			const processedText = processText(text, leadingChars, property);
 			if (!processedText && property && text) {
-				displayAndLog(plugin, `Template variable {{${pasteType}}:${property}}} isn't supported!`, _5sec);
+				displayAndLog(
+					plugin,
+					t("notices.templateVariableUnsupported", { name: `{{${pasteType}:${property}}}` }),
+					_5sec,
+				);
 			}
 			return prepareIfPath(isPath, processedText);
 		})
-		.replace(allRE, prepareIfPath(isPath, content))
-		.replace(propertyRE, (_, property: string) => prepareIfPath(isPath, processText(text, undefined, property)));
+		.replace(allRE, () => prepareIfPath(isPath, content))
+		.replace(propertyRE, (_, property: string) => {
+			// The same notice as the prefixed form above. Without it an unsupported property such
+			// as {{content:abc}} silently produced nothing.
+			if (!isSupportedTextProperty(property)) {
+				displayAndLog(
+					plugin,
+					t("notices.templateVariableUnsupported", { name: `{{${pasteType}:${property}}}` }),
+					_5sec,
+				);
+			}
+			return prepareIfPath(isPath, processText(text, undefined, property));
+		});
 }

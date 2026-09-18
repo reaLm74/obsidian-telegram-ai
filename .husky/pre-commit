@@ -6,8 +6,22 @@
 echo "🔍 Running pre-commit checks..."
 
 # 1. ESLint (includes obsidianmd plugin rules)
+#
+# The SAME command CI runs (`npm run lint`), deliberately without --max-warnings 0. The
+# tree carries 12 accepted warnings that cannot be cleared without breaking the design:
+# `fetch` in the Bot API client is what makes a long poll abortable, the Node built-ins
+# are in test files only, `setWarning` is used because `setDestructive` needs Obsidian 1.13
+# while minAppVersion is 1.8.7, and the two sentence-case hits are API-key placeholders
+# ("sk-...", an OpenRouter URL) that must be shown verbatim. With the strict flag this step
+# failed on a clean checkout, so the hook rejected every commit — including the ones fixing
+# things. A gate stricter than CI, that nothing in the repo can satisfy, only teaches
+# --no-verify.
+#
+# Never run `eslint --fix` over the whole tree without reading the diff: auto-fixable
+# obsidianmd rules rewrite environment-sensitive code (`globalThis` → `window` in the test
+# setup broke every test file at once). The mocks are exempted in eslint.config.mjs now.
 echo "  → ESLint..."
-npx eslint src/ --max-warnings 0
+npm run lint
 if [ $? -ne 0 ]; then
   echo "❌ ESLint failed. Fix errors before committing."
   exit 1
@@ -21,7 +35,19 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-# 3. Production build + bundle size check
+# 3. Unit tests
+#
+# CI runs these on every PR, and they take ~5 s — an order of magnitude less than the
+# production build this hook already waits for. Catching a broken invariant here rather
+# than in CI is the whole point of a pre-commit hook.
+echo "  → Unit tests..."
+npm run test:unit
+if [ $? -ne 0 ]; then
+  echo "❌ Unit tests failed. Run 'npm run test:unit' to see the failures."
+  exit 1
+fi
+
+# 4. Production build + bundle size check
 echo "  → Building production bundle..."
 node esbuild.config.mjs production
 if [ $? -ne 0 ]; then
@@ -34,16 +60,10 @@ if [ -f "post-build.mjs" ]; then
   node post-build.mjs
 fi
 
-# Check bundle size (5MB = 5242880 bytes)
-MAX_SIZE=5242880
-ACTUAL_SIZE=$(wc -c < main.js | tr -d ' ')
-if [ "$ACTUAL_SIZE" -gt "$MAX_SIZE" ]; then
-  SIZE_MB=$(echo "scale=2; $ACTUAL_SIZE / 1048576" | bc)
-  echo "❌ main.js is ${SIZE_MB}MB (limit: 5MB). Reduce bundle size."
-  exit 1
-fi
+# Bundle size is enforced by the production build itself (3.5 MB ceiling in
+# esbuild.config.mjs, which step 4 just ran) — no separate check needed here.
 
-# 4. Validate manifest.json structure
+# 5. Validate manifest.json structure
 echo "  → Validating manifest.json..."
 node -e "
   const m = require('./manifest.json');

@@ -11,6 +11,7 @@ export class CustomAIParametersModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		const { contentEl } = this;
 		contentEl.empty();
 
@@ -67,7 +68,7 @@ export class CustomAIParametersModal extends Modal {
 
 			// Field for editing prompt
 			const textarea = paramContent.createEl("textarea", {
-				placeholder: "Enter prompt for this parameter...",
+				placeholder: t("modal.customParams.prompt.placeholder"),
 			});
 
 			// Set value explicitly
@@ -96,7 +97,20 @@ export class CustomAIParametersModal extends Modal {
 			};
 
 			const deleteButton = buttonGroup.createEl("button", { text: t("common.delete"), cls: "mod-warning" });
+			// Two-click confirm, like the category delete flow: the prompt text is gone for
+			// good with the parameter, and this used to fire on the first (possibly stray)
+			// click with no way back.
+			let deleteArmed = false;
 			deleteButton.onclick = () => {
+				if (!deleteArmed) {
+					deleteArmed = true;
+					deleteButton.setText(t("settings.categories.customParams.deleteConfirm", { name: paramName }));
+					window.setTimeout(() => {
+						deleteArmed = false;
+						deleteButton.setText(t("common.delete"));
+					}, 4000);
+					return;
+				}
 				void (async () => {
 					delete this.plugin.settings.aiCustomParameters[paramName];
 					await this.plugin.saveSettings();
@@ -119,7 +133,7 @@ export class CustomAIParametersModal extends Modal {
 			.setName(t("settings.ai.customParams.name"))
 			.setDesc(t("settings.ai.customParams.name.desc"))
 			.addText((text) => {
-				text.setPlaceholder("E.g., project_name")
+				text.setPlaceholder(t("modal.customParams.name.placeholder"))
 					.setValue(paramName)
 					.onChange((value) => {
 						paramName = value;
@@ -130,7 +144,7 @@ export class CustomAIParametersModal extends Modal {
 			.setName(t("settings.ai.customParams.prompt"))
 			.setDesc(t("settings.ai.customParams.prompt.desc"))
 			.addTextArea((text) => {
-				text.setPlaceholder("E.g., determine project name from text (maximum 20 characters)")
+				text.setPlaceholder(t("modal.customParams.desc.placeholder"))
 					.setValue(paramPrompt)
 					.onChange((value) => {
 						paramPrompt = value;
@@ -155,10 +169,17 @@ export class CustomAIParametersModal extends Modal {
 							return;
 						}
 
+						// Say so when an existing parameter is silently replaced — the old prompt
+						// is unrecoverable and "added" would misdescribe what happened.
+						const replaced = paramName.trim() in this.plugin.settings.aiCustomParameters;
 						this.plugin.settings.aiCustomParameters[paramName.trim()] = paramPrompt.trim();
 						await this.plugin.saveSettings();
 
-						new Notice(t("settings.categories.customParams.added", { name: paramName }));
+						new Notice(
+							replaced
+								? t("settings.categories.customParams.exists", { name: paramName })
+								: t("settings.categories.customParams.added", { name: paramName }),
+						);
 						this.onOpen(); // Refresh the modal
 					})();
 				});

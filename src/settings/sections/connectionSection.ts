@@ -1,10 +1,9 @@
 import TelegramSyncPlugin from "src/main";
 import { ButtonComponent, Setting, TextComponent } from "obsidian";
 import { BotSettingsModal } from "../modals/BotSettings";
-import { UserLogInModal } from "../modals/UserLogin";
 import { _15sec, displayAndLog } from "src/utils/logUtils";
-import * as Client from "src/telegram/user/client";
-import * as User from "src/telegram/user/user";
+import { getNewSessionId } from "src/telegram/user/sessionTypes";
+import { connectUser, getClientUserName, isUserModeAvailable } from "src/telegram/user/userGateway";
 import { enqueue } from "src/utils/queues";
 import { t } from "src/locale/i18n";
 
@@ -20,7 +19,9 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
 			if (plugin.checkingBotConnection) {
 				botStatus.setValue(t("settings.bot.connecting"));
 			} else if (plugin.isBotConnected()) {
-				botStatus.setValue(`🤖 ${plugin.botUser?.username || "connected"}`);
+				botStatus.setValue(
+					plugin.botUser?.username ? `🤖 ${plugin.botUser.username}` : t("settings.bot.connected"),
+				);
 			} else {
 				botStatus.setValue(t("settings.bot.disconnected"));
 			}
@@ -35,7 +36,7 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
 				// would leave the unencrypted bot token sitting in settings.
 				const botSettingsModal = new BotSettingsModal(plugin, async () => {
 					if (plugin.settings.telegramSessionType == "bot") {
-						plugin.settings.telegramSessionId = Client.getNewSessionId();
+						plugin.settings.telegramSessionId = getNewSessionId();
 						plugin.userConnected = false;
 					}
 					await plugin.saveSettings();
@@ -48,8 +49,7 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
 			});
 		});
 	// add link to botFather
-	const botFatherLink = activeDocument.createElement("div");
-	botFatherLink.textContent = t("settings.bot.botfather");
+	const botFatherLink = createDiv({ text: t("settings.bot.botfather") });
 	botFatherLink.createEl("a", {
 		href: "https://t.me/botfather",
 		text: "@botfather",
@@ -68,6 +68,12 @@ export function addBot(containerEl: HTMLElement, plugin: TelegramSyncPlugin, _up
  * state changed, so logging in has to redraw the host explicitly.
  */
 export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, update: () => void) {
+	// User mode is a desktop feature: GramJS cannot run on mobile at all. Showing a login
+	// button that can only fail would be worse than saying so.
+	if (!isUserModeAvailable()) {
+		new Setting(containerEl).setName(t("settings.user.name")).setDesc(t("settings.user.desktopOnly"));
+		return;
+	}
 	const userSettings = new Setting(containerEl)
 		.setName(t("settings.user.name"))
 		.setDesc(t("settings.user.desc"))
@@ -76,7 +82,7 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, up
 			if (plugin.checkingUserConnection) {
 				userStatus.setValue(t("settings.bot.connecting"));
 			} else if (plugin.userConnected) {
-				userStatus.setValue(`👨🏽‍💻 ${Client.clientUser?.username || "connected"}`);
+				userStatus.setValue(getClientUserName() ? `👨🏽‍💻 ${getClientUserName()}` : t("settings.user.connected"));
 			} else userStatus.setValue(t("settings.bot.disconnected"));
 		})
 		.addButton((userLogInButton: ButtonComponent) => {
@@ -86,12 +92,14 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, up
 				void (async () => {
 					if (plugin.settings.telegramSessionType == "user") {
 						// Log Out
-						await User.connect(plugin, "bot");
+						await connectUser(plugin, "bot");
 						displayAndLog(plugin, t("settings.user.loggedOut"), _15sec);
 						update();
 					} else {
-						// Log In
+						// Log In. The modal is imported lazily: it is the entry to the
+						// desktop-only MTProto stack and must stay out of the load path.
 						const initialSessionType = plugin.settings.telegramSessionType;
+						const { UserLogInModal } = await import("../modals/UserLogin");
 						const userLogInModal = new UserLogInModal(plugin);
 						userLogInModal.onClose = () => {
 							void (async () => {
@@ -113,7 +121,7 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, up
 			refreshButton.setIcon("refresh-ccw");
 			refreshButton.onClick(() => {
 				void (async () => {
-					await User.connect(plugin, "user", plugin.settings.telegramSessionId);
+					await connectUser(plugin, "user", plugin.settings.telegramSessionId);
 					refreshButton.setDisabled(true);
 					update();
 				})();
@@ -121,8 +129,10 @@ export function addUser(containerEl: HTMLElement, plugin: TelegramSyncPlugin, up
 		});
 	}
 
-	// add link to authorized user features
-	userSettings.descEl.createSpan({
+	// A line of its own, not a span glued to the end of the description: the two are
+	// separate sentences, and inline they ran together as "…works without it.Additional
+	// features…".
+	userSettings.descEl.createDiv({
 		text: t("settings.user.features"),
 	});
 }

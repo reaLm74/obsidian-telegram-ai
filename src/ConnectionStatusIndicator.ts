@@ -1,15 +1,23 @@
 import { setIcon } from "obsidian";
 import TelegramSyncPlugin from "./main";
+import { redactSecrets } from "./utils/secretRedaction";
+import { t } from "./locale/i18n";
 
-export const connectionStatusIndicatorSettingName = "Connection status indicator";
+/**
+ * Only the KEYS of this enum are used — as the stored setting value and as the type
+ * behind {@link KeysOfConnectionStatusIndicatorType}. The strings are historical; the
+ * dropdown labels come from the locale files (settings.advanced.indicator.*).
+ */
 export enum ConnectionStatusIndicatorType {
 	HIDDEN = "Never show, log the errors",
 	CONSTANT = "Show constantly all states",
 	ONLY_WHEN_ERRORS = "Show only when connection errors",
 }
 export type KeysOfConnectionStatusIndicatorType = keyof typeof ConnectionStatusIndicatorType;
-export const checkConnectionMessage =
-	"Check internet (proxy) connection, the functionality of Telegram using the official app. If everything is ok, restart Obsidian.";
+/** Localized at call time — a module-level string would freeze to English before initLocale. */
+export function checkConnectionMessage(): string {
+	return t("notices.checkConnection");
+}
 
 export default class ConnectionStatusIndicator {
 	plugin: TelegramSyncPlugin;
@@ -62,7 +70,10 @@ export default class ConnectionStatusIndicator {
 		if (!this.icon) return;
 		this.icon.setAttrs({
 			"data-tooltip-position": "top",
-			"aria-label": `${error || ""}\n${checkConnectionMessage}`.trimStart(),
+			// Redacted like every other surface that renders error text: a Bot API failure
+			// can quote a file URL, and those carry the bot token verbatim. This tooltip
+			// was the one user-visible place that showed the message unfiltered.
+			"aria-label": redactSecrets(`${error || ""}\n${checkConnectionMessage()}`.trimStart()),
 		});
 		this.label?.addClass("tgai-status-indicator-error");
 		this.label?.setText("X");

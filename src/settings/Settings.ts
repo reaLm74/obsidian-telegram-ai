@@ -1,8 +1,10 @@
 import TelegramSyncPlugin from "src/main";
-import { App, PluginSettingTab, Setting } from "obsidian";
-import TelegramBot from "node-telegram-bot-api";
+import { App, PluginSettingTab, Setting, requireApiVersion } from "obsidian";
+import type { SettingDefinitionItem } from "obsidian";
+import { applyControlValue, buildSettingDefinitions, resolveControlValue } from "./settingDefinitions";
+import TelegramBot from "src/telegram/botApi";
 import { createProgressBar, updateProgressBar, deleteProgressBar, ProgressBarType } from "src/telegram/bot/progressBar";
-import * as Client from "src/telegram/user/client";
+import * as SessionTypes from "src/telegram/user/sessionTypes";
 import { _1sec } from "src/utils/logUtils";
 import { t } from "src/locale/i18n";
 import { getTopicId } from "src/telegram/bot/message/getters";
@@ -13,11 +15,8 @@ import { KeysOfConnectionStatusIndicatorType } from "src/ConnectionStatusIndicat
 import { enqueue } from "src/utils/queues";
 import { MessageDistributionRule, createDefaultMessageDistributionRule } from "./messageDistribution";
 import { NoteCategory } from "src/categories/types";
-import {
-	ProcessOldMessagesSettings,
-	clearCachedUnprocessedMessages,
-	getDefaultProcessOldMessagesSettings,
-} from "src/telegram/user/sync";
+import { ProcessOldMessagesSettings, getDefaultProcessOldMessagesSettings } from "src/telegram/user/processingState";
+import { clearCachedUnprocessedMessages } from "src/telegram/user/userGateway";
 import { AdvancedSettingsModal } from "./modals/AdvancedSettings";
 import { ProcessOldMessagesSettingsModal } from "./modals/ProcessOldMessagesSettings";
 import { getOffsetDate } from "src/utils/dateUtils";
@@ -40,16 +39,24 @@ export interface TelegramSyncSettings {
 	botToken: string;
 	encryptionByPinCode: boolean;
 	botTokenEncrypted: boolean;
+	/**
+	 * A known plaintext sealed under the current pin, so a pin can be verified on its own.
+	 * Empty when pin encryption is off. Holds no secret — only the pin can be checked with it.
+	 */
+	pinVerifier: string;
 	allowedChats: string[];
 	mainDeviceId: string;
 	pluginVersion: string;
 	/** Schema version owned by settingsMigrator.ts — not the release the user last saw. */
 	settingsVersion: string;
-	telegramSessionType: Client.SessionType;
+	telegramSessionType: SessionTypes.SessionType;
 	telegramSessionId: number;
 	/** MTProto app credentials from my.telegram.org. Empty = bot-only mode. */
 	telegramApiId: string;
+	/** Stored encrypted like every other secret — see utils/secretStore.ts. */
 	telegramApiHash: string;
+	/** Whether telegramApiHash holds ciphertext. */
+	telegramApiHashEncrypted: boolean;
 	connectionStatusIndicatorType: KeysOfConnectionStatusIndicatorType;
 	cacheCleanupAtStartup: boolean;
 	messageDistributionRules: MessageDistributionRule[];
@@ -57,7 +64,6 @@ export interface TelegramSyncSettings {
 	parallelMessageProcessing: boolean;
 	processOldMessages: boolean;
 	processOldMessagesSettings: ProcessOldMessagesSettings;
-	processOtherBotsMessages: boolean;
 	retryFailedMessagesProcessing: boolean;
 	processedMessageAction: string;
 	emojiForProcessedMessages: string;
@@ -72,22 +78,46 @@ export interface TelegramSyncSettings {
 	aiRetryDelay: number;
 	aiTimeout: number;
 	aiVisionEnabled: boolean;
+	/**
+	 * Reasoning depth, e.g. "none", "minimal" or "low".
+	 *
+	 * Applies to whichever provider is selected — each encodes it differently on the wire.
+	 * Empty means "cheapest the model offers". Ignored by models with no reasoning stage,
+	 * and by any model that does not list the chosen level — see ai/modelCapabilities.ts.
+	 */
+	aiReasoningEffort: string;
 	aiProvider: string;
 	claudeApiKey: string;
+	/** Whether claudeApiKey holds ciphertext. */
+	claudeApiKeyEncrypted: boolean;
 	claudeModel: string;
 	claudeTemperature: number;
 	claudeMaxTokens: number;
+	/**
+	 * Comma-separated `anthropic-beta` flags, forwarded verbatim.
+	 *
+	 * Which betas an account needs changes faster than releases ship, so this is free-form
+	 * rather than a compiled-in list.
+	 */
+	claudeBetaFeatures: string;
 	geminiApiKey: string;
+	/** Whether geminiApiKey holds ciphertext. */
+	geminiApiKeyEncrypted: boolean;
 	geminiModel: string;
+	/** @deprecated Superseded by aiVisionEnabled, which covers every provider. */
 	geminiVisionEnabled: boolean;
 	geminiTemperature: number;
 	geminiMaxTokens: number;
+	/** Gemini safety filter level, e.g. "BLOCK_ONLY_HIGH". See ai/gemini.ts. */
+	geminiSafetyThreshold: string;
 	aiPromptText: string;
-	aiPromptVoice: string;
 	aiPromptPhoto: string;
-	aiPromptVideo: string;
-	aiPromptAudio: string;
 	aiPromptDocument: string;
+	/** One prompt for voice, audio and video — getPromptForContentType maps all three here.
+	 *  aiPromptVoice / aiPromptVideo / aiPromptAudio used to sit alongside it and were never
+	 *  read by anything; two presets wrote them and got no behaviour for it. Removed rather
+	 *  than wired up, so there stays exactly one prompt per thing the user can see. Leftover
+	 *  keys in an old data.json are ignored — loadSettings merges over DEFAULT_SETTINGS. */
 	aiPromptAudioVideo: string;
 	aiPromptGeneral: string; // General prompt for note formatting
 	aiPromptLink: string;
@@ -119,9 +149,61 @@ export interface TelegramSyncSettings {
 	wikiLinksEnabled: boolean;
 	autoTagsEnabled: boolean;
 	aiSummarizationMode: "replace" | "summary_and_original";
+	/** Parallel AI HTTP requests allowed at once. See ai/requestPool.ts. */
+	aiMaxConcurrentRequests: number;
+	/** Failed processing attempts before a message is quarantined for manual retry. */
+	messageMaxRetries: number;
+	/** Stamp newly created notes with telegram-chat-id / telegram-message-id frontmatter. */
+	noteFrontmatterIds: boolean;
+	/** An edited Telegram message rewrites its note instead of appending a copy. */
+	editedMessageUpdatesNote: boolean;
+	/** Keep the pre-edit body in a collapsed callout when an edit rewrites a note. */
+	editedNoteVersionHistory: boolean;
+	/** Link a reply's note to the note of the message it replies to. */
+	replyLinksEnabled: boolean;
+	/**
+	 * Mirror Telegram reactions into note frontmatter. Off by default: turning it on makes
+	 * polling ask for `message_reaction` updates, which changes the getUpdates subscription.
+	 */
+	reactionSyncEnabled: boolean;
+	/** Accumulated AI usage for the current calendar month. Maintained by ai/usageTracker.ts. */
+	aiMonthlySpend: {
+		/** "YYYY-MM" the totals belong to; a new month resets them. */
+		month: string;
+		totalUSD: number;
+		inputTokens: number;
+		outputTokens: number;
+		requests: number;
+	};
 	setupCompleted: boolean;
 	/** Verbose tracing to the developer console. Off by default — see utils/debugLog.ts. */
 	debugMode: boolean;
+	/** Mobile battery saver: pause Telegram polling while Obsidian is in the background. */
+	mobilePauseWhenHidden: boolean;
+	/**
+	 * Skip channel posts auto-forwarded into a linked discussion group.
+	 *
+	 * A channel with a linked group mirrors every post into it automatically. Syncing both
+	 * the channel and its group then writes every post twice. On: the mirrored copy is
+	 * ignored, while the comments under it keep syncing (and their reply links point at the
+	 * channel post's note when it exists).
+	 */
+	skipAutoForwardedChannelPosts: boolean;
+	/** API key for the custom OpenAI-compatible endpoint. Stored encrypted — see secretStore. */
+	customApiKey: string;
+	/** Whether customApiKey holds ciphertext. */
+	customApiKeyEncrypted: boolean;
+	/**
+	 * Base URL of the custom OpenAI-compatible API, up to and including the version
+	 * segment when the service has one — e.g. "https://openrouter.ai/api/v1",
+	 * "https://api.groq.com/openai/v1" or "http://localhost:11434/v1" for Ollama.
+	 * The plugin appends "/chat/completions" and "/models" to it.
+	 */
+	customBaseUrl: string;
+	/** Model id understood by the custom endpoint. Free-form — the endpoint is the authority. */
+	customModel: string;
+	customTemperature: number;
+	customMaxTokens: number;
 	// add new settings above this line
 	topicNames: Topic[];
 }
@@ -130,14 +212,16 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	botToken: "",
 	encryptionByPinCode: false,
 	botTokenEncrypted: false,
+	pinVerifier: "",
 	allowedChats: [],
 	mainDeviceId: "",
 	pluginVersion: "",
 	settingsVersion: "",
 	telegramSessionType: "bot",
-	telegramSessionId: Client.getNewSessionId(),
+	telegramSessionId: SessionTypes.getNewSessionId(),
 	telegramApiId: "",
 	telegramApiHash: "",
+	telegramApiHashEncrypted: false,
 	connectionStatusIndicatorType: "CONSTANT",
 	cacheCleanupAtStartup: false,
 	messageDistributionRules: [createDefaultMessageDistributionRule()],
@@ -145,7 +229,6 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	parallelMessageProcessing: false,
 	processOldMessages: false,
 	processOldMessagesSettings: getDefaultProcessOldMessagesSettings(),
-	processOtherBotsMessages: false,
 	retryFailedMessagesProcessing: false,
 	processedMessageAction: "EMOJI",
 	emojiForProcessedMessages: "🔥",
@@ -159,21 +242,23 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	aiRetryDelay: 1000,
 	aiTimeout: 30000,
 	aiVisionEnabled: false,
+	aiReasoningEffort: "",
 	aiProvider: "openai",
 	claudeApiKey: "",
-	claudeModel: "claude-3-5-sonnet-20241022",
+	claudeApiKeyEncrypted: false,
+	claudeModel: "claude-opus-5",
 	claudeTemperature: 0.7,
 	claudeMaxTokens: 2000,
+	claudeBetaFeatures: "",
 	geminiApiKey: "",
-	geminiModel: "gemini-1.5-pro",
+	geminiApiKeyEncrypted: false,
+	geminiModel: "gemini-3.7-flash",
 	geminiVisionEnabled: false,
 	geminiTemperature: 0.7,
 	geminiMaxTokens: 2000,
+	geminiSafetyThreshold: "BLOCK_ONLY_HIGH",
 	aiPromptText: "",
-	aiPromptVoice: "",
 	aiPromptPhoto: "",
-	aiPromptVideo: "",
-	aiPromptAudio: "",
 	aiPromptDocument: "",
 	aiPromptAudioVideo: "",
 	aiPromptGeneral:
@@ -204,8 +289,24 @@ export const DEFAULT_SETTINGS: TelegramSyncSettings = {
 	wikiLinksEnabled: false,
 	autoTagsEnabled: false,
 	aiSummarizationMode: "replace",
+	aiMaxConcurrentRequests: 3,
+	messageMaxRetries: 5,
+	noteFrontmatterIds: true,
+	editedMessageUpdatesNote: true,
+	editedNoteVersionHistory: false,
+	replyLinksEnabled: true,
+	reactionSyncEnabled: false,
+	aiMonthlySpend: { month: "", totalUSD: 0, inputTokens: 0, outputTokens: 0, requests: 0 },
 	setupCompleted: false,
 	debugMode: false,
+	mobilePauseWhenHidden: true,
+	skipAutoForwardedChannelPosts: false,
+	customApiKey: "",
+	customApiKeyEncrypted: false,
+	customBaseUrl: "",
+	customModel: "",
+	customTemperature: 0.7,
+	customMaxTokens: 2000,
 	// add new settings above this line
 	topicNames: [],
 };
@@ -218,6 +319,40 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 	constructor(app: App, plugin: TelegramSyncPlugin) {
 		super(app, plugin);
 		this.plugin = plugin;
+	}
+
+	/**
+	 * The declarative settings surface (Obsidian 1.13+). When this returns a non-empty
+	 * array, display() below is never called and every definition is indexed by the
+	 * settings search. renderSettings() stays as the documented fallback for older
+	 * versions — minAppVersion is 1.8.7. The requireApiVersion guards are technically
+	 * redundant inside callbacks only the 1.13+ renderer can invoke, but they make the
+	 * version dependency checkable — the no-unsupported-api lint rule reads them.
+	 */
+	getSettingDefinitions(): SettingDefinitionItem[] {
+		return buildSettingDefinitions({
+			plugin: this.plugin,
+			refreshDomState: () => {
+				if (requireApiVersion("1.13.0")) this.refreshDomState();
+			},
+			update: () => {
+				if (requireApiVersion("1.13.0")) this.update();
+			},
+		});
+	}
+
+	getControlValue(key: string): unknown {
+		return resolveControlValue(this.plugin, key);
+	}
+
+	async setControlValue(key: string, value: unknown): Promise<void> {
+		const { structural } = await applyControlValue(this.plugin, key, value);
+		// Content changes (model names in descriptions, provider-specific rows) need a
+		// rebuild; anything else only re-evaluates visible/disabled predicates in place.
+		if (requireApiVersion("1.13.0")) {
+			if (structural) this.update();
+			else this.refreshDomState();
+		}
 	}
 
 	refresh() {
@@ -236,6 +371,10 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		) {
 			try {
 				if (!this.refreshValues) this.refreshValues = {};
+				// On 1.13+ the declarative surface owns the DOM: the connection-state
+				// refresh must rebuild through update(), or the imperative markup would
+				// be painted over the declarative one.
+				else if (requireApiVersion("1.13.0")) this.update();
 				else this.renderSettings();
 			} finally {
 				this.refreshValues.botConnected = botConnected;
@@ -247,7 +386,21 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 		}
 	}
 
+	private refreshTeardownArmed = false;
+
 	setRefreshInterval() {
+		// Unload safety, armed once: the plugin clears this even if hide() never runs — a
+		// settings tab left open while the plugin is disabled otherwise keeps a 1 s timer
+		// refreshing a dead tab.
+		//
+		// Armed once rather than per call, because plugin.registerInterval() appends a
+		// cleanup entry every time and removes none, and this method runs from
+		// renderSettings() — which is the `update` callback threaded into every settings
+		// section, so it re-runs on each change the user makes.
+		if (!this.refreshTeardownArmed) {
+			this.refreshTeardownArmed = true;
+			this.plugin.register(() => window.clearInterval(this.refreshIntervalId));
+		}
 		window.clearInterval(this.refreshIntervalId);
 		this.refreshIntervalId = window.setInterval(() => {
 			// eslint-disable-next-line @typescript-eslint/unbound-method -- enqueue requires a function reference, context is passed separately
@@ -330,7 +483,7 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 			btn.setButtonText(t("settings.advanced.button"));
 			btn.setClass("mod-cta");
 			btn.onClick(() => {
-				const advancedSettingsModal = new AdvancedSettingsModal(this.plugin);
+				const advancedSettingsModal = new AdvancedSettingsModal(this.plugin, () => this.renderSettings());
 				advancedSettingsModal.open();
 			});
 		});
@@ -342,7 +495,8 @@ export class TelegramSyncSettingTab extends PluginSettingTab {
 
 		const topicId = getTopicId(msg);
 		if (topicId) {
-			const topicName = msg.text.substring(11);
+			// Not substring(11): "/topicName@my_bot Foo" stored "my_bot Foo" as the name.
+			const topicName = msg.text.replace(/^\/topicName(@\w+)?\s*/, "").trim();
 			if (!topicName) throw new Error("Set topic name! example: /topicName NewTopicName");
 			const newTopic: Topic = {
 				name: topicName,

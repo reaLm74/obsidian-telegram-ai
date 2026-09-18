@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type TelegramBot from "node-telegram-bot-api";
+import type TelegramBot from "src/telegram/botApi";
 import { accessDeniedMessage, isSenderAllowed } from "./accessControl";
 
 function pluginWith(allowedChats: string[]) {
@@ -71,5 +71,18 @@ describe("accessDeniedMessage", () => {
 		const text = accessDeniedMessage(message({ chatId: 555 }));
 		expect(text).not.toContain("username");
 		expect(text).toContain('"555"');
+	});
+
+	// Telegram usernames are case-preserving but case-insensitive as identifiers. Matching
+	// exact case denied a whitelisted sender whenever the entry and the profile differed
+	// only in case — which looks like "the bot is ignoring me", with nothing in the log.
+	it("matches a whitelisted username regardless of case on either side", () => {
+		expect(isSenderAllowed({ allowedChats: ["Alice"] }, message({ username: "alice" }))).toBe(true);
+		expect(isSenderAllowed({ allowedChats: ["alice"] }, message({ username: "ALICE" }))).toBe(true);
+		expect(isSenderAllowed({ allowedChats: ["AlIcE"] }, message({ username: "aLiCe" }))).toBe(true);
+	});
+
+	it("still denies a username that only looks similar", () => {
+		expect(isSenderAllowed({ allowedChats: ["alice"] }, message({ username: "alice2" }))).toBe(false);
 	});
 });

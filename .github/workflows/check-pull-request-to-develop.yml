@@ -1,19 +1,32 @@
+# Quality gate for pull requests into develop.
+#
+# Previously this ran eslint only, with continue-on-error, and only on the `opened` event —
+# so a PR could be fixed up after review and merged without anything being checked again,
+# and a red linter never blocked anything. Now type-check, lint and the test suite all run
+# on every push to the PR, and a failure blocks the merge.
 name: Check pull request
 
 on:
     pull_request:
         types:
             - opened
+            - synchronize
+            - reopened
         branches:
             - develop
+
+# A force-push supersedes the run already in flight; there is no reason to pay for both.
+concurrency:
+    group: check-pr-${{ github.event.pull_request.number }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
 
 jobs:
     check-pr:
         runs-on: ubuntu-latest
         steps:
-            - name: Print github
-              run: echo '${{ toJson(github) }}'
-
             - name: Checkout repository
               uses: actions/checkout@v4
 
@@ -21,14 +34,28 @@ jobs:
               uses: actions/setup-node@v4
               with:
                   node-version: "22.x"
+                  cache: "npm"
 
             - name: Install dependencies
               run: npm ci
 
-            - name: Run linter
-              run: npm run lint
-              continue-on-error: true
+            # Type errors first: they are the cheapest to produce and the most likely to
+            # make the other two steps fail for reasons that are hard to read.
+            - name: Type-check
+              run: npx tsc --noEmit --skipLibCheck
 
-            - name: Report lint errors
+            - name: Lint
+              run: npm run lint
+
+            - name: Unit tests
+              run: npm run test:coverage
+
+            - name: Build
+              run: node esbuild.config.mjs production
+
+            - name: Explain a failure
               if: ${{ failure() }}
-              run: echo "There are linting errors. Please use 'npm run lint-fix' to address them."
+              run: |
+                  echo "::notice::Type errors: npx tsc --noEmit --skipLibCheck"
+                  echo "::notice::Lint errors: npm run lint-fix"
+                  echo "::notice::Test failures: npm run test:unit"

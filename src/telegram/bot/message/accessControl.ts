@@ -9,7 +9,7 @@
  * Kept in its own module so it can be tested without loading the Telegram client stack.
  */
 
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 
 export interface AccessControlSettings {
 	allowedChats: string[];
@@ -26,9 +26,15 @@ export function isSenderAllowed(settings: AccessControlSettings, msg: TelegramBo
 	const allowedChats = settings.allowedChats.map((chat) => chat.trim()).filter(Boolean);
 	if (allowedChats.length == 0) return false;
 
+	// Usernames compare case-insensitively. Telegram usernames are case-preserving but
+	// case-insensitive as identifiers, so an exact-case match denied a legitimately
+	// whitelisted sender whenever the entry and the profile differed only in case — a
+	// silent, hard-to-diagnose "the bot ignores me". Chat ids are digits; lowercasing
+	// leaves them untouched, so one comparison covers both kinds of entry.
+	const allowedLower = allowedChats.map((chat) => chat.toLowerCase());
 	const telegramUserName = msg.from?.username ?? "";
-	if (telegramUserName && allowedChats.includes(telegramUserName)) return true;
-	return allowedChats.includes(msg.chat.id.toString());
+	if (telegramUserName && allowedLower.includes(telegramUserName.toLowerCase())) return true;
+	return allowedLower.includes(msg.chat.id.toString());
 }
 
 /** Reply sent to a sender who is not on the whitelist, telling them what to add. */

@@ -33,10 +33,31 @@ describe("i18n", () => {
 	});
 
 	describe("getAvailableLocales", () => {
-		it("includes en and ru", () => {
+		it("includes every shipped language", () => {
 			const locales = getAvailableLocales();
-			expect(locales).toContain("en");
-			expect(locales).toContain("ru");
+			for (const locale of ["en", "ru", "de", "es", "zh"]) {
+				expect(locales).toContain(locale);
+			}
+		});
+	});
+
+	describe("new locales", () => {
+		it("switches to German", () => {
+			initLocale("de-DE");
+			expect(getLocaleName()).toBe("de");
+			expect(t("common.cancel")).toBe("Abbrechen");
+		});
+
+		it("switches to Spanish", () => {
+			initLocale("es");
+			expect(getLocaleName()).toBe("es");
+			expect(t("common.cancel")).toBe("Cancelar");
+		});
+
+		it("switches to Chinese (zh-CN normalizes to zh)", () => {
+			initLocale("zh-CN");
+			expect(getLocaleName()).toBe("zh");
+			expect(t("common.cancel")).toBe("取消");
 		});
 	});
 
@@ -98,23 +119,48 @@ describe("i18n", () => {
 			const result = t("settings.bot.name");
 			expect(result).not.toContain("{{");
 		});
+
+		// Values carry runtime data — error texts, vault paths, file names — where $&, $` and
+		// $' are substitution patterns to String.replace. They must reach the user verbatim.
+		it("inserts a value containing $& and $' literally", () => {
+			initLocale("en");
+			const result = t("notices.transcriptionFailed", { error: "path A$&B and $'tail" });
+			expect(result).toContain("path A$&B and $'tail");
+			expect(result).not.toContain("{{error}}");
+		});
 	});
 
 	describe("locale consistency", () => {
-		it("en and ru have the same number of keys", () => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const enKeys = Object.keys(require("./en.json") as Record<string, unknown>);
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const ruKeys = Object.keys(require("./ru.json") as Record<string, unknown>);
-			expect(enKeys.length).toBe(ruKeys.length);
-		});
+		// en.json is the source of truth; every registered locale must mirror it exactly.
+		// A missing key silently falls back to English at runtime, so only this test
+		// makes an incomplete translation visible.
+		const en = require("./en.json") as Record<string, string>;
+		const others: Record<string, Record<string, string>> = {
+			ru: require("./ru.json") as Record<string, string>,
+			de: require("./de.json") as Record<string, string>,
+			es: require("./es.json") as Record<string, string>,
+			zh: require("./zh.json") as Record<string, string>,
+		};
 
-		it("en and ru have the same keys", () => {
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const enKeys = Object.keys(require("./en.json") as Record<string, unknown>).sort();
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const ruKeys = Object.keys(require("./ru.json") as Record<string, unknown>).sort();
-			expect(enKeys).toEqual(ruKeys);
-		});
+		for (const [name, locale] of Object.entries(others)) {
+			it(`en and ${name} have the same keys`, () => {
+				expect(Object.keys(locale).sort()).toEqual(Object.keys(en).sort());
+			});
+
+			it(`${name} preserves every {{placeholder}} of en`, () => {
+				// A translation that drops {{model}} or renames it to {{modell}} breaks
+				// substitution only at runtime, in that one language — catch it here.
+				const placeholdersOf = (s: string) => (s.match(/\{\{\w+\}\}/g) ?? []).sort();
+				const broken: string[] = [];
+				for (const [key, value] of Object.entries(en)) {
+					const translated = locale[key];
+					if (typeof translated !== "string") continue; // key parity already covers it
+					if (placeholdersOf(value).join(",") !== placeholdersOf(translated).join(",")) {
+						broken.push(key);
+					}
+				}
+				expect(broken, `placeholder mismatch in ${name}: ${broken.join(", ")}`).toEqual([]);
+			});
+		}
 	});
 });

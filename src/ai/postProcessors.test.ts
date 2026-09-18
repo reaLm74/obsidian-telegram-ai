@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /**
  * Tests for AI post-processors: WikiLinker, AutoTagger, SummarizationFormatter.
  */
@@ -116,7 +115,6 @@ describe("WikiLinker", () => {
 	it("handles empty vault gracefully", () => {
 		const plugin = createMockPlugin({ wikiLinksEnabled: true });
 		// Override vault to return empty
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(plugin as any).app.vault.getMarkdownFiles = () => [];
 
 		const content = "Some content without matches";
@@ -203,6 +201,40 @@ describe("AutoTagger", () => {
 		expect(result).toContain("#meeting");
 		expect(result).toContain("#feature-request");
 		expect(result).toContain("#todo");
+	});
+
+	// Substring matching tagged ordinary prose: "capital" → #api, "reaction" → #react,
+	// "facebook" → #book, "particle" → #article, "trust" → #rust.
+	it("does not tag keywords found inside longer words", () => {
+		const plugin = createMockPlugin({ autoTagsEnabled: true });
+		const content =
+			"The capital raised trust in the reaction to a particle shared on facebook, ideally by javascriptless means";
+
+		const result = applyPostProcessors(content, createCtx(plugin, content));
+
+		expect(result).toBe(content);
+	});
+
+	it("still matches keywords that contain punctuation", () => {
+		const plugin = createMockPlugin({ autoTagsEnabled: true });
+		const content = "Deployed with Node.js behind a CI/CD pipeline";
+
+		const result = applyPostProcessors(content, createCtx(plugin, content));
+
+		expect(result).toContain("#nodejs");
+		expect(result).toContain("#ci-cd");
+	});
+
+	it("separates java from javascript", () => {
+		const plugin = createMockPlugin({ autoTagsEnabled: true });
+
+		const javaOnly = applyPostProcessors("Rewrote the service in Java", createCtx(plugin, ""));
+		expect(javaOnly).toContain("#java");
+		expect(javaOnly).not.toContain("#javascript");
+
+		const jsOnly = applyPostProcessors("Rewrote the service in JavaScript", createCtx(plugin, ""));
+		expect(jsOnly).toContain("#javascript");
+		expect(jsOnly).not.toMatch(/#java(?!script)/);
 	});
 });
 
@@ -319,5 +351,29 @@ describe("Phase 4.1 settings migration", () => {
 		expect(settings.aiSummarizationMode).toBe("summary_and_original");
 		expect(settings.wikiLinksEnabled).toBe(true);
 		expect(settings.autoTagsEnabled).toBe(true);
+	});
+});
+
+// Regression (PPR-001): a note name inside a URL was wikilinked and broke the link.
+describe("WikiLinker — URLs", () => {
+	const plugin = () => createMockPlugin({ wikiLinksEnabled: true });
+
+	it("leaves a bare URL intact and links the mention outside it", () => {
+		const content = "Read https://example.com/?q=PostgreSQL before PostgreSQL migration";
+		const result = applyPostProcessors(content, createCtx(plugin(), content));
+		expect(result).toBe("Read https://example.com/?q=PostgreSQL before [[PostgreSQL]] migration");
+	});
+
+	it("leaves www. addresses intact", () => {
+		const content = "See www.PostgreSQL.org for details";
+		const result = applyPostProcessors(content, createCtx(plugin(), content));
+		expect(result).toBe(content);
+	});
+
+	it("leaves markdown link targets intact but may link the label", () => {
+		const content = "[PostgreSQL guide](https://docs.example.com/a?PostgreSQL)";
+		const result = applyPostProcessors(content, createCtx(plugin(), content));
+		expect(result).toContain("(https://docs.example.com/a?PostgreSQL)");
+		expect(result).not.toContain("?[[PostgreSQL]]");
 	});
 });

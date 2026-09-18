@@ -4,15 +4,28 @@
  * regression guard: an extra request is a silent cost regression that nothing else catches.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import type TelegramSyncPlugin from "src/main";
 import { NoteCategory } from "src/categories/types";
 import { initLocale } from "src/locale/i18n";
 
 const mockProcessWithOpenAI = vi.fn<(...args: unknown[]) => Promise<string | null>>();
 
-vi.mock("src/ai/openai", () => ({
-	processWithOpenAI: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+/** Flipped per test to stand in for "the selected provider has its key/endpoint set up". */
+let providerConfigured = true;
+
+// Since 0.7 the metadata request goes through the SELECTED provider (the registry),
+// not through OpenAI directly — a custom/local setup must not leak content to a vendor
+// the user did not pick. The mock intercepts the registry lookup; the counter keeps its
+// old name because what it counts is unchanged: outbound metadata requests.
+vi.mock("src/ai/providers", () => ({
+	getActiveProvider: () => ({
+		process: (...args: unknown[]) => mockProcessWithOpenAI(...args),
+	}),
+	// The classification gate asks the registry whether the SELECTED provider is set up.
+	// It used to read settings.openAIApiKey, which switched categorisation off for every
+	// non-OpenAI provider while the toggle still said it was on.
+	isProviderConfigured: () => providerConfigured,
 }));
 
 import {
@@ -58,6 +71,7 @@ interface PluginOptions {
 	categoriesEnabled?: boolean;
 	aiCategorizationEnabled?: boolean;
 	openAIApiKey?: string;
+	aiProvider?: string;
 	aiCustomParameters?: Record<string, string>;
 	categories?: NoteCategory[];
 	outputLanguage?: string;
@@ -71,6 +85,7 @@ function makePlugin(options: PluginOptions = {}): TelegramSyncPlugin {
 			categoriesEnabled: options.categoriesEnabled ?? true,
 			aiCategorizationEnabled: options.aiCategorizationEnabled ?? true,
 			openAIApiKey: options.openAIApiKey ?? "sk-test",
+			aiProvider: options.aiProvider ?? "openai",
 			aiCustomParameters: options.aiCustomParameters ?? { title: "Generate a concise title" },
 			aiOutputLanguage: options.outputLanguage ?? "auto",
 			aiOutputLanguageCustom: "",
@@ -94,6 +109,7 @@ function makeMessage(overrides: Partial<TelegramBot.Message> = {}): TelegramBot.
 }
 
 beforeEach(() => {
+	providerConfigured = true;
 	mockProcessWithOpenAI.mockReset();
 	mockProcessWithOpenAI.mockResolvedValue("title: Quarterly Report\ncategory: Work");
 	clearMessageMetadataCache();
@@ -134,12 +150,24 @@ describe("resolveMessageMetadata — when nothing should be asked", () => {
 		expect(prompt).toContain("title:");
 	});
 
-	// Mirrors AIClassifier.checkApiKey: no key, no classification.
-	it("does not ask for a category without an API key", async () => {
-		const plugin = makePlugin({ openAIApiKey: "" });
+	// An unconfigured provider, no classification.
+	it("does not ask for a category when the selected provider is not configured", async () => {
+		providerConfigured = false;
+		const plugin = makePlugin();
 		await resolveMessageMetadata(plugin, makeMessage(), "text");
 		const prompt = mockProcessWithOpenAI.mock.calls[0][2] as string;
 		expect(prompt).not.toContain("Available categories");
+	});
+
+	// The gate used to read settings.openAIApiKey, so a Claude / Gemini / local-endpoint
+	// user with categorisation switched on never got a category asked for — every note
+	// quietly landed in the default one.
+	it("asks for a category on a configured non-OpenAI provider with no OpenAI key", async () => {
+		const plugin = makePlugin({ aiProvider: "claude", openAIApiKey: "" });
+		await resolveMessageMetadata(plugin, makeMessage(), "text");
+		const prompt = mockProcessWithOpenAI.mock.calls[0][2] as string;
+		expect(prompt).toContain("Available categories");
+		expect(prompt).toContain("Work");
 	});
 });
 

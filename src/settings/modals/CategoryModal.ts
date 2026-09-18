@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Notice, Setting } from "obsidian";
 import TelegramSyncPlugin from "src/main";
 import { NoteCategory } from "src/categories/types";
 import { t } from "src/locale/i18n";
@@ -7,6 +7,7 @@ export class CategoryModal extends Modal {
 	private plugin: TelegramSyncPlugin;
 	private category?: NoteCategory;
 	private onSave: () => void;
+	private nameInputEl?: HTMLInputElement;
 
 	constructor(app: App, plugin: TelegramSyncPlugin, category?: NoteCategory, onSave?: () => void) {
 		super(app);
@@ -16,42 +17,39 @@ export class CategoryModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		const { contentEl } = this;
 		contentEl.empty();
 
-		// Set high z-index for modal window
-		const modalEl = this.containerEl.parentElement;
-		if (modalEl) {
-			modalEl.addClass("tgai-ai-modal-on-top");
-		}
-
 		this.titleEl.setText(this.category ? t("settings.categories.edit") : t("settings.categories.addTitle"));
 
+		const defaultColor = "#3498db";
 		let name = this.category?.name || "";
 		let description = this.category?.description || "";
-		let color = this.category?.color || "#3498db";
+		let color = this.category?.color || defaultColor;
 		let notePathTemplate = this.category?.notePathTemplate || "{{category}}/{{date:YYYY-MM}}/{{date:DD-HH-mm}}.md";
 		let filePathOverride = this.category?.filePathOverride || "";
 		let keywords = this.category?.keywords.join(", ") || "";
-		let templatePath = this.category?.templatePath || "";
 
 		new Setting(contentEl)
 			.setName(t("settings.categories.name"))
 			.setDesc(t("settings.categories.name.desc"))
 			.addText((text) => {
-				text.setPlaceholder("Category name")
+				text.setPlaceholder(t("modal.category.name.placeholder"))
 					.setValue(name)
 					.onChange((value) => {
 						name = value;
+						text.inputEl.removeClass("tgai-error-border");
 					});
 				text.inputEl.addClass("tgai-ai-w-full");
+				this.nameInputEl = text.inputEl;
 			});
 
 		new Setting(contentEl)
 			.setName(t("settings.categories.description"))
 			.setDesc(t("settings.categories.description.desc"))
 			.addTextArea((text) => {
-				text.setPlaceholder("Category description")
+				text.setPlaceholder(t("modal.category.desc.placeholder"))
 					.setValue(description)
 					.onChange((value) => {
 						description = value;
@@ -64,7 +62,7 @@ export class CategoryModal extends Modal {
 			.setName(t("settings.categories.color"))
 			.setDesc(t("settings.categories.color.desc"))
 			.addText((text) => {
-				text.setPlaceholder("#349800")
+				text.setPlaceholder(defaultColor)
 					.setValue(color)
 					.onChange((value) => {
 						color = value;
@@ -88,7 +86,10 @@ export class CategoryModal extends Modal {
 			.setName(t("settings.categories.fileOverride"))
 			.setDesc(t("settings.categories.fileOverride.desc"))
 			.addTextArea((text) => {
-				text.setPlaceholder("{{category}}/Files/{{file:type}}s/{{file:name}}.{{file:extension}}")
+				// No {{category}} here: that variable is substituted only in the note path
+				// template above, not in the file override, and the old placeholder taught a
+				// pattern that left the literal text in the path.
+				text.setPlaceholder("Files/{{file:type}}s/{{file:name}}.{{file:extension}}")
 					.setValue(filePathOverride)
 					.onChange((value) => {
 						filePathOverride = value;
@@ -101,25 +102,13 @@ export class CategoryModal extends Modal {
 			.setName(t("settings.categories.keywords"))
 			.setDesc(t("settings.categories.keywords.desc"))
 			.addTextArea((text) => {
-				text.setPlaceholder("Keyword1, keyword2, keyword3")
+				text.setPlaceholder(t("modal.category.keywords.placeholder"))
 					.setValue(keywords)
 					.onChange((value) => {
 						keywords = value;
 					});
 				text.inputEl.addClass("tgai-ai-w-full");
 				text.inputEl.rows = 2;
-			});
-
-		new Setting(contentEl)
-			.setName(t("settings.categories.templatePath"))
-			.setDesc(t("settings.categories.templatePath.desc"))
-			.addText((text) => {
-				text.setPlaceholder("Templates/CategoryTemplate.md")
-					.setValue(templatePath)
-					.onChange((value) => {
-						templatePath = value;
-					});
-				text.inputEl.addClass("tgai-ai-w-full");
 			});
 
 		// Buttons
@@ -132,7 +121,10 @@ export class CategoryModal extends Modal {
 		saveButton.onclick = () => {
 			void (async () => {
 				if (!name.trim()) {
-					// Simple validation
+					// Visible feedback, not a silent return — the modal staying open with no
+					// reaction reads as a broken Save button.
+					this.nameInputEl?.addClass("tgai-error-border");
+					new Notice(t("modal.category.nameRequired"));
 					return;
 				}
 
@@ -149,7 +141,6 @@ export class CategoryModal extends Modal {
 					this.category.notePathTemplate = notePathTemplate.trim();
 					this.category.filePathOverride = filePathOverride.trim() || undefined;
 					this.category.keywords = keywordsList;
-					this.category.templatePath = templatePath.trim();
 					this.category.updatedAt = new Date().toISOString();
 				} else {
 					// Create new
@@ -161,7 +152,6 @@ export class CategoryModal extends Modal {
 						notePathTemplate: notePathTemplate.trim(),
 						filePathOverride: filePathOverride.trim() || undefined,
 						keywords: keywordsList,
-						templatePath: templatePath.trim(),
 						enabled: true,
 						createdAt: new Date().toISOString(),
 						updatedAt: new Date().toISOString(),

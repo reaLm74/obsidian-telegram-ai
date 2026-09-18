@@ -45,7 +45,9 @@ for (const item of PHOTO_TYPES) {
 export function convertBotFileToMessageMedia(fileId: string, fileSize: number): Api.TypeMessageMedia {
 	const decoded = rle_decode(b64_decode(fileId));
 	const major = decoded[decoded.length - 1];
-	const buffer = major < 4 ? decoded.slice(0, -1) : decoded.slice(0, -2);
+	// subarray, not the deprecated Buffer.slice: same view semantics, and Node 22 typings
+	// flag slice as deprecated.
+	const buffer = major < 4 ? decoded.subarray(0, -1) : decoded.subarray(0, -2);
 
 	let bufferPosition = 0;
 	let fileType = buffer.readInt32LE(bufferPosition);
@@ -133,7 +135,9 @@ export function convertBotFileToMessageMedia(fileId: string, fileSize: number): 
 export function extractMediaId(fileId: string): string {
 	const decoded = rle_decode(b64_decode(fileId));
 	const major = decoded[decoded.length - 1];
-	const buffer = major < 4 ? decoded.slice(0, -1) : decoded.slice(0, -2);
+	// subarray, not the deprecated Buffer.slice: same view semantics, and Node 22 typings
+	// flag slice as deprecated.
+	const buffer = major < 4 ? decoded.subarray(0, -1) : decoded.subarray(0, -2);
 
 	let bufferPosition = 0;
 	let fileType = buffer.readInt32LE(bufferPosition);
@@ -200,7 +204,7 @@ function readBytes(buffer: Buffer, position: number): { result: Buffer; newPosit
 		padding = mod(-(length + 1), 4);
 	}
 
-	const result = buffer.slice(position, position + length);
+	const result = buffer.subarray(position, position + length);
 	position += length + padding;
 	return { result, newPosition: position };
 }

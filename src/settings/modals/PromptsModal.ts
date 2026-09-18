@@ -14,6 +14,7 @@ export class PromptsModal extends Modal {
 	}
 
 	onOpen() {
+		this.modalEl.addClass("tgai-modal");
 		this.render();
 	}
 
@@ -43,7 +44,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptGeneral,
-			"Format this content as a beautiful Markdown note...",
+			t("prompts.placeholder.general"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptGeneral = value;
@@ -72,7 +73,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptText,
-			"Process this text message and format it as a note...",
+			t("prompts.placeholder.text"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptText = value;
@@ -99,7 +100,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptPhoto,
-			"Analyze this image and create a descriptive note...",
+			t("prompts.placeholder.image"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptPhoto = value;
@@ -129,7 +130,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptAudioVideo,
-			"Process this transcript and format it as a note...",
+			t("prompts.placeholder.transcript"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptAudioVideo = value;
@@ -156,7 +157,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptDocument,
-			"Process this document and create a note...",
+			t("prompts.placeholder.document"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptDocument = value;
@@ -183,7 +184,7 @@ export class PromptsModal extends Modal {
 		this.createFullWidthTextArea(
 			contentEl,
 			this.plugin.settings.aiPromptLink,
-			"Read the article and provide a brief summary...",
+			t("prompts.placeholder.link"),
 			(value) => {
 				void (async () => {
 					this.plugin.settings.aiPromptLink = value;
@@ -223,6 +224,9 @@ export class PromptsModal extends Modal {
 					.addOption(AUTO_LANGUAGE, t("settings.ai.outputLanguage.auto"))
 					.addOption("en", "English")
 					.addOption("ru", "Русский")
+					.addOption("de", "Deutsch")
+					.addOption("es", "Español")
+					.addOption("zh", "简体中文")
 					.addOption(CUSTOM_LANGUAGE, t("settings.ai.outputLanguage.custom"))
 					.setValue(this.plugin.settings.aiOutputLanguage || AUTO_LANGUAGE)
 					.onChange((value) => {

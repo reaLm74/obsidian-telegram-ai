@@ -369,7 +369,7 @@ Messages with the same `media_group_id` are grouped together and processed as a 
 Based on message content, various template variables become available:
 - `{{date:*}}` - Date formatting
 - `{{content:*}}` - Content extraction
-- `{{sender:*}}` - Sender information
+- `{{user}}`, `{{user:name}}`, `{{user:fullName}}` - Sender information
 - `{{ai:*}}` - AI-generated parameters
 
 This reference helps understand the structure of Telegram messages and how they are processed by the plugin.

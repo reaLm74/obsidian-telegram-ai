@@ -1,0 +1,45 @@
+# Static security analysis.
+#
+# The plugin handles a bot token, API keys and untrusted message text from strangers, so
+# an injection or a path-traversal introduced by accident is worth catching before review
+# rather than after a release. Runs on PRs, on pushes to the long-lived branches, and
+# weekly — the weekly run is what catches newly published query patterns against code that
+# has not changed.
+name: CodeQL
+
+on:
+    push:
+        branches:
+            - main
+            - develop
+    pull_request:
+        branches:
+            - develop
+    schedule:
+        - cron: "0 5 * * 1"
+
+permissions:
+    contents: read
+    security-events: write
+
+jobs:
+    analyze:
+        name: Analyze TypeScript
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Initialize CodeQL
+              uses: github/codeql-action/init@v3
+              with:
+                  languages: javascript-typescript
+                  queries: security-and-quality
+
+            - name: Autobuild
+              uses: github/codeql-action/autobuild@v3
+
+            - name: Perform CodeQL analysis
+              uses: github/codeql-action/analyze@v3
+              with:
+                  category: "/language:javascript-typescript"

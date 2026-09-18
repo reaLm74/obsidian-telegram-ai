@@ -1,14 +1,29 @@
-import TelegramBot from "node-telegram-bot-api";
+import TelegramBot from "src/telegram/botApi";
 import { LinkifyIt } from "linkify-it";
 import TelegramSyncPlugin from "src/main";
 import { Topic } from "src/settings/Settings";
+import { safeMarkdownLink } from "src/utils/markdownLink";
 
 const fileTypes = ["photo", "video", "voice", "document", "audio", "video_note"];
+
+// No fallback to msg.from in either function: a message the sender wrote themselves is not
+// a forward. The fallback put "**Forwarded from <sender>**" on top of every ordinary note
+// and made {{forwardFrom=Name}} match the sender's own messages.
+/**
+ * A chat id the way users see it: without the "-100" prefix of supergroups and channels, and
+ * without the sign of a basic group. Stripping four characters from every negative id — the
+ * old approach — cut a basic group's own digits: -4012345678 became "2345678".
+ */
+export function shortChatId(id: number): string {
+	const s = id.toString();
+	if (s.startsWith("-100")) return s.slice(4);
+	return s.startsWith("-") ? s.slice(1) : s;
+}
 
 export function getForwardFromName(msg: TelegramBot.Message): string {
 	let forwardFromName = "";
 
-	if (msg.forward_from || msg.forward_from_chat || msg.forward_sender_name || msg.from) {
+	if (msg.forward_from || msg.forward_from_chat || msg.forward_sender_name) {
 		if (msg.forward_from) {
 			forwardFromName =
 				msg.forward_from.first_name + (msg.forward_from.last_name ? " " + msg.forward_from.last_name : "");
@@ -19,8 +34,6 @@ export function getForwardFromName(msg: TelegramBot.Message): string {
 					: msg.forward_from_chat.username) || "";
 		} else if (msg.forward_sender_name) {
 			forwardFromName = msg.forward_sender_name;
-		} else if (msg.from) {
-			forwardFromName = msg.from.first_name + (msg.from.last_name ? " " + msg.from.last_name : "");
 		}
 	}
 
@@ -29,8 +42,7 @@ export function getForwardFromName(msg: TelegramBot.Message): string {
 
 export function getForwardFromLink(msg: TelegramBot.Message): string {
 	let forwardFromLink = "";
-	// TODO if msg.from then created by not forwarded from
-	if (msg.forward_from || msg.forward_from_chat || msg.forward_sender_name || msg.from) {
+	if (msg.forward_from || msg.forward_from_chat || msg.forward_sender_name) {
 		const forwardFromName = getForwardFromName(msg);
 		let username = "";
 
@@ -49,9 +61,6 @@ export function getForwardFromLink(msg: TelegramBot.Message): string {
 				(msg.forward_from_message_id || "999999999");
 		} else if (msg.forward_sender_name) {
 			username = "hidden_account_" + msg.forward_date;
-		} else if (msg.from) {
-			const from_id = msg.from.id < 0 ? msg.from.id.toString().slice(4) : msg.from.id.toString();
-			username = msg.from.username || "no_username_" + from_id;
 		}
 		forwardFromLink = `[${forwardFromName}](https://t.me/${username})`;
 	}
@@ -170,7 +179,11 @@ export function getInlineUrls(msg: TelegramBot.Message): string {
 	msg.reply_markup.inline_keyboard.forEach((buttonsGroup) => {
 		buttonsGroup.forEach((button) => {
 			if (button.url) {
-				urls += `[${button.text}](${button.url})\n`;
+				// Inline-keyboard URLs are fully sender-controlled — the button label says
+				// one thing and the target can say another — and they reach the note without
+				// passing through linkify-it. safeMarkdownLink gates the scheme and escapes
+				// both halves so the value cannot break out of the link syntax.
+				urls += `${safeMarkdownLink(button.text, button.url)}\n`;
 			}
 		});
 	});
