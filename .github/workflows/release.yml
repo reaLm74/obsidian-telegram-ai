@@ -45,7 +45,7 @@ jobs:
             # repository, so anyone downloading a release can verify with `gh attestation
             # verify` that the assets match the source rather than trusting the upload.
             - name: Attest build provenance
-              uses: actions/attest-build-provenance@v2
+              uses: actions/attest-build-provenance@v4
               with:
                   subject-path: |
                       main.js
