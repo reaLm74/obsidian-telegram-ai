@@ -117,6 +117,7 @@ let originalAlert: OverridableAlert | undefined;
 
 // changing GramJs version can cause cache issues and wrong alerts, so it's cure for it
 export function hideMTProtoAlerts(plugin: TelegramSyncPlugin) {
+	// eslint-disable-next-line @typescript-eslint/unbound-method -- kept unbound on purpose: .bind() would drop the __isOverridden flag, and restoreMTProtoAlerts() must put back this exact function
 	const currentAlert = window.alert as OverridableAlert;
 	if (currentAlert.__isOverridden) return;
 

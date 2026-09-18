@@ -67,7 +67,7 @@ describe("applyCategoryNotePathTemplate", () => {
 			plugin,
 			"Cat/{{chat}}.md",
 			category,
-			msg({ chat: { id: -1001234567890, type: "supergroup", title: "Team" } as TelegramBot.Chat }),
+			msg({ chat: { id: -1001234567890, type: "supergroup", title: "Team" } }),
 		);
 		expect(path).toBe("Cat/Team.md");
 	});
